@@ -1,0 +1,18 @@
+// x2, size 8
+λa.a(λb.λc.b, a)
+// x1, size 13
+λa.λb.λc.λd.b(c, a(c, d))
+// x1, size 11
+λa.λb.λc.λd.b(a, c, d)
+// x1, size 11
+λa.λb.a(λc.λd.b(d, c))
+// x1, size 11
+λa.λb.λc.b(λd.c(a(d)))
+// x1, size 11
+λa.λb.b(a(λc.λd.c), b)
+// x3, size 3
+λa.λb.a
+// x1, size 8
+λa.λb.λc.b(a(c))
+// x1, size 8
+λa.λb.λc.c(a, b)
