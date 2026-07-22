@@ -162,10 +162,22 @@ fn try_semantic(id: &str, task: &parse::Task) -> Option<String> {
         eprintln!("  {id}: semantic decode failed");
         return None;
     };
+    if std::env::var("SUP_DEBUG").is_ok() {
+        for (j, (i, o)) in inputs.iter().zip(outputs.iter()).enumerate().take(3) {
+            eprintln!("  {id} test{j}: in={i:?} out={o:?}");
+        }
+    }
+    let dbg = std::env::var("SUP_DEBUG").is_ok();
+    if dbg {
+        eprintln!("  {id}: searching...");
+    }
     let Some(e) = sem::solve(&inputs, &outputs, &sem::SemOptions::default()) else {
         eprintln!("  {id}: no DSL expression found (kinds {kinds:?}, out {out_kind:?})");
         return None;
     };
+    if dbg {
+        eprintln!("  {id}: candidate found: {e:?}");
+    }
     // The tuple adapter needs to know which Nat argument is the size; its
     // position varies per task, so try each Nat position until one verifies.
     let nat_positions: Vec<usize> = kinds
@@ -179,14 +191,20 @@ fn try_semantic(id: &str, task: &parse::Task) -> Option<String> {
     } else {
         nat_positions
     };
+    // Fuel bounds recursion depth too: keep it under what the 1GB worker
+    // stack can absorb when a bad candidate diverges. Algo/tree solutions
+    // run real algorithms (backtracking, BFS, DFT), so they get more.
+    let fuel = match family {
+        compile::Family::Algo => 3_000_000,
+        compile::Family::CTre | compile::Family::STre => 3_000_000,
+        _ => 2_000_000,
+    };
     for size_idx in size_choices {
         let src = compile::program(family, out_kind, &e, &kinds, size_idx);
         let Ok(main) = compile::inline_main(&src) else {
             continue;
         };
-        // Fuel bounds recursion depth too: keep it under what the 1GB worker
-        // stack can absorb when a bad candidate diverges.
-        if compile::verify(&main, task, 2_000_000) {
+        if compile::verify(&main, task, fuel) {
             return Some(src);
         }
     }

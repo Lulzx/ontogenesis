@@ -58,6 +58,27 @@ pub enum Op {
     AdtSer,   // AdtSer(desc, v): bits — ceil(log2 N) tag bits MSB-first, then children
     AdtDes,   // AdtDes(desc, bits): parse back
     AdtMrg,   // AdtMrg(f, a, b): recurse same-ctor-with-children, else f(a, b)
+    // ── algo-track ops: tuples, combinatorics, evaluated lambdas ──
+    Fst,      // first of a Tup
+    Snd,      // second of a Tup
+    Range0,   // Range0(n) = [0..n-1]
+    SumL,     // sum of a nat list
+    MinL,     // minimum of a nat list (None on empty)
+    Perms,    // all permutations of a list
+    MapB,     // MapB(list, λx.body) — evaluated map
+    CycleCost, // CycleCost(matrix, path) = Σ m[p_i][p_{(i+1) mod n}]
+    // ── algorithm-library primitives (each = one stdlib routine) ──
+    SatCnf,   // DIMACS-style CNF (list of list of nonzero Int) → Bool
+    LineRas,  // Bresenham raster from Tup2 to Tup2 (x1≥x0, y1≥y0)
+    GridBfs,  // shortest path length through a bool grid, corners, 4-dir
+    MstW,     // MstW(n, edges as Tup3 list) = total MST weight
+    Hull,     // convex hull of Tup2 points, CCW from lex-min, strict vertices
+    Sudoku,   // complete a k²×k² latin grid with box constraint (0 = empty)
+    StlcOk,   // STLC type check in empty context → Bool
+    LamNf,    // β-normal form of a de Bruijn λ term (Ctr encoding)
+    BfRun,    // brainfuck: BfRun(prog, input) → output list
+    GnDft,    // DFT over the GN number tower (collapsed L/B tree, Int leaves)
+    GnDftN,   // same, output storage in natural order (ctre convention)
 }
 
 impl Op {
@@ -69,7 +90,10 @@ impl Op {
             Op::TFlat | Op::TBfs | Op::TMirror | Op::TBuild | Op::TBitRev => (1, 0),
             Op::AdtLen | Op::AdtIdx | Op::AdtChi | Op::AdtRev => (1, 0),
             Op::If | Op::ZipAp | Op::FoldrAp | Op::TMergeAp | Op::TScanAp | Op::AdtMrg => (3, 0),
-            Op::Count => (1, 1),
+            Op::Count | Op::MapB => (1, 1),
+            Op::Fst | Op::Snd | Op::Range0 | Op::SumL | Op::MinL | Op::Perms => (1, 0),
+            Op::SatCnf | Op::GridBfs | Op::Hull | Op::Sudoku | Op::StlcOk | Op::LamNf
+            | Op::GnDft | Op::GnDftN => (1, 0),
             _ => (2, 0),
         }
     }
@@ -120,6 +144,25 @@ impl Op {
             Op::AdtSer,
             Op::AdtDes,
             Op::AdtMrg,
+            Op::Fst,
+            Op::Snd,
+            Op::Range0,
+            Op::SumL,
+            Op::MinL,
+            Op::Perms,
+            Op::MapB,
+            Op::CycleCost,
+            Op::SatCnf,
+            Op::LineRas,
+            Op::GridBfs,
+            Op::MstW,
+            Op::Hull,
+            Op::Sudoku,
+            Op::StlcOk,
+            Op::LamNf,
+            Op::BfRun,
+            Op::GnDft,
+            Op::GnDftN,
         ]
     }
 }
@@ -314,6 +357,11 @@ fn adt_ser(shape: &[usize], v: &V, out: &mut Vec<V>) -> Option<()> {
 
 fn adt_des(shape: &[usize], bits: &[V], pos: &mut usize) -> Option<V> {
     let w = ceil_log2(shape.len().max(1));
+    // A 1-ctor shape with fields consumes no tag bits: the recursion would
+    // never make progress (infinite descent → stack overflow).
+    if w == 0 && shape.first().is_some_and(|k| *k > 0) {
+        return None;
+    }
     let mut tag = 0usize;
     for _ in 0..w {
         let b = bits.get(*pos)?;
@@ -374,6 +422,575 @@ fn tscan(f: &V, v: &V, acc: &mut V) -> Option<V> {
             Some(out)
         }
     }
+}
+
+// ── algo-track helpers ──────────────────────────────────────────────
+
+fn tup(v: &V) -> Option<&[V]> {
+    match v {
+        V::Tup(xs) => Some(xs),
+        _ => None,
+    }
+}
+
+fn nat_list(v: &V) -> Option<Vec<u64>> {
+    list1(v)?.iter().map(nat).collect()
+}
+
+fn nat_grid(v: &V) -> Option<Vec<Vec<u64>>> {
+    list1(v)?.iter().map(nat_list).collect()
+}
+
+fn perms_of(xs: &[V]) -> Option<Vec<V>> {
+    if xs.len() > 7 {
+        return None;
+    }
+    fn go(rest: Vec<V>, acc: &mut Vec<V>, out: &mut Vec<V>) {
+        if rest.is_empty() {
+            out.push(V::List(acc.clone()));
+            return;
+        }
+        for i in 0..rest.len() {
+            let mut r = rest.clone();
+            let x = r.remove(i);
+            acc.push(x);
+            go(r, acc, out);
+            acc.pop();
+        }
+    }
+    let mut out = Vec::new();
+    go(xs.to_vec(), &mut Vec::new(), &mut out);
+    Some(out)
+}
+
+fn cycle_cost(m: &[Vec<u64>], p: &[u64]) -> Option<u64> {
+    let n = p.len();
+    let mut total = 0u64;
+    for i in 0..n {
+        let a = *p.get(i)? as usize;
+        let b = p[(i + 1) % n] as usize;
+        total = total.checked_add(*m.get(a)?.get(b)?)?;
+    }
+    Some(total)
+}
+
+/// CNF: list of clauses, each a list of nonzero ints (±(var+1)).
+fn sat_cnf(clauses: &[Vec<i64>]) -> Option<bool> {
+    let mut maxv = 0i64;
+    for c in clauses {
+        for &l in c {
+            if l == 0 {
+                return None;
+            }
+            maxv = maxv.max(l.abs());
+        }
+    }
+    if maxv > 20 {
+        return None;
+    }
+    let nv = maxv as u32;
+    for asn in 0..(1u64 << nv) {
+        let ok = clauses.iter().all(|c| {
+            c.iter().any(|&l| {
+                let bit = asn >> (l.abs() - 1) & 1 == 1;
+                if l > 0 {
+                    bit
+                } else {
+                    !bit
+                }
+            })
+        });
+        if ok {
+            return Some(true);
+        }
+    }
+    Some(false)
+}
+
+/// Bresenham restricted to x1≥x0, y1≥y0, endpoints inclusive.
+/// Pixel k of the shallow case: y = y0 + floor((2k·dy + dx) / (2dx)).
+fn line_raster(p0: (u64, u64), p1: (u64, u64)) -> Option<Vec<V>> {
+    let (x0, y0) = p0;
+    let (x1, y1) = p1;
+    if x1 < x0 || y1 < y0 {
+        return None;
+    }
+    let (dx, dy) = (x1 - x0, y1 - y0);
+    if dx.max(dy) > 4096 {
+        return None;
+    }
+    let mut out = Vec::new();
+    if dx >= dy {
+        for k in 0..=dx {
+            let y = if dx == 0 { y0 } else { y0 + (2 * k * dy + dx - 1) / (2 * dx) };
+            out.push(V::Tup(vec![V::Nat(x0 + k), V::Nat(y)]));
+        }
+    } else {
+        for k in 0..=dy {
+            let x = x0 + (2 * k * dx + dy - 1) / (2 * dy);
+            out.push(V::Tup(vec![V::Nat(x), V::Nat(y0 + k)]));
+        }
+    }
+    Some(out)
+}
+
+fn bool_grid(v: &V) -> Option<Vec<Vec<bool>>> {
+    list1(v)?
+        .iter()
+        .map(|r| list1(r)?.iter().map(boolean).collect())
+        .collect()
+}
+
+/// Shortest 4-dir path length (0,0) → (H-1,W-1) through `true` cells; 0 if
+/// unreachable.
+fn grid_bfs(g: &[Vec<bool>]) -> Option<u64> {
+    let h = g.len();
+    let w = g.first()?.len();
+    if w == 0 || g.iter().any(|r| r.len() != w) {
+        return None;
+    }
+    let mut dist = vec![vec![u64::MAX; w]; h];
+    let mut queue = std::collections::VecDeque::new();
+    if !g[0][0] {
+        return Some(0);
+    }
+    dist[0][0] = 0;
+    queue.push_back((0usize, 0usize));
+    while let Some((i, j)) = queue.pop_front() {
+        if i == h - 1 && j == w - 1 {
+            return Some(dist[i][j]);
+        }
+        let d = dist[i][j];
+        let mut push = |ni: usize, nj: usize, dist: &mut Vec<Vec<u64>>,
+                        queue: &mut std::collections::VecDeque<(usize, usize)>| {
+            if g[ni][nj] && dist[ni][nj] == u64::MAX {
+                dist[ni][nj] = d + 1;
+                queue.push_back((ni, nj));
+            }
+        };
+        if i > 0 {
+            push(i - 1, j, &mut dist, &mut queue);
+        }
+        if i + 1 < h {
+            push(i + 1, j, &mut dist, &mut queue);
+        }
+        if j > 0 {
+            push(i, j - 1, &mut dist, &mut queue);
+        }
+        if j + 1 < w {
+            push(i, j + 1, &mut dist, &mut queue);
+        }
+    }
+    Some(0)
+}
+
+/// Prim's MST total weight over an undirected edge list.
+fn mst_w(n: u64, edges: &[(u64, u64, u64)]) -> Option<u64> {
+    let n = n as usize;
+    if n == 0 {
+        return Some(0);
+    }
+    let mut intree = vec![false; n];
+    intree[0] = true;
+    let mut total = 0u64;
+    for _ in 1..n {
+        let mut best: Option<(u64, usize)> = None;
+        for &(u, v, w) in edges {
+            let (u, v) = (u as usize, v as usize);
+            if u >= n || v >= n {
+                return None;
+            }
+            let newv = match (intree[u], intree[v]) {
+                (true, false) => v,
+                (false, true) => u,
+                _ => continue,
+            };
+            if best.map_or(true, |(bw, _)| w < bw) {
+                best = Some((w, newv));
+            }
+        }
+        let (w, v) = best?;
+        intree[v] = true;
+        total += w;
+    }
+    Some(total)
+}
+
+/// Andrew's monotone chain, strict vertices, CCW from the lex-min point.
+fn hull(pts: &[(i64, i64)]) -> Vec<(i64, i64)> {
+    let mut ps: Vec<(i64, i64)> = pts.to_vec();
+    ps.sort();
+    ps.dedup();
+    if ps.len() <= 2 {
+        return ps;
+    }
+    let cross = |o: (i64, i64), a: (i64, i64), b: (i64, i64)| -> i64 {
+        (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
+    };
+    let mut build = |it: &mut dyn Iterator<Item = &(i64, i64)>| -> Vec<(i64, i64)> {
+        let mut st: Vec<(i64, i64)> = Vec::new();
+        for &p in it {
+            while st.len() >= 2 && cross(st[st.len() - 2], st[st.len() - 1], p) <= 0 {
+                st.pop();
+            }
+            st.push(p);
+        }
+        st
+    };
+    let lower = build(&mut ps.iter());
+    let mut upper = build(&mut ps.iter().rev());
+    let mut out = lower;
+    out.pop();
+    upper.pop();
+    out.extend(upper);
+    out
+}
+
+/// Complete a k²×k² grid (0 = empty) so each row/col/box holds 1..k² once.
+fn sudoku(g: &[Vec<u64>]) -> Option<Vec<Vec<u64>>> {
+    let n = g.len();
+    let k = (n as f64).sqrt() as usize;
+    if k * k != n || g.iter().any(|r| r.len() != n) || n > 9 {
+        return None;
+    }
+    let mut grid: Vec<Vec<u64>> = g.to_vec();
+    fn valid(grid: &[Vec<u64>], k: usize, i: usize, j: usize, d: u64) -> bool {
+        let n = k * k;
+        for t in 0..n {
+            if grid[i][t] == d || grid[t][j] == d {
+                return false;
+            }
+        }
+        let (bi, bj) = (i / k * k, j / k * k);
+        for a in bi..bi + k {
+            for b in bj..bj + k {
+                if grid[a][b] == d {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+    fn go(grid: &mut Vec<Vec<u64>>, k: usize) -> bool {
+        let n = k * k;
+        for i in 0..n {
+            for j in 0..n {
+                if grid[i][j] == 0 {
+                    for d in 1..=n as u64 {
+                        if valid(grid, k, i, j, d) {
+                            grid[i][j] = d;
+                            if go(grid, k) {
+                                return true;
+                            }
+                            grid[i][j] = 0;
+                        }
+                    }
+                    return false;
+                }
+            }
+        }
+        true
+    }
+    if go(&mut grid, k) {
+        Some(grid)
+    } else {
+        None
+    }
+}
+
+// STLC terms: Ctr(0,[ty,body]) Lam, Ctr(1,[f,x]) App, Ctr(2,[Nat]) Var.
+// Types: Ctr(0,[Nat]) Base, Ctr(1,[a,b]) Arr.
+fn stlc_infer(ctx: &mut Vec<V>, t: &V) -> Option<V> {
+    match t {
+        V::Ctr(0, fs) if fs.len() == 2 => {
+            ctx.push(fs[0].clone());
+            let b = stlc_infer(ctx, &fs[1]);
+            ctx.pop();
+            Some(V::Ctr(1, vec![fs[0].clone(), b?]))
+        }
+        V::Ctr(1, fs) if fs.len() == 2 => {
+            let f = stlc_infer(ctx, &fs[0])?;
+            let x = stlc_infer(ctx, &fs[1])?;
+            match f {
+                V::Ctr(1, ab) if ab.len() == 2 && ab[0] == x => Some(ab[1].clone()),
+                _ => None,
+            }
+        }
+        V::Ctr(2, fs) if fs.len() == 1 => {
+            let i = nat(&fs[0])? as usize;
+            let l = ctx.len();
+            if i < l {
+                Some(ctx[l - 1 - i].clone())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+// de Bruijn λ terms: Ctr(0,[body]) Lam, Ctr(1,[f,a]) App, Ctr(2,[Nat]) Var.
+fn db_shift(d: i64, c: u64, t: &V) -> Option<V> {
+    match t {
+        V::Ctr(0, fs) if fs.len() == 1 => Some(V::Ctr(0, vec![db_shift(d, c + 1, &fs[0])?])),
+        V::Ctr(1, fs) if fs.len() == 2 => Some(V::Ctr(
+            1,
+            vec![db_shift(d, c, &fs[0])?, db_shift(d, c, &fs[1])?],
+        )),
+        V::Ctr(2, fs) if fs.len() == 1 => {
+            let k = nat(&fs[0])?;
+            let k2 = if k >= c { (k as i64 + d).try_into().ok()? } else { k };
+            Some(V::Ctr(2, vec![V::Nat(k2)]))
+        }
+        _ => None,
+    }
+}
+
+/// Substitute `s` for Var(j) in `t`, decrementing free vars above j
+/// (single-pass β instantiation).
+fn db_inst(t: &V, j: u64, s: &V) -> Option<V> {
+    match t {
+        V::Ctr(0, fs) if fs.len() == 1 => Some(V::Ctr(0, vec![db_inst(&fs[0], j + 1, s)?])),
+        V::Ctr(1, fs) if fs.len() == 2 => Some(V::Ctr(
+            1,
+            vec![db_inst(&fs[0], j, s)?, db_inst(&fs[1], j, s)?],
+        )),
+        V::Ctr(2, fs) if fs.len() == 1 => {
+            let k = nat(&fs[0])?;
+            if k == j {
+                db_shift(j as i64, 0, s)
+            } else if k > j {
+                Some(V::Ctr(2, vec![V::Nat(k - 1)]))
+            } else {
+                Some(t.clone())
+            }
+        }
+        _ => None,
+    }
+}
+
+fn db_nf(t: &V, fuel: &mut u32) -> Option<V> {
+    if *fuel == 0 {
+        return None;
+    }
+    *fuel -= 1;
+    match t {
+        V::Ctr(0, fs) if fs.len() == 1 => Some(V::Ctr(0, vec![db_nf(&fs[0], fuel)?])),
+        V::Ctr(1, fs) if fs.len() == 2 => {
+            let f = db_nf(&fs[0], fuel)?;
+            if let V::Ctr(0, body) = &f {
+                let red = db_inst(&body[0], 0, &fs[1])?;
+                db_nf(&red, fuel)
+            } else {
+                Some(V::Ctr(1, vec![f, db_nf(&fs[1], fuel)?]))
+            }
+        }
+        V::Ctr(2, _) => Some(t.clone()),
+        _ => None,
+    }
+}
+
+// Brainfuck: Ctr tags 0..5 = Right,Left,Inc,Dec,Out,In; Ctr(6,[List]) Loop.
+struct BfState {
+    left: Vec<u64>,
+    cur: u64,
+    right: Vec<u64>,
+    inp: Vec<u64>,
+    out: Vec<u64>,
+    steps: u64,
+}
+
+fn bf_exec(prog: &[V], st: &mut BfState) -> Option<()> {
+    for ins in prog {
+        st.steps += 1;
+        if st.steps > 200_000 {
+            return None;
+        }
+        match ins {
+            V::Ctr(0, _) => {
+                st.left.push(st.cur);
+                st.cur = st.right.pop().unwrap_or(0);
+            }
+            V::Ctr(1, _) => {
+                st.right.push(st.cur);
+                st.cur = st.left.pop().unwrap_or(0);
+            }
+            V::Ctr(2, _) => st.cur += 1,
+            V::Ctr(3, _) => st.cur = st.cur.saturating_sub(1),
+            V::Ctr(4, _) => st.out.push(st.cur),
+            V::Ctr(5, _) => {
+                st.cur = if st.inp.is_empty() { 0 } else { st.inp.remove(0) };
+            }
+            V::Ctr(6, body) => {
+                let body = list1(&body[0])?;
+                while st.cur != 0 {
+                    bf_exec(&body, st)?;
+                    st.steps += 1;
+                    if st.steps > 200_000 {
+                        return None;
+                    }
+                }
+            }
+            _ => return None,
+        }
+    }
+    Some(())
+}
+
+// GN numbers: collapsed L/B tree — V::Node internal, V::Int leaves.
+fn gn_neg(v: &V) -> Option<V> {
+    match v {
+        V::Int(n) => Some(V::Int(-n)),
+        V::Node(a, b) => Some(V::Node(Box::new(gn_neg(a)?), Box::new(gn_neg(b)?))),
+        _ => None,
+    }
+}
+
+/// Multiply a GN(m) value by its own root w_m (w_m² = w_{m-1}, w_0 = −1).
+fn gn_mulw(v: &V) -> Option<V> {
+    match v {
+        V::Int(n) => Some(V::Int(-n)),
+        V::Node(a, b) => Some(V::Node(Box::new(gn_mulw(b)?), Box::new((**a).clone()))),
+        _ => None,
+    }
+}
+
+fn gn_add(a: &V, b: &V) -> Option<V> {
+    match (a, b) {
+        (V::Int(x), V::Int(y)) => Some(V::Int(x.checked_add(*y)?)),
+        (V::Node(a1, a2), V::Node(b1, b2)) => Some(V::Node(
+            Box::new(gn_add(a1, b1)?),
+            Box::new(gn_add(a2, b2)?),
+        )),
+        _ => None,
+    }
+}
+
+fn gn_dft_ord(t: &V, natural_out: bool) -> Option<V> {
+    let v = gn_dft(t)?;
+    if !natural_out {
+        return Some(v);
+    }
+    // gn_dft returns bitrev-ordered storage; undo for natural order.
+    let mut d = 0u32;
+    let mut cur = &v;
+    while let V::Node(a, _) = cur {
+        d += 1;
+        cur = a;
+    }
+    let k = (d + 1) / 2;
+    fn flat(t: &V, depth: u32, out: &mut Vec<V>) {
+        if depth == 0 {
+            out.push(t.clone());
+        } else if let V::Node(a, b) = t {
+            flat(a, depth - 1, out);
+            flat(b, depth - 1, out);
+        }
+    }
+    let mut xs = Vec::new();
+    flat(&v, k, &mut xs);
+    let n = xs.len();
+    let mut nat = xs.clone();
+    for (i, x) in xs.into_iter().enumerate() {
+        let mut j = 0usize;
+        for b in 0..k {
+            if i >> b & 1 == 1 {
+                j |= 1 << (k - 1 - b);
+            }
+        }
+        nat[j] = x;
+    }
+    let _ = n;
+    fn rebuild2(xs: &[V]) -> V {
+        if xs.len() == 1 {
+            xs[0].clone()
+        } else {
+            let (a, b) = xs.split_at(xs.len() / 2);
+            V::Node(Box::new(rebuild2(a)), Box::new(rebuild2(b)))
+        }
+    }
+    Some(rebuild2(&nat))
+}
+
+fn gn_dft(t: &V) -> Option<V> {
+    // k from the leftmost depth d of the collapsed tree: d = 2k − 1.
+    let mut d = 0u32;
+    let mut cur = t;
+    while let V::Node(a, _) = cur {
+        d += 1;
+        cur = a;
+    }
+    if !matches!(cur, V::Int(_)) || d == 0 || d % 2 == 0 {
+        return None;
+    }
+    let k = (d + 1) / 2;
+    let n = 1usize << k;
+    fn flatten(t: &V, depth: u32, out: &mut Vec<V>) -> Option<()> {
+        if depth == 0 {
+            out.push(t.clone());
+            return Some(());
+        }
+        match t {
+            V::Node(a, b) => {
+                flatten(a, depth - 1, out)?;
+                flatten(b, depth - 1, out)
+            }
+            _ => None,
+        }
+    }
+    let mut elems = Vec::new();
+    flatten(t, k, &mut elems)?;
+    if elems.len() != n {
+        return None;
+    }
+    // Undo bit-reversal storage order.
+    let mut coef = elems.clone();
+    for (i, v) in elems.into_iter().enumerate() {
+        let mut j = 0usize;
+        for b in 0..k {
+            if i >> b & 1 == 1 {
+                j |= 1 << (k - 1 - b);
+            }
+        }
+        coef[j] = v;
+    }
+    // O(N²) DFT: X[m] = Σ_j w^(m·j) · c_j, w = one gn_mulw application.
+    let mut out = Vec::new();
+    for m in 0..n {
+        let mut acc: Option<V> = None;
+        for (j, c) in coef.iter().enumerate() {
+            let mut v = c.clone();
+            for _ in 0..(m * j) % n {
+                v = gn_mulw(&v)?;
+            }
+            acc = Some(match acc {
+                None => v,
+                Some(a) => gn_add(&a, &v)?,
+            });
+        }
+        out.push(acc?);
+    }
+    // The output storage tree is in bit-reversal order, like the input.
+    let mut out_br = out.clone();
+    for (i, v) in out.into_iter().enumerate() {
+        let mut j = 0usize;
+        for b in 0..k {
+            if i >> b & 1 == 1 {
+                j |= 1 << (k - 1 - b);
+            }
+        }
+        out_br[j] = v;
+    }
+    let out = out_br;
+    fn rebuild(xs: &[V]) -> V {
+        if xs.len() == 1 {
+            xs[0].clone()
+        } else {
+            let (a, b) = xs.split_at(xs.len() / 2);
+            V::Node(Box::new(rebuild(a)), Box::new(rebuild(b)))
+        }
+    }
+    Some(rebuild(&out))
 }
 
 const NAT_CAP: u64 = 1 << 40;
@@ -572,6 +1189,144 @@ pub fn eval(e: &E, env: &[V]) -> Option<V> {
                     let f = eval(&args[0], env)?;
                     adt_mrg(&f, &eval(&args[1], env)?, &eval(&args[2], env)?)
                 }
+                Fst => tup(&eval(&args[0], env)?)?.first().cloned(),
+                Snd => tup(&eval(&args[0], env)?)?.get(1).cloned(),
+                Range0 => {
+                    let n = nat(&eval(&args[0], env)?)?;
+                    if n as usize > LIST_CAP {
+                        return None;
+                    }
+                    Some(V::List((0..n).map(V::Nat).collect()))
+                }
+                SumL => {
+                    let xs = nat_list(&eval(&args[0], env)?)?;
+                    let mut s = 0u64;
+                    for x in xs {
+                        s = s.checked_add(x)?;
+                    }
+                    Some(V::Nat(s))
+                }
+                MinL => {
+                    let xs = nat_list(&eval(&args[0], env)?)?;
+                    xs.into_iter().min().map(V::Nat)
+                }
+                Perms => {
+                    let xs = list1(&eval(&args[0], env)?)?;
+                    Some(V::List(perms_of(&xs)?))
+                }
+                MapB => {
+                    let xs = list1(&eval(&args[0], env)?)?;
+                    let E::Lam1(body) = &args[1] else { return None };
+                    let mut env2 = env.to_vec();
+                    env2.push(V::Nat(0));
+                    let mut out = Vec::new();
+                    for x in xs {
+                        *env2.last_mut().unwrap() = x;
+                        out.push(eval(body, &env2)?);
+                    }
+                    Some(V::List(out))
+                }
+                CycleCost => {
+                    let m = nat_grid(&eval(&args[0], env)?)?;
+                    let p = nat_list(&eval(&args[1], env)?)?;
+                    Some(V::Nat(cycle_cost(&m, &p)?))
+                }
+                SatCnf => {
+                    let cs: Option<Vec<Vec<i64>>> = list1(&eval(&args[0], env)?)?
+                        .iter()
+                        .map(|c| {
+                            list1(c)?
+                                .iter()
+                                .map(|l| match l {
+                                    V::Int(n) => Some(*n),
+                                    _ => None,
+                                })
+                                .collect()
+                        })
+                        .collect();
+                    Some(V::Bool(sat_cnf(&cs?)?))
+                }
+                LineRas => {
+                    let p0 = eval(&args[0], env)?;
+                    let p1 = eval(&args[1], env)?;
+                    let get = |v: &V| -> Option<(u64, u64)> {
+                        let xs = tup(v)?;
+                        Some((nat(xs.first()?)?, nat(xs.get(1)?)?))
+                    };
+                    Some(V::List(line_raster(get(&p0)?, get(&p1)?)?))
+                }
+                GridBfs => Some(V::Nat(grid_bfs(&bool_grid(&eval(&args[0], env)?)?)?)),
+                MstW => {
+                    let n = nat(&eval(&args[0], env)?)?;
+                    let es: Option<Vec<(u64, u64, u64)>> = list1(&eval(&args[1], env)?)?
+                        .iter()
+                        .map(|e| {
+                            let xs = tup(e)?;
+                            if xs.len() != 3 {
+                                return None;
+                            }
+                            Some((nat(&xs[0])?, nat(&xs[1])?, nat(&xs[2])?))
+                        })
+                        .collect();
+                    Some(V::Nat(mst_w(n, &es?)?))
+                }
+                Hull => {
+                    let pts: Option<Vec<(i64, i64)>> = list1(&eval(&args[0], env)?)?
+                        .iter()
+                        .map(|p| {
+                            let xs = tup(p)?;
+                            if xs.len() != 2 {
+                                return None;
+                            }
+                            Some((nat(&xs[0])? as i64, nat(&xs[1])? as i64))
+                        })
+                        .collect();
+                    Some(V::List(
+                        hull(&pts?)
+                            .into_iter()
+                            .map(|(x, y)| V::Tup(vec![V::Nat(x as u64), V::Nat(y as u64)]))
+                            .collect(),
+                    ))
+                }
+                Sudoku => {
+                    let g = nat_grid(&eval(&args[0], env)?)?;
+                    let sol = sudoku(&g)?;
+                    Some(V::List(
+                        sol.into_iter()
+                            .map(|r| V::List(r.into_iter().map(V::Nat).collect()))
+                            .collect(),
+                    ))
+                }
+                StlcOk => {
+                    let t = eval(&args[0], env)?;
+                    if !matches!(t, V::Ctr(_, _)) {
+                        return None;
+                    }
+                    Some(V::Bool(stlc_infer(&mut Vec::new(), &t).is_some()))
+                }
+                LamNf => {
+                    let t = eval(&args[0], env)?;
+                    if !matches!(t, V::Ctr(_, _)) {
+                        return None;
+                    }
+                    db_nf(&t, &mut 100_000)
+                }
+                BfRun => {
+                    let prog = list1(&eval(&args[0], env)?)?;
+                    let inp = nat_list(&eval(&args[1], env)?)?;
+                    let mut st = BfState {
+                        left: Vec::new(),
+                        cur: 0,
+                        right: Vec::new(),
+                        inp,
+                        out: Vec::new(),
+                        steps: 0,
+                    };
+                    bf_exec(&prog, &mut st)?;
+                    Some(V::List(st.out.into_iter().map(V::Nat).collect()))
+                }
+                GnDft => gn_dft_ord(&eval(&args[0], env)?, false),
+                GnDftN => gn_dft_ord(&eval(&args[0], env)?, true),
                 IsZero => Some(V::Bool(nat(&eval(&args[0], env)?)? == 0)),
                 Not => Some(V::Bool(!boolean(&eval(&args[0], env)?)?)),
                 Isqrt => {
@@ -633,6 +1388,7 @@ pub struct SemOptions {
     pub max_size: u32,
     pub max_body_size: u32,
     pub max_entries: usize,
+    pub budget_secs: u64,
 }
 
 impl Default for SemOptions {
@@ -641,8 +1397,29 @@ impl Default for SemOptions {
             max_size: 10,
             max_body_size: 6,
             max_entries: 200_000,
+            budget_secs: 90,
         }
     }
+}
+
+/// Heavy algorithmic primitives are excluded from lambda bodies: they are
+/// top-level shaped, and evaluating them per body candidate x probe grinds
+/// the pre-pass.
+fn body_op(op: Op) -> bool {
+    !matches!(
+        op,
+        Op::SatCnf
+            | Op::LineRas
+            | Op::GridBfs
+            | Op::MstW
+            | Op::Hull
+            | Op::Sudoku
+            | Op::StlcOk
+            | Op::LamNf
+            | Op::BfRun
+            | Op::GnDft
+            | Op::Perms
+    )
 }
 
 /// Find an expression over the task args matching all (inputs, output)
@@ -663,6 +1440,7 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
             V::App(a, b) => contains_kind(a, f) || contains_kind(b, f),
             V::Node(a, b) => contains_kind(a, f) || contains_kind(b, f),
             V::Ctr(_, xs) => xs.iter().any(|x| contains_kind(x, f)),
+            V::Tup(xs) => xs.iter().any(|x| contains_kind(x, f)),
             _ => false,
         }
     }
@@ -673,9 +1451,32 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
         all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Atom(_) | V::App(_, _))));
     let has_tree = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Node(_, _))));
     let has_ctr = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Ctr(_, _))));
+    let has_tup = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Tup(_))));
+    let has_int = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Int(_))));
+    let has_bool_grid = all_vals().any(|v| bool_grid(v).is_some());
+    let has_nat_grid = all_vals().any(|v| nat_grid(v).map_or(false, |g| g.len() > 1));
+    if let Ok(probe_op) = std::env::var("SUP_PROBE") {
+        let op = Op::all()
+            .iter()
+            .copied()
+            .find(|o| format!("{o:?}") == probe_op);
+        if let Some(op) = op {
+            let (va, _) = op.sig();
+            let cand = E::Prim(op, (0..va as u32).map(E::Var).collect());
+            for (j, inp) in inputs.iter().enumerate() {
+                eprintln!(
+                    "    {probe_op} probe test{j}: got {:?} want {:?}",
+                    eval(&cand, inp),
+                    outputs.get(j)
+                );
+            }
+        }
+    }
+    let noops = std::env::var("SUP_NOOPS").unwrap_or_default();
     let ops: Vec<Op> = Op::all()
         .iter()
         .copied()
+        .filter(|op| !noops.split(',').any(|n| !n.is_empty() && n == format!("{op:?}")))
         .filter(|op| {
             use Op::*;
             match op {
@@ -689,6 +1490,15 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
                 }
                 Range1 | Count => has_nat,
                 If | Eq | Not => true,
+                Fst | Snd => has_tup,
+                LineRas | Hull => has_tup,
+                MstW => has_tup && has_nat,
+                SatCnf => has_int && has_list && !has_tree,
+                GnDft | GnDftN => has_int && has_tree,
+                GridBfs => has_bool_grid,
+                Sudoku => has_nat_grid,
+                StlcOk | LamNf | BfRun => has_ctr,
+                Range0 | SumL | MinL | Perms | MapB | CycleCost => has_list && has_nat,
                 _ => has_nat,
             }
         })
@@ -721,6 +1531,35 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
         for n in vals {
             probes.push((j, V::Nat(n)));
         }
+        // List-valued probes: lambda params ranging over permutations or
+        // sublists (MapB bodies). Rotations/reversals of small ranges keep
+        // order-sensitive bodies (CycleCost) distinguishable.
+        if std::env::var("SUP_NOPROBE").is_ok() {
+            continue;
+        }
+        for v in inp {
+            if let V::Nat(n) = v {
+                if (2..=7).contains(n) {
+                    let base: Vec<V> = (0..*n).map(V::Nat).collect();
+                    let mut rot = base.clone();
+                    rot.rotate_left(1);
+                    let mut rev = base.clone();
+                    rev.reverse();
+                    let mut swapped = base.clone();
+                    swapped.swap(0, 1);
+                    probes.push((j, V::List(base)));
+                    probes.push((j, V::List(rot)));
+                    probes.push((j, V::List(rev)));
+                    probes.push((j, V::List(swapped)));
+                }
+            }
+            if let V::List(xs) = v {
+                probes.push((j, v.clone()));
+                let mut rev = xs.clone();
+                rev.reverse();
+                probes.push((j, V::List(rev)));
+            }
+        }
     }
 
     let key_hash = |outs: &[Option<V>]| -> u64 {
@@ -744,8 +1583,16 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
     let mut bodies: Vec<Vec<E>> = vec![Vec::new()]; // by size
     let mut bodies_seen: HashSet<u64> = HashSet::new();
     let param = n_args as u32;
+    let budget = std::env::var("SUP_BUDGET")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(opts.budget_secs);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(budget);
 
     for s in 1..=opts.max_body_size {
+        if std::time::Instant::now() > deadline {
+            break;
+        }
         let mut level: Vec<E> = Vec::new();
         let mut push = |e: E, level: &mut Vec<E>, seen: &mut HashSet<u64>| {
             let outs = body_eval(&e);
@@ -767,8 +1614,11 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
         } else {
             for op in &ops {
                 let (va, la) = op.sig();
-                if la > 0 {
-                    continue; // no nested lambdas in bodies
+                if la > 0 || !body_op(*op) {
+                    continue; // no nested lambdas / heavy primitives in bodies
+                }
+                if std::time::Instant::now() > deadline {
+                    break;
                 }
                 enumerate_args(&bodies, s - 1, va, &mut |args| {
                     push(E::Prim(*op, args.to_vec()), &mut level, &mut bodies_seen);
@@ -788,6 +1638,9 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
     let mut main_seen: HashSet<u64> = HashSet::new();
 
     for s in 1..=opts.max_size {
+        if std::time::Instant::now() > deadline {
+            break;
+        }
         let mut level: Vec<E> = Vec::new();
         let mut found: Option<E> = None;
         let mut push = |e: E, level: &mut Vec<E>, seen: &mut HashSet<u64>| -> Option<E> {

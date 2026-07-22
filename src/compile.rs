@@ -29,6 +29,7 @@ pub enum Family {
     STre,
     CAdt,
     SAdt,
+    Algo,
 }
 
 impl Family {
@@ -45,6 +46,7 @@ impl Family {
             "stre" => Some(Family::STre),
             "cadt" => Some(Family::CAdt),
             "sadt" => Some(Family::SAdt),
+            "algo" => Some(Family::Algo),
             _ => None,
         }
     }
@@ -64,6 +66,10 @@ pub enum ArgKind {
     /// Scott list of Church booleans (serialized bits).
     Bits,
     Atom,
+    /// GN-number tree (fft): L/B tree with balanced-ternary leaves.
+    Gn,
+    /// Algo-family value consumed in its native encoding (identity adapter).
+    Raw,
 }
 
 /// What the task's expected outputs are, structurally.
@@ -87,6 +93,8 @@ pub enum OutKind {
     Bits,
     /// Element/application-tree output: passes through with no adapter.
     Raw,
+    /// GN-number tree output (fft).
+    Gn,
 }
 
 /// The standard library. Order matters: each definition only references
@@ -221,6 +229,131 @@ pub const STDLIB: &str = "\
 @mksctor = λd.λi.@sdup(i, λi1.λi2.@colk(@slen(@snth(d, i1)), @snil, λfs.@mkadt(@slen(d), i2, fs)))
 ";
 
+/// Algorithm-track library. Same affine discipline as STDLIB: computed
+/// values are forced+copied through @sdup/@sldup CPS before reuse; input
+/// data and dup outputs are normal forms and may be re-read freely.
+/// Emitted only for Family::Algo tasks (keeps other families' binaries small).
+pub const ALGO_LIB: &str = "\
+@sfst = λp.p(λx.λy.x)
+@ssnd = λp.p(λx.λy.y)
+@spair = λx.λy.λp.p(x, y)
+@smax = λa.λb.@sdup(a, λa1.λa2.@sdup(b, λb1.λb2.@ifc(@sleq(a1, b1), b2, a2)))
+@smin = λa.λb.@sdup(a, λa1.λa2.@sdup(b, λb1.λb2.@ifc(@sleq(a1, b1), a2, b2)))
+@srange0 = λn.@srev(@smapf(@spred, @srange1(n)))
+@ssuml = λl.@sfoldr(@sadd, @sz, l)
+@sminl = λl.l(λh.λt.@sfoldr(@smin, h, t), @sz)
+@orl = @Y(λr.λl.l(λh.λt.@ifc(h, @true, r(t)), @false))
+@none = λs.λn.n
+@some = λx.λs.λn.s(x)
+@orelse = λm1.λm2.m1(λx.@some(x), m2)
+@sldup = @Y(λr.λl.λk.l(λh.λt.@sdup(h, λh1.λh2.r(t, λt1.λt2.k(@scons(h1, t1), @scons(h2, t2)))), k(@snil, @snil)))
+@smapb = λl.λf.@smapf(f, l)
+@spicks = @Y(λr.λl.l(λh.λt.@scons(@spair(h, t), @smapf(λpk.pk(λx.λrest.@spair(x, @scons(h, rest))), r(t))), @snil))
+@sperms = @Y(λr.λl.l(λh.λt.@sconcat(@smapf(λpk.pk(λx.λrest.@smapf(λq.@scons(x, q), r(rest))), @spicks(@scons(h, t)))), @scons(@snil, @snil)))
+@scyclecost = λm.λp.@sldup(p, λp1.λp2.@ssuml(@szipf(λi.λj.@snth(@snth(m, i), j), p1, @srotl(p2))))
+@litidx = λlit.lit(λi.i, λi.i)
+@litsat = λasn.λlit.lit(λi.@snth(asn, i), λi.@not(@snth(asn, i)))
+@smaxl = @Y(λr.λl.l(λh.λt.@smax(h, r(t)), @sz))
+@nvars = λf.@smaxl(@smapf(λlit.@ss(@litidx(lit)), @sconcat(f)))
+@sat0 = λasn.λf.@andl(@smapf(λc.@orl(@smapf(@litsat(asn), c)), f))
+@satgo = @Y(λr.λv.λasn.λf.v(λvp.@sdup(vp, λv1.λv2.@ifc(r(v1, @scons(@true, asn), f), @true, r(v2, @scons(@false, asn), f))), @sat0(asn, f)))
+@ssatcnf = λf.@satgo(@nvars(f), @snil, f)
+@slineras = λp.λq.p(λa.λb.q(λc.λd.@ifc(@andb(@siszero(@ssub(c, a)), @siszero(@ssub(d, b))), @scons(@spair(a, b), @snil), @ifc(@sleq(@ssub(d, b), @ssub(c, a)), @smapf(λk.@sdup(k, λk1.λk2.@spair(@sadd(a, k1), @sadd(b, @sdiv(@sadd(@smul(@sdbl(k2), @ssub(d, b)), @spred(@ssub(c, a))), @sdbl(@ssub(c, a)))))), @srange0(@ss(@ssub(c, a)))), @smapf(λk.@sdup(k, λk1.λk2.@spair(@sadd(a, @sdiv(@sadd(@smul(@sdbl(k2), @ssub(c, a)), @spred(@ssub(d, b))), @sdbl(@ssub(d, b)))), @sadd(b, k1))), @srange0(@ss(@ssub(d, b))))))))
+@lset = @Y(λr.λl.λi.λv.l(λh.λt.i(λip.@scons(h, r(t, ip, v)), @scons(v, t)), @snil))
+@gset = @Y(λr.λg.λi.λj.λv.g(λh.λt.i(λip.@scons(h, r(t, ip, j, v)), @scons(@lset(h, j, v), t)), @snil))
+@gget = λg.λi.λj.@snth(@snth(g, i), j)
+@bdup = λb.λk.b(k(@true, @true), k(@false, @false))
+@lbdup = @Y(λr.λl.λk.l(λh.λt.@bdup(h, λh1.λh2.r(t, λt1.λt2.k(@scons(h1, t1), @scons(h2, t2)))), k(@snil, @snil)))
+@gbdup = @Y(λr.λg.λk.g(λh.λt.@lbdup(h, λh1.λh2.r(t, λt1.λt2.k(@scons(h1, t1), @scons(h2, t2)))), k(@snil, @snil)))
+@nbrs = λhh.λww.λi.λj.@sapp(i(λip.@scons(@spair(ip, j), @snil), @snil), @sapp(@ifc(@slt(@ss(i), hh), @scons(@spair(@ss(i), j), @snil), @snil), @sapp(j(λjp.@scons(@spair(i, jp), @snil), @snil), @ifc(@slt(@ss(j), ww), @scons(@spair(i, @ss(j)), @snil), @snil))))
+@istarget = λhh.λww.λpr.pr(λi.λj.@andb(@seq(@ss(i), hh), @seq(@ss(j), ww)))
+@markall = @Y(λr.λg.λfr.fr(λp.λt.p(λi.λj.r(@gset(g, i, j, @false), t)), g))
+@expand = λg.λhh.λww.λfr.@sconcat(@smapf(λp.p(λi.λj.@sfilter(λq.q(λx.λy.@gget(g, x, y)), @nbrs(hh, ww, i, j))), fr))
+@bfsgo = @Y(λr.λg.λfr.λsteps.fr(λq0.λq1.@sdup(@slen(g), λhh1.λhh2.@sdup(@slen(@shead(g)), λww1.λww2.@ifc(@orl(@smapf(@istarget(hh1, ww1), @scons(q0, q1))), steps, (λg2.@gbdup(g2, λga.λgb.r(gb, @expand(ga, hh2, ww2, @scons(q0, q1)), @ss(steps))))(@markall(g, @scons(q0, q1)))))), @sz))
+@sgridbfs = λg.@bfsgo(g, @scons(@spair(@sz, @sz), @snil), @sz)
+@better = λw.λx.λbst.bst(λpr.pr(λbw.λbx.@sdup(w, λw1.λw2.@sdup(bw, λbw1.λbw2.@ifc(@slt(w1, bw1), @some(@spair(w2, x)), @some(@spair(bw2, bx)))))), @some(@spair(w, x)))
+@scanbest = λit.λes.@sfoldr(λe.λbst.e(λu.λv.λw.@ifc(@snth(it, u), @ifc(@snth(it, v), bst, @better(w, v, bst)), @ifc(@snth(it, v), @better(w, u, bst), bst))), @none, es)
+@srepl = @Y(λr.λn.λx.n(λp.@scons(x, r(p, x)), @snil))
+@mstgo = @Y(λr.λcnt.λit.λacc.λes.cnt(λcp.@lbdup(it, λit1.λit2.@scanbest(it1, es)(λpr.pr(λw.λx.r(cp, @lset(it2, x, @true), @sadd(acc, w), es)), acc)), acc))
+@smstw = λn.λes.n(λnp.@sdup(np, λnp1.λnp2.@mstgo(np1, @lset(@srepl(@ss(np2), @false), @sz, @true), @sz, es)), @sz)
+@zsub = λa.λb.@sdup(a, λa1.λa2.@sdup(b, λb1.λb2.@spair(@ssub(a1, b1), @ssub(b2, a2))))
+@zmul = λx.λy.x(λp1.λn1.y(λp2.λn2.@sdup(p1, λp11.λp12.@sdup(n1, λn11.λn12.@sdup(p2, λp21.λp22.@sdup(n2, λn21.λn22.@spair(@sadd(@smul(p11, p21), @smul(n11, n21)), @sadd(@smul(p12, n22), @smul(n12, p22)))))))))
+@zleq = λx.λy.x(λp1.λn1.y(λp2.λn2.@sleq(@sadd(p1, n2), @sadd(p2, n1))))
+@crossle = λo.λa.λb.o(λox.λoy.a(λax.λay.b(λbx.λby.@zleq(@zmul(@zsub(ax, ox), @zsub(by, oy)), @zmul(@zsub(ay, oy), @zsub(bx, ox))))))
+@plex = λp.λq.p(λa.λb.q(λc.λd.@sdup(a, λa1.λa2.@sdup(c, λc1.λc2.@ifc(@slt(a1, c1), @true, @ifc(@seq(a2, c2), @sleq(b, d), @false))))))
+@peq = λp.λq.p(λa.λb.q(λc.λd.@andb(@seq(a, c), @seq(b, d))))
+@sins = @Y(λr.λx.λl.l(λh.λt.@ifc(@plex(x, h), @scons(x, @scons(h, t)), @scons(h, r(x, t))), @scons(x, @snil)))
+@ssortp = λl.@sfoldr(@sins, @snil, l)
+@spdd = @Y(λr.λl.l(λh.λt.t(λh2.λt2.@ifc(@peq(h, h2), r(@scons(h2, t2)), @scons(h, r(@scons(h2, t2)))), @scons(h, @snil)), @snil))
+@push = @Y(λr.λst.λp.st(λs1.λt1.t1(λs2.λt2.@ifc(@crossle(s2, s1, p), r(@scons(s2, t2), p), @scons(p, @scons(s1, @scons(s2, t2)))), @scons(p, @scons(s1, @snil))), @scons(p, @snil)))
+@chgo = @Y(λr.λst.λl.l(λp.λt.r(@push(st, p), t), @srev(st)))
+@sinit = λl.@srev(@stail(@srev(l)))
+@shull = λl.@ifc(@sleq(@slen(@spdd(@ssortp(l))), @ss(@ss(@sz))), @spdd(@ssortp(l)), @sapp(@sinit(@chgo(@snil, @spdd(@ssortp(l)))), @sinit(@chgo(@snil, @srev(@spdd(@ssortp(l)))))))
+@stake = @Y(λr.λn.λl.n(λp.l(λh.λt.@scons(h, r(p, t)), @snil), @snil))
+@sdrop = @Y(λr.λn.λl.n(λp.l(λh.λt.r(p, t), @snil), l))
+@chunksg = @Y(λr.λg.λl.l(λh.λt.@scons(@stake(@slen(@shead(g)), @scons(h, t)), r(g, @sdrop(@spred(@slen(@shead(g))), t))), @snil))
+@sfind0 = @Y(λr.λi.λl.l(λh.λt.@ifc(@siszero(h), @some(i), r(@ss(i), t)), @none))
+@grp = λn.λk.λi.λj.@ifc(@seq(@sdiv(i, n), @sdiv(j, n)), @true, @ifc(@seq(@smod(i, n), @smod(j, n)), @true, @andb(@seq(@sdiv(@sdiv(i, n), k), @sdiv(@sdiv(j, n), k)), @seq(@sdiv(@smod(i, n), k), @sdiv(@smod(j, n), k)))))
+@validat = λg.λflat.λi.λd.@andl(@szipf(λidx.λval.@ifc(@andb(@seq(val, d), @grp(@slen(g), @ssqrt(@slen(g)), i, idx)), @false, @true), @srange0(@slen(flat)), flat))
+@solveg = @Y(λr.λg.λflat.@sldup(flat, λf1.λf2.@sfind0(@sz, f1)(λi.@sfoldr(λd.λacc.@orelse(@sdup(d, λd1.λd2.@ifc(@validat(g, f2, i, d1), r(g, @lset(f2, i, d2)), @none)), acc), @none, @srange1(@slen(g))), @some(f2))))
+@ssudoku = λg.@solveg(g, @sconcat(g))(λs.@sldup(s, λs1.λs2.(λa.λb.b)(s2, @chunksg(g, s1))), @snil)
+@teq = @Y(λr.λx.λy.x(λn1.y(λn2.@seq(n1, n2), λc.λd.@false), λa1.λb1.y(λn.@false, λa2.λb2.@andb(r(a1, a2), r(b1, b2)))))
+@tarr = λa.λb.λbase.λarr.arr(a, b)
+@mnth = @Y(λr.λl.λi.l(λh.λt.i(λip.r(t, ip), @some(h)), @none))
+@mbind = λm.λf.m(f, @none)
+@tinf = @Y(λr.λctx.λt.t(λty.λbody.@mbind(r(@scons(ty, ctx), body), λbt.@some(@tarr(ty, bt))), λf.λx.@mbind(r(ctx, f), λft.@mbind(r(ctx, x), λxt.ft(λn.@none, λaa.λbb.@ifc(@teq(aa, xt), @some(bb), @none)))), λi.@mnth(ctx, i)))
+@sstlcok = λt.@tinf(@snil, t)(λx.@true, @false)
+@tlam = λb.λl.λa.λv.l(b)
+@tapp = λf.λx.λl.λa.λv.a(f, x)
+@tvar = λi.λl.λa.λv.v(i)
+@tshift = @Y(λr.λd.λc.λt.t(λb.@tlam(r(d, @ss(c), b)), λf.λx.@tapp(r(d, c, f), r(d, c, x)), λi.@sdup(i, λi1.λi2.@ifc(@slt(i1, c), @tvar(i2), @tvar(@sadd(i2, d))))))
+@tinst = @Y(λr.λj.λs.λt.t(λb.@tlam(r(@ss(j), s, b)), λf.λx.@tapp(r(j, s, f), r(j, s, x)), λi.@sdup(i, λi1.λi2.@sdup(j, λj1.λj2.@ifc(@slt(i1, j1), @tvar(i2), @ifc(@seq(i2, j2), @tshift(j, @sz, s), @tvar(@spred(i2))))))))
+@tnf = @Y(λr.λt.t(λb.@tlam(r(b)), λf.λx.r(f)(λb.r(@tinst(@sz, x, b)), λg.λh.@tapp(@tapp(g, h), r(x)), λi.@tapp(@tvar(i), r(x))), λi.@tvar(i)))
+@sbfrun0 = @Y(λr.λis.λL.λc.λR.λinp.λk.is(λins.λrest.ins(R(λrh.λrt.r(rest, @scons(c, L), rh, rt, inp, k), r(rest, @scons(c, L), @sz, @snil, inp, k)), L(λlh.λlt.r(rest, lt, lh, @scons(c, R), inp, k), r(rest, @snil, @sz, @scons(c, R), inp, k)), r(rest, L, @ss(c), R, inp, k), r(rest, L, @spred(c), R, inp, k), @sdup(c, λc1.λc2.@scons(c1, r(rest, L, c2, R, inp, k))), inp(λih.λit.r(rest, L, ih, R, it, k), r(rest, L, @sz, R, @snil, k)), λbody.@Y(λlp.λL1.λc1.λR1.λinp1.λkk.@sdup(c1, λca.λcb.ca(λp.r(body, L1, cb, R1, inp1, λL2.λc2.λR2.λinp2.lp(L2, c2, R2, inp2, kk)), kk(L1, @sz, R1, inp1))))(L, c, R, inp, λL2.λc2.λR2.λinp2.r(rest, L2, c2, R2, inp2, k))), k(L, c, R, inp)))
+@sbfrun = λprog.λinp.@sbfrun0(prog, @snil, @sz, @snil, inp, λL.λc.λR.λi.@snil)
+";
+
+/// GN-number library for the fft tasks (balanced ternary + the w-tower).
+/// Emitted for tree-family tasks whose decode produced a Gn kind.
+pub const GN_LIB: &str = "\
+@spair = λx.λy.λp.p(x, y)
+@btE = λt.λo.λi.λe.e
+@btT = λx.λt.λo.λi.λe.t(x)
+@btO = λx.λt.λo.λi.λe.o(x)
+@btI = λx.λt.λo.λi.λe.i(x)
+@srange0 = λn.@srev(@smapf(@spred, @srange1(n)))
+@bt2z = @Y(λr.λb.b(λx.r(x)(λp.λn.@spair(@smul(@ss(@ss(@ss(@sz))), p), @ss(@smul(@ss(@ss(@ss(@sz))), n)))), λx.r(x)(λp.λn.@spair(@smul(@ss(@ss(@ss(@sz))), p), @smul(@ss(@ss(@ss(@sz))), n))), λx.r(x)(λp.λn.@spair(@ss(@smul(@ss(@ss(@ss(@sz))), p)), @smul(@ss(@ss(@ss(@sz))), n))), @spair(@sz, @sz)))
+@btneg = @Y(λr.λb.b(λx.@btI(r(x)), λx.@btO(r(x)), λx.@btT(r(x)), @btE))
+@pos2bt = @Y(λr.λm.m(λmp.@sdup(@ss(mp), λm1.λm2.@sdup(@smod(m1, @ss(@ss(@ss(@sz)))), λd1.λd2.@ifc(@siszero(d1), @btO(r(@sdiv(m2, @ss(@ss(@ss(@sz)))))), @ifc(@seq(d2, @ss(@sz)), @btI(r(@sdiv(m2, @ss(@ss(@ss(@sz)))))), @btT(r(@sdiv(@ss(m2), @ss(@ss(@ss(@sz)))))))))), @btE))
+@z2bt = λz.z(λp.λn.@sdup(p, λp1.λp2.@sdup(n, λn1.λn2.@ifc(@sleq(n1, p1), @pos2bt(@ssub(p2, n2)), @btneg(@pos2bt(@ssub(n2, p2)))))))
+@btadd = λa.λb.@z2bt(@bt2z(a)(λp1.λn1.@bt2z(b)(λp2.λn2.@spair(@sadd(p1, p2), @sadd(n1, n2)))))
+@gneg = @Y(λr.λg.g(λa.λb.@stnode(r(a), r(b)), λx.@stleaf(@btneg(x))))
+@gmulw = @Y(λr.λg.g(λa.λb.@stnode(r(b), a), λx.@stleaf(@btneg(x))))
+@gadd = @Y(λr.λx.λy.x(λa.λb.y(λc.λd.@stnode(r(a, c), r(b, d)), @stleaf(@btE)), λu.y(λc.λd.@stleaf(@btE), λv.@stleaf(@btadd(u, v)))))
+@gnpow = @Y(λr.λe.λg.e(λep.r(ep, @gmulw(g)), g))
+@gdepth = @Y(λr.λg.g(λa.λb.@ss(r(a)), λx.@sz))
+@gflatk = @Y(λr.λk.λg.k(λkp.@sdup(kp, λk1.λk2.g(λa.λb.@sapp(r(k1, a), r(k2, b)), @snil)), g(λa.λb.@snil, λx.@scons(x, @snil))))
+@gsum = λl.l(λh.λt.@sfoldr(@gadd, h, t), @stleaf(@btE))
+@gndft0 = λt.@sdup(@gdepth(t), λk1.λk2.@sdup(@spow(@ss(@ss(@sz)), k1), λn1.λn2.@smapf(λm.@gsum(@szipf(λj.λc.@gnpow(@smod(@smul(m, j), n1), c), @srange0(n2), @sbrp(@gflatk(k2, t)))), @srange0(@spow(@ss(@ss(@sz)), @gdepth(t))))))
+@gndft = λt.@stbuild(@sbrp(@gndft0(t)))
+@gndftn = λt.@stbuild(@gndft0(t))
+@cbtT = λx.λt.λo.λi.λe.t(x(t, o, i, e))
+@cbtO = λx.λt.λo.λi.λe.o(x(t, o, i, e))
+@cbtI = λx.λt.λo.λi.λe.i(x(t, o, i, e))
+@cbtE = λt.λo.λi.λe.e
+@cbt2s = λx.x(@btT, @btO, @btI, @btE)
+@sbt2c = @Y(λr.λb.b(λx.@cbtT(r(x)), λx.@cbtO(r(x)), λx.@cbtI(r(x)), @cbtE))
+@gnh = λa.λb.λn.λl.@stnode(a(n, l), b(n, l))
+@glh0 = λx.λn.λl.@stleaf(@cbt2s(x))
+@gcv0 = λt.t(@gnh, @glh0, @gnh, @glh0)
+@glh1 = λx.λn.λl.@stleaf(@gcv0(x))
+@gnc2s = λt.t(@gnh, @glh1, @gnh, @glh1)
+@gsub0 = @Y(λr.λg.g(λa.λb.λn.λl.n(r(a), r(b), n, l), λx.λn.λl.l(@sbt2c(x), n, l)))
+@groot0 = λg.g(λa.λb.λn.λl.n(@gsub0(a), @gsub0(b)), λx.λn.λl.l(@sbt2c(x)))
+@gsub1 = @Y(λr.λg.g(λa.λb.λn.λl.n(r(a), r(b), n, l), λx.λn.λl.l(@groot0(x), n, l)))
+@gns2c = λg.g(λa.λb.λn.λl.n(@gsub1(a), @gsub1(b)), λx.λn.λl.l(@groot0(x)))
+";
+
 fn op_ref(op: Op) -> &'static str {
     match op {
         Op::Add => "@sadd",
@@ -268,6 +401,25 @@ fn op_ref(op: Op) -> &'static str {
         Op::AdtSer => "@adtser",
         Op::AdtDes => "@adtdesv",
         Op::AdtMrg => "@adtmrg",
+        Op::Fst => "@sfst",
+        Op::Snd => "@ssnd",
+        Op::Range0 => "@srange0",
+        Op::SumL => "@ssuml",
+        Op::MinL => "@sminl",
+        Op::Perms => "@sperms",
+        Op::MapB => "@smapb",
+        Op::CycleCost => "@scyclecost",
+        Op::SatCnf => "@ssatcnf",
+        Op::LineRas => "@slineras",
+        Op::GridBfs => "@sgridbfs",
+        Op::MstW => "@smstw",
+        Op::Hull => "@shull",
+        Op::Sudoku => "@ssudoku",
+        Op::StlcOk => "@sstlcok",
+        Op::LamNf => "@tnf",
+        Op::BfRun => "@sbfrun",
+        Op::GnDft => "@gndft",
+        Op::GnDftN => "@gndftn",
     }
 }
 
@@ -320,6 +472,9 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
     let adapted = move |i: u32| -> String {
         let a = format!("a{i}");
         match (family, kinds_owned[i as usize]) {
+            (Family::Algo, _) => a,
+            (Family::CTre, ArgKind::Gn) => format!("@gnc2s({a})"),
+            (_, ArgKind::Gn) | (_, ArgKind::Raw) => a,
             (Family::SNat | Family::SList, ArgKind::Nat) => a,
             (Family::CBin, ArgKind::Nat) => format!("@cb2s({a})"),
             (Family::SBin, ArgKind::Nat) => format!("@sb2s({a})"),
@@ -341,6 +496,9 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
     let is_adt = matches!(family, Family::CAdt | Family::SAdt);
     let core = emit(e, n_args, &adapted, is_adt.then_some(size_idx));
     let wrapped = match (family, out) {
+        (Family::Algo, _) => core,
+        (Family::CTre, OutKind::Gn) => format!("@gns2c({core})"),
+        (_, OutKind::Gn) => core,
         (Family::SNat | Family::SList | Family::CAdt | Family::SAdt, OutKind::Nat) => core,
         (Family::CBin, OutKind::Nat) => format!("@s2cb({core})"),
         (Family::SBin, OutKind::Nat) => format!("@s2sb({core})"),
@@ -362,7 +520,14 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
     for i in 0..n_args {
         lams.push_str(&format!("λa{i}."));
     }
-    format!("{STDLIB}@main = {lams}{wrapped}\n")
+    let mut lib = String::from(STDLIB);
+    if matches!(family, Family::Algo) {
+        lib.push_str(ALGO_LIB);
+    }
+    if kinds.contains(&ArgKind::Gn) || matches!(out, OutKind::Gn) {
+        lib.push_str(GN_LIB);
+    }
+    format!("{lib}@main = {lams}{wrapped}\n")
 }
 
 // ── Internal verification ───────────────────────────────────────────
@@ -486,6 +651,42 @@ pub fn decode_task(
             _ => None,
         }
     };
+    // GN-number trees (fft): Scott side decodes via the family tree decoder
+    // with all-Int leaves; the Church side has its own self-passing grammar.
+    let dec_gn = |t: &Rc<Term>| -> Option<V> {
+        fn leaves_int(v: &V) -> bool {
+            match v {
+                V::Node(a, b) => leaves_int(a) && leaves_int(b),
+                V::Int(_) => true,
+                _ => false,
+            }
+        }
+        let v = match family {
+            Family::CTre => crate::decode::church_gn(t)?,
+            _ => dec_tree(t)?,
+        };
+        if matches!(v, V::Node(_, _)) && leaves_int(&v) {
+            Some(v)
+        } else {
+            None
+        }
+    };
+    // Algo-family recipe decoders (everything Scott-encoded).
+    use crate::decode::{
+        d_bf_instr, d_bool as db, d_lam_term, d_lit, d_slist_of, d_snat, d_stlc_term, d_tup_of,
+    };
+    let dec_list_nat = |t: &Rc<Term>| d_slist_of(t, &d_snat);
+    let dec_grid_bool = |t: &Rc<Term>| d_slist_of(t, &|r| d_slist_of(r, &db));
+    let dec_grid_nat = |t: &Rc<Term>| d_slist_of(t, &|r| d_slist_of(r, &d_snat));
+    let dec_pair_nat = |t: &Rc<Term>| d_tup_of(t, 2, &d_snat);
+    let dec_list_pair = |t: &Rc<Term>| d_slist_of(t, &|p| d_tup_of(p, 2, &d_snat));
+    let dec_edges = |t: &Rc<Term>| d_slist_of(t, &|p| d_tup_of(p, 3, &d_snat));
+    let dec_cnf = |t: &Rc<Term>| d_slist_of(t, &|c| d_slist_of(c, &d_lit));
+    let dec_bfprog = |t: &Rc<Term>| d_slist_of(t, &d_bf_instr);
+    let dec_lam = |t: &Rc<Term>| d_lam_term(t);
+    let dec_stlc = |t: &Rc<Term>| d_stlc_term(t);
+    let dec_snat_strict = |t: &Rc<Term>| d_snat(t);
+    let dec_bool_strict = |t: &Rc<Term>| db(t);
 
     // Normalize everything once.
     let mut arg_nfs: Vec<Vec<Rc<Term>>> = Vec::new(); // [test][arg]
@@ -526,8 +727,24 @@ pub fn decode_task(
                 (ArgKind::Atom, &dec_atomish),
             ],
             Family::CTre | Family::STre => vec![
+                (ArgKind::Gn, &dec_gn),
                 (ArgKind::Tree, &dec_tree),
                 (ArgKind::Atom, &dec_atomish),
+            ],
+            Family::Algo => vec![
+                (ArgKind::Raw, &dec_snat_strict),
+                (ArgKind::Raw, &dec_bool_strict),
+                (ArgKind::Raw, &dec_grid_bool),
+                (ArgKind::Raw, &dec_cnf),
+                (ArgKind::Raw, &dec_grid_nat),
+                (ArgKind::Raw, &dec_list_nat),
+                (ArgKind::Raw, &dec_pair_nat),
+                (ArgKind::Raw, &dec_list_pair),
+                (ArgKind::Raw, &dec_edges),
+                (ArgKind::Raw, &dec_bfprog),
+                (ArgKind::Raw, &dec_lam),
+                (ArgKind::Raw, &dec_stlc),
+                (ArgKind::Raw, &dec_atomish),
             ],
             Family::CAdt | Family::SAdt => unreachable!("adt uses decode_task_adt"),
         };
@@ -559,16 +776,26 @@ pub fn decode_task(
             (OutKind::Raw, &dec_atomish),
         ],
         Family::CTre => vec![
+            (OutKind::Gn, &dec_gn),
             (OutKind::Tree, &dec_tree),
             (OutKind::List, &dec_clist),
             (OutKind::ListS, &dec_slist),
             (OutKind::Raw, &dec_atomish),
         ],
         Family::STre => vec![
+            (OutKind::Gn, &dec_gn),
             (OutKind::Tree, &dec_tree),
             (OutKind::ListS, &dec_slist),
             (OutKind::List, &dec_clist),
             (OutKind::Raw, &dec_atomish),
+        ],
+        Family::Algo => vec![
+            (OutKind::Raw, &dec_snat_strict),
+            (OutKind::Raw, &dec_bool_strict),
+            (OutKind::Raw, &dec_grid_nat),
+            (OutKind::Raw, &dec_list_nat),
+            (OutKind::Raw, &dec_list_pair),
+            (OutKind::Raw, &dec_lam),
         ],
         _ => vec![
             (OutKind::List, &dec_list),

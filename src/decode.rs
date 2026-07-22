@@ -27,6 +27,11 @@ pub enum V {
     App(Box<V>, Box<V>),
     /// Church/Scott ADT constructor application: (tag, arity, fields).
     Ctr(u32, Vec<V>),
+    /// Signed integer (balanced-ternary tasks, signed literals).
+    Int(i64),
+    /// Fixed-width tuple (Scott pair/triple λp.p(x, y[, z])) — distinct from
+    /// List so the compiler can emit the right encoding.
+    Tup(Vec<V>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -434,6 +439,332 @@ pub fn scott_adt(shape: &[usize], t: &Rc<Term>) -> Option<V> {
     }
 }
 
+/// Balanced ternary, Scott-encoded, LSB first:
+/// E = λt.λo.λi.λe.e, T(x) = ...t(x), O(x) = ...o(x), I(x) = ...i(x).
+/// Canonical only: no trailing O digit.
+pub fn scott_bt(t: &Rc<Term>) -> Option<i64> {
+    let mut val = 0i64;
+    let mut place = 1i64;
+    let mut last_zero = false;
+    let mut any = false;
+    let mut cur = t.clone();
+    loop {
+        let mut b = cur.as_ref();
+        for _ in 0..4 {
+            let Term::Lam(inner) = b else { return None };
+            b = inner.as_ref();
+        }
+        match b {
+            Term::Var(0) => {
+                if any && last_zero {
+                    return None;
+                }
+                return Some(val);
+            }
+            Term::App(h, rest) => {
+                let d: i64 = match h.as_ref() {
+                    Term::Var(3) => -1,
+                    Term::Var(2) => 0,
+                    Term::Var(1) => 1,
+                    _ => return None,
+                };
+                val += d * place;
+                place = place.checked_mul(3)?;
+                last_zero = d == 0;
+                any = true;
+                cur = unshift(rest, 4)?;
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// Church balanced ternary: same digits but the tail is a fold under shared
+/// binders — T(I(E)) = λt.λo.λi.λe.t(i(e)).
+pub fn church_bt(t: &Term) -> Option<i64> {
+    let mut b = t;
+    for _ in 0..4 {
+        let Term::Lam(inner) = b else { return None };
+        b = inner.as_ref();
+    }
+    let mut val = 0i64;
+    let mut place = 1i64;
+    let mut last_zero = false;
+    let mut any = false;
+    let mut cur = b;
+    loop {
+        match cur {
+            Term::Var(0) => {
+                if any && last_zero {
+                    return None;
+                }
+                return Some(val);
+            }
+            Term::App(h, rest) => {
+                let d: i64 = match h.as_ref() {
+                    Term::Var(3) => -1,
+                    Term::Var(2) => 0,
+                    Term::Var(1) => 1,
+                    _ => return None,
+                };
+                val += d * place;
+                place = place.checked_mul(3)?;
+                last_zero = d == 0;
+                any = true;
+                cur = rest.as_ref();
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// Balanced-ternary digits of n, LSB first (empty for 0).
+fn bt_digits(mut n: i64) -> Vec<i64> {
+    let mut ds = Vec::new();
+    while n != 0 {
+        let mut r = n.rem_euclid(3);
+        n = n.div_euclid(3);
+        if r == 2 {
+            r = -1;
+            n += 1;
+        }
+        ds.push(r);
+    }
+    ds
+}
+
+pub fn scott_bt_term(n: i64) -> Rc<Term> {
+    let mut t = lam(lam(lam(lam(var(0)))));
+    for &d in bt_digits(n).iter().rev() {
+        let idx = match d {
+            -1 => 3,
+            0 => 2,
+            _ => 1,
+        };
+        t = lam(lam(lam(lam(app(var(idx), t)))));
+    }
+    t
+}
+
+pub fn church_bt_term(n: i64) -> Rc<Term> {
+    let mut body = var(0);
+    for &d in bt_digits(n).iter().rev() {
+        let idx = match d {
+            -1 => 3,
+            0 => 2,
+            _ => 1,
+        };
+        body = app(var(idx), body);
+    }
+    lam(lam(lam(lam(body))))
+}
+
+/// Church GN tree (ctre_fft): root spines are plain (`n(a,b)` / `l(x)`),
+/// sub-level spines are self-passing (`n(a,b,n,l)` / `l(x,n,l)`), and leaf
+/// content restarts the grammar (down to Church-BT scalars). Decodes to the
+/// collapsed Node/Int form.
+pub fn church_gn(t: &Rc<Term>) -> Option<V> {
+    fn spine(t: &Rc<Term>) -> Option<(bool, Vec<Rc<Term>>)> {
+        // peel λn.λl., collect application spine; head Var(1)=node / Var(0)=leaf
+        let Term::Lam(b1) = t.as_ref() else { return None };
+        let Term::Lam(b2) = b1.as_ref() else {
+            return None;
+        };
+        let mut args = Vec::new();
+        let mut cur = b2.clone();
+        while let Term::App(f, a) = cur.clone().as_ref() {
+            args.push(a.clone());
+            cur = f.clone();
+        }
+        args.reverse();
+        match cur.as_ref() {
+            Term::Var(1) => Some((true, args)),
+            Term::Var(0) => Some((false, args)),
+            _ => None,
+        }
+    }
+    fn content(x: &Rc<Term>) -> Option<V> {
+        if let Some(n) = church_bt(x) {
+            return Some(V::Int(n));
+        }
+        plain(x)
+    }
+    fn sub(t: &Rc<Term>) -> Option<V> {
+        let (is_node, args) = spine(t)?;
+        if is_node && args.len() == 4 {
+            if !matches!(args[2].as_ref(), Term::Var(1)) || !matches!(args[3].as_ref(), Term::Var(0)) {
+                return None;
+            }
+            Some(V::Node(
+                Box::new(sub(&unshift(&args[0], 2)?)?),
+                Box::new(sub(&unshift(&args[1], 2)?)?),
+            ))
+        } else if !is_node && args.len() == 3 {
+            if !matches!(args[1].as_ref(), Term::Var(1)) || !matches!(args[2].as_ref(), Term::Var(0)) {
+                return None;
+            }
+            content(&unshift(&args[0], 2)?)
+        } else {
+            None
+        }
+    }
+    fn plain(t: &Rc<Term>) -> Option<V> {
+        let (is_node, args) = spine(t)?;
+        if is_node && args.len() == 2 {
+            Some(V::Node(
+                Box::new(sub(&unshift(&args[0], 2)?)?),
+                Box::new(sub(&unshift(&args[1], 2)?)?),
+            ))
+        } else if !is_node && args.len() == 1 {
+            content(&unshift(&args[0], 2)?)
+        } else {
+            None
+        }
+    }
+    plain(t)
+}
+
+/// Strict Church bool: λa.λb.a / λa.λb.b only.
+pub fn strict_bool(t: &Term) -> Option<bool> {
+    let Term::Lam(b1) = t else { return None };
+    let Term::Lam(b2) = b1.as_ref() else {
+        return None;
+    };
+    match b2.as_ref() {
+        Term::Var(1) => Some(true),
+        Term::Var(0) => Some(false),
+        _ => None,
+    }
+}
+
+/// Scott constructor for a known shape: λc0..λcN-1. c_tag(f1, .., fk).
+/// Returns the tag and the (unshifted) field terms.
+pub fn scott_ctr(t: &Rc<Term>, shape: &[usize]) -> Option<(usize, Vec<Rc<Term>>)> {
+    let n = shape.len();
+    let mut cur = t.clone();
+    for _ in 0..n {
+        let Term::Lam(b) = cur.as_ref() else {
+            return None;
+        };
+        cur = b.clone();
+    }
+    let mut spine = Vec::new();
+    let mut head = cur;
+    while let Term::App(f, a) = head.clone().as_ref() {
+        spine.push(a.clone());
+        head = f.clone();
+    }
+    spine.reverse();
+    let Term::Var(i) = head.as_ref() else {
+        return None;
+    };
+    if *i as usize >= n {
+        return None;
+    }
+    let tag = n - 1 - *i as usize;
+    if spine.len() != shape[tag] {
+        return None;
+    }
+    let fields: Option<Vec<Rc<Term>>> = spine.iter().map(|a| unshift(a, n as u32)).collect();
+    Some((tag, fields?))
+}
+
+/// Raw n-tuple elements: λt.t(A, B, C) without value decoding.
+pub fn ntuple_raw(t: &Rc<Term>) -> Option<Vec<Rc<Term>>> {
+    let Term::Lam(b) = t.as_ref() else { return None };
+    let mut args_rev: Vec<&Rc<Term>> = Vec::new();
+    let mut cur = b;
+    while let Term::App(f, a) = cur.as_ref() {
+        args_rev.push(a);
+        cur = f;
+    }
+    if !matches!(cur.as_ref(), Term::Var(0)) {
+        return None;
+    }
+    let mut out = Vec::new();
+    for a in args_rev.iter().rev() {
+        out.push(unshift(a, 1)?);
+    }
+    Some(out)
+}
+
+// ── Algo-family recipe decoders ─────────────────────────────────────
+
+pub fn d_snat(t: &Rc<Term>) -> Option<V> {
+    Some(V::Nat(scott_nat(t)?))
+}
+
+pub fn d_bool(t: &Rc<Term>) -> Option<V> {
+    Some(V::Bool(strict_bool(t)?))
+}
+
+pub fn d_slist_of(t: &Rc<Term>, elem: &dyn Fn(&Rc<Term>) -> Option<V>) -> Option<V> {
+    let items = scott_list_raw(t)?;
+    Some(V::List(
+        items.iter().map(elem).collect::<Option<Vec<V>>>()?,
+    ))
+}
+
+pub fn d_tup_of(
+    t: &Rc<Term>,
+    arity: usize,
+    elem: &dyn Fn(&Rc<Term>) -> Option<V>,
+) -> Option<V> {
+    let items = ntuple_raw(t)?;
+    if items.len() != arity {
+        return None;
+    }
+    Some(V::Tup(
+        items.iter().map(elem).collect::<Option<Vec<V>>>()?,
+    ))
+}
+
+/// SAT literal: Pos(n) = λp.λn.p(n) → +(n+1); Neg(n) → −(n+1). DIMACS-style.
+pub fn d_lit(t: &Rc<Term>) -> Option<V> {
+    let (tag, fs) = scott_ctr(t, &[1, 1])?;
+    let n = scott_nat(&fs[0])? as i64;
+    Some(V::Int(if tag == 0 { n + 1 } else { -(n + 1) }))
+}
+
+/// Brainfuck instruction: 7-variant Scott; Loop's field is a program list.
+pub fn d_bf_instr(t: &Rc<Term>) -> Option<V> {
+    let (tag, fs) = scott_ctr(t, &[0, 0, 0, 0, 0, 0, 1])?;
+    if tag == 6 {
+        Some(V::Ctr(6, vec![d_slist_of(&fs[0], &d_bf_instr)?]))
+    } else {
+        Some(V::Ctr(tag as u32, Vec::new()))
+    }
+}
+
+/// de Bruijn λ term: Lam(body) | App(f, a) | Var(nat).
+pub fn d_lam_term(t: &Rc<Term>) -> Option<V> {
+    let (tag, fs) = scott_ctr(t, &[1, 2, 1])?;
+    match tag {
+        0 => Some(V::Ctr(0, vec![d_lam_term(&fs[0])?])),
+        1 => Some(V::Ctr(1, vec![d_lam_term(&fs[0])?, d_lam_term(&fs[1])?])),
+        _ => Some(V::Ctr(2, vec![V::Nat(scott_nat(&fs[0])?)])),
+    }
+}
+
+/// STLC type: Base(nat) | Arr(a, b).
+pub fn d_stlc_ty(t: &Rc<Term>) -> Option<V> {
+    let (tag, fs) = scott_ctr(t, &[1, 2])?;
+    match tag {
+        0 => Some(V::Ctr(0, vec![V::Nat(scott_nat(&fs[0])?)])),
+        _ => Some(V::Ctr(1, vec![d_stlc_ty(&fs[0])?, d_stlc_ty(&fs[1])?])),
+    }
+}
+
+/// STLC term: Lam(ty, body) | App(f, x) | Var(nat).
+pub fn d_stlc_term(t: &Rc<Term>) -> Option<V> {
+    let (tag, fs) = scott_ctr(t, &[2, 2, 1])?;
+    match tag {
+        0 => Some(V::Ctr(0, vec![d_stlc_ty(&fs[0])?, d_stlc_term(&fs[1])?])),
+        1 => Some(V::Ctr(1, vec![d_stlc_term(&fs[0])?, d_stlc_term(&fs[1])?])),
+        _ => Some(V::Ctr(2, vec![V::Nat(scott_nat(&fs[0])?)])),
+    }
+}
+
 /// N-tuple: λt.t(A, B, C) — Lam over an application spine headed by the
 /// binder. The empty tuple is λt.t.
 pub fn ntuple(t: &Rc<Term>) -> Option<Vec<V>> {
@@ -490,6 +821,22 @@ pub fn decode_value(t: &Rc<Term>) -> Option<V> {
                 return Some(V::Bool(true));
             }
         }
+    }
+    // Balanced-ternary integers (fft leaves). Ordered late: 4-binder shapes
+    // don't collide with the nat/list/bool recognizers above.
+    if let Some(n) = scott_bt(t) {
+        return Some(V::Int(n));
+    }
+    if let Some(n) = church_bt(t) {
+        return Some(V::Int(n));
+    }
+    // Nested trees (GN numbers are L/B trees whose leaves are BT ints).
+    // Ordered last: Cons-shaped nodes prefer the list recognizers above.
+    if let Some(v) = scott_tree(t) {
+        return Some(v);
+    }
+    if let Some(v) = church_tree(t) {
+        return Some(v);
     }
     None
 }

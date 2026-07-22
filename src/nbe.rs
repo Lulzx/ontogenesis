@@ -82,7 +82,33 @@ pub fn force(th: &Thunk, fuel: &mut Fuel) -> Result<Rc<Val>, Abort> {
     }
 }
 
+thread_local! {
+    static STACK_BASE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Abort before the recursion blows the worker's 1GB stack: measure stack
+/// growth from the first eval on this thread and bail past ~700MB.
+#[inline]
+fn stack_guard() -> Result<(), Abort> {
+    let here = {
+        let probe = 0u8;
+        &probe as *const u8 as usize
+    };
+    STACK_BASE.with(|b| {
+        let base = b.get();
+        if base == 0 {
+            b.set(here);
+            Ok(())
+        } else if base.saturating_sub(here) > 700_000_000 {
+            Err(Abort)
+        } else {
+            Ok(())
+        }
+    })
+}
+
 pub fn eval(env: &Env, t: &Rc<Term>, fuel: &mut Fuel) -> Result<Rc<Val>, Abort> {
+    stack_guard()?;
     match t.as_ref() {
         Term::Var(i) => {
             let idx = env.len() - 1 - *i as usize;

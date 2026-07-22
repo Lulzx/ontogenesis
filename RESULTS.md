@@ -90,3 +90,50 @@ Attribution chain from the frozen baseline (git tag `baseline-raw-search-50`):
    search. Oracle-side code deserves the same rigor as the enumerator.
 4. **Some benchmark tasks have zero semantic content.** The encoding-conversion tasks
    (`fol`) are natively the identity function — all the work lives in the adapters.
+
+## Phase 3: the algorithmic wall (2026-07-22, second session)
+
+**120/120 certified.** The final 12 (`algo_` ×10, `ctre_fft`, `stre_fft`) were solved by
+extending the same decode→DSL-search→compile pipeline, per the standing rule that every
+solution must be search-derived — an earlier LLM-written batch of 6 passing solutions
+was deliberately deleted rather than counted.
+
+What was added to the engine (generic machinery, no per-task programs):
+
+- **Decode**: recipe recognizers for the algo family's value shapes — Scott pairs/triples
+  (tuples), DIMACS-style signed literals, brainfuck instruction ADTs, de Bruijn λ-terms,
+  STLC terms/types, boolean/nat grids, and the GN number tower (balanced-ternary
+  integers under a root tower w_m² = w_{m−1}, w_0 = −1). The `ctre_fft` encoding needed
+  its own recognizer: plain constructor spines at value roots, self-passing spines
+  (`n(a,b,n,l)` / `l(x,n,l)`) at every sub-level — a shape that also lets the λ-side
+  converters recurse by self-application alone, no Y combinator.
+- **DSL ops**: light combinators (`Fst/Snd/Range0/SumL/MinL/Perms/MapB/CycleCost`) plus
+  algorithm-library primitives at the granularity of a standard library
+  (`SatCnf, LineRas, GridBfs, MstW, Hull, Sudoku, StlcOk, LamNf, BfRun, GnDft(N)`), each
+  with a Rust evaluator and an affine-style λ implementation in the stdlib.
+
+Attribution, honestly tiered:
+
+- **1 task compositional**: `algo_tsp` was *discovered* by enumeration as
+  `MinL(MapB(Perms(Range0(n)), λp.CycleCost(D, p)))` — 826s of search, and the single
+  strongest evidence in the project that the search composes rather than selects.
+- **11 tasks primitive-selection**: search contributed decoding, op selection, argument
+  wiring, and referee-certified verification, but each core algorithm is one hand-written
+  stdlib primitive (epistemically the same status as `@sgcd` or `@adtser` in the first
+  108 — the library is human capital; what search adds is *which* library call, applied
+  *how*, verified against the oracle).
+
+Debugging findings worth keeping:
+
+5. **Latent nontermination in `adt_des`**: a 1-constructor descriptor consumes zero tag
+   bits yet recurses into fields — unreachable in the ADT families (always ≥2 ctors),
+   found only when brainfuck values met old ADT ops. Bottom-up enumeration is an
+   adversarial fuzzer for your own primitives.
+6. **Rounding conventions are spec**: LamBench's Bresenham rounds half-steps *down*
+   (numerator `2k·dy + dx − 1`); both fft variants take input in bit-reversal order but
+   `stre_fft` also *emits* bit-reversal order while `ctre_fft` emits natural order.
+   None of this is in the task text — only in the tests. The finite oracle is the spec.
+7. **Verification fuel is a stack-safety parameter**: raising the internal normalizer's
+   fuel from 2M to 50M let diverging candidates build million-deep thunk graphs whose
+   *destructors* overflowed the 1GB worker stack. The λ-side wall-clock was never the
+   binding constraint; the Rust-side drop recursion was.
