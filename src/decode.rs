@@ -173,6 +173,84 @@ pub fn scott_list(t: &Rc<Term>) -> Option<Vec<V>> {
     }
 }
 
+/// Church binary (LSB first, no trailing zeros), in normal form:
+/// E = λo.λi.λe.e; the fold of I(O(I(E))) is λo.λi.λe.i(o(i(e))).
+pub fn church_bin(t: &Term) -> Option<u64> {
+    let Term::Lam(b1) = t else { return None };
+    let Term::Lam(b2) = b1.as_ref() else {
+        return None;
+    };
+    let Term::Lam(b3) = b2.as_ref() else {
+        return None;
+    };
+    let mut val = 0u64;
+    let mut pos = 0u32;
+    let mut cur = b3.as_ref();
+    loop {
+        match cur {
+            Term::Var(0) => {
+                // no trailing zeros: the last constructor must be I (or none)
+                if pos > 0 && val >> (pos - 1) == 0 {
+                    return None;
+                }
+                return Some(val);
+            }
+            Term::App(h, rest) => {
+                let bit = match h.as_ref() {
+                    Term::Var(2) => 0u64,
+                    Term::Var(1) => 1u64,
+                    _ => return None,
+                };
+                if pos >= 63 {
+                    return None;
+                }
+                val |= bit << pos;
+                pos += 1;
+                cur = rest.as_ref();
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// Scott binary: E = λo.λi.λe.e, O(x) = λo.λi.λe.o(x), I(x) = λo.λi.λe.i(x).
+pub fn scott_bin(t: &Term) -> Option<u64> {
+    let mut val = 0u64;
+    let mut pos = 0u32;
+    let mut cur = t;
+    loop {
+        let Term::Lam(b1) = cur else { return None };
+        let Term::Lam(b2) = b1.as_ref() else {
+            return None;
+        };
+        let Term::Lam(b3) = b2.as_ref() else {
+            return None;
+        };
+        match b3.as_ref() {
+            Term::Var(0) => {
+                if pos > 0 && val >> (pos - 1) == 0 {
+                    return None;
+                }
+                return Some(val);
+            }
+            Term::App(h, rest) => {
+                let bit = match h.as_ref() {
+                    Term::Var(2) => 0u64,
+                    Term::Var(1) => 1u64,
+                    _ => return None,
+                };
+                if pos >= 63 {
+                    return None;
+                }
+                val |= bit << pos;
+                pos += 1;
+                cur = rest.as_ref();
+            }
+            _ => return None,
+        }
+    }
+}
+
 /// N-tuple: λt.t(A, B, C) — Lam over an application spine headed by the
 /// binder. The empty tuple is λt.t.
 pub fn ntuple(t: &Rc<Term>) -> Option<Vec<V>> {

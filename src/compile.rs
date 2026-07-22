@@ -23,6 +23,8 @@ pub enum Family {
     CList,
     SList,
     NTup,
+    CBin,
+    SBin,
 }
 
 impl Family {
@@ -33,6 +35,8 @@ impl Family {
             "clst" => Some(Family::CList),
             "slst" => Some(Family::SList),
             "ntup" => Some(Family::NTup),
+            "cbin" => Some(Family::CBin),
+            "sbin" => Some(Family::SBin),
             _ => None,
         }
     }
@@ -125,6 +129,19 @@ pub const STDLIB: &str = "\
 @tup2list = λn.λt.t(@tupcol(n, @snil))
 @l2tgo = @Y(λr.λl.λk.l(λh.λt.r(t, k(h)), k))
 @list2tup = λl.λk.@l2tgo(l, k)
+@sdbl = @Y(λr.λn.n(λp.@ss(@ss(r(p))), @sz))
+@shalf = @Y(λr.λn.n(λp.p(λq.@ss(r(q)), @sz), @sz))
+@seven = @Y(λr.λn.n(λp.p(λq.r(q), @false), @true))
+@cb2s = λb.b(λx.@sdbl(x), λx.@ss(@sdbl(x)), @sz)
+@sb2s = @Y(λr.λb.b(λx.@sdbl(r(x)), λx.@ss(@sdbl(r(x))), @sz))
+@cbE = λo.λi.λe.e
+@cbO = λx.λo.λi.λe.o(x(o, i, e))
+@cbI = λx.λo.λi.λe.i(x(o, i, e))
+@sbE = λo.λi.λe.e
+@sbO = λx.λo.λi.λe.o(x)
+@sbI = λx.λo.λi.λe.i(x)
+@s2cb = @Y(λr.λn.n(λp.@sdup(@ss(p), λn1.λn2.@ifc(@seven(n1), @cbO(r(@shalf(n2))), @cbI(r(@shalf(n2))))), @cbE))
+@s2sb = @Y(λr.λn.n(λp.@sdup(@ss(p), λn1.λn2.@ifc(@seven(n1), @sbO(r(@shalf(n2))), @sbI(r(@shalf(n2))))), @sbE))
 ";
 
 fn op_ref(op: Op) -> &'static str {
@@ -197,6 +214,8 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
         let a = format!("a{i}");
         match (family, kinds_owned[i as usize]) {
             (Family::SNat | Family::SList, ArgKind::Nat) => a,
+            (Family::CBin, ArgKind::Nat) => format!("@cb2s({a})"),
+            (Family::SBin, ArgKind::Nat) => format!("@sb2s({a})"),
             (_, ArgKind::Nat) => format!("@c2s({a})"),
             (Family::SList, ArgKind::List) => a,
             (_, ArgKind::List) => format!("@c2sl({a})"),
@@ -210,6 +229,8 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
     let core = emit(e, n_args, &adapted);
     let wrapped = match (family, out) {
         (Family::SNat | Family::SList, OutKind::Nat) => core,
+        (Family::CBin, OutKind::Nat) => format!("@s2cb({core})"),
+        (Family::SBin, OutKind::Nat) => format!("@s2sb({core})"),
         (_, OutKind::Nat) => format!("@s2c({core})"),
         (Family::SList, OutKind::List) => core,
         (_, OutKind::List) => format!("@s2cl({core})"),
@@ -303,10 +324,11 @@ pub fn decode_task(
     };
     let scott_side = matches!(family, Family::SNat | Family::SList);
     let dec_nat = |t: &Rc<Term>| -> Option<V> {
-        let n = if scott_side {
-            crate::decode::scott_nat(t)?
-        } else {
-            crate::decode::church_nat(t)?
+        let n = match family {
+            Family::CBin => crate::decode::church_bin(t)?,
+            Family::SBin => crate::decode::scott_bin(t)?,
+            _ if scott_side => crate::decode::scott_nat(t)?,
+            _ => crate::decode::church_nat(t)?,
         };
         Some(V::Nat(n))
     };
@@ -358,7 +380,9 @@ pub fn decode_task(
     for p in 0..n_args {
         let col = |j: usize| arg_nfs[j][p].clone();
         let candidates: Vec<(ArgKind, Dec)> = match family {
-            Family::CNat | Family::SNat => vec![(ArgKind::Nat, &dec_nat)],
+            Family::CNat | Family::SNat | Family::CBin | Family::SBin => {
+                vec![(ArgKind::Nat, &dec_nat)]
+            }
             Family::CList | Family::SList => vec![
                 (ArgKind::Nat, &dec_nat),
                 (ArgKind::List, &dec_list),
@@ -388,7 +412,7 @@ pub fn decode_task(
     // Output kind: ordered attempts.
     let wcol = |j: usize| want_nfs[j].clone();
     let out_candidates: Vec<(OutKind, Dec)> = match family {
-        Family::CNat | Family::SNat => {
+        Family::CNat | Family::SNat | Family::CBin | Family::SBin => {
             vec![(OutKind::Nat, &dec_nat), (OutKind::Bool, &dec_bool)]
         }
         Family::NTup => vec![
