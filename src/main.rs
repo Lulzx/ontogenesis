@@ -1,4 +1,5 @@
 mod bank;
+mod decode;
 mod nbe;
 mod parse;
 mod term;
