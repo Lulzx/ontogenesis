@@ -293,6 +293,147 @@ pub fn scott_tree(t: &Rc<Term>) -> Option<V> {
     }
 }
 
+/// ADT type descriptor: a Scott list of constructor specs, each a Scott
+/// list of λx.x recursive-field markers. Returns field counts per ctor.
+pub fn adt_desc(t: &Rc<Term>) -> Option<Vec<usize>> {
+    let specs = scott_list_raw(t)?;
+    let mut out = Vec::new();
+    for s in specs {
+        let fields = scott_list_raw(&s)?;
+        for f in &fields {
+            if !matches!(f.as_ref(), Term::Lam(b) if matches!(b.as_ref(), Term::Var(0))) {
+                return None;
+            }
+        }
+        out.push(fields.len());
+    }
+    Some(out)
+}
+
+/// Scott list with raw term elements (no value decoding).
+pub fn scott_list_raw(t: &Rc<Term>) -> Option<Vec<Rc<Term>>> {
+    let mut items = Vec::new();
+    let mut cur: Rc<Term> = t.clone();
+    loop {
+        let Term::Lam(b1) = cur.as_ref() else {
+            return None;
+        };
+        let Term::Lam(b2) = b1.as_ref() else {
+            return None;
+        };
+        let step: Option<(Rc<Term>, Rc<Term>)> = match b2.as_ref() {
+            Term::Var(0) => None,
+            Term::App(fh, tail) => {
+                let Term::App(c, head) = fh.as_ref() else {
+                    return None;
+                };
+                if !matches!(c.as_ref(), Term::Var(1)) {
+                    return None;
+                }
+                Some((unshift(head, 2)?, unshift(tail, 2)?))
+            }
+            _ => return None,
+        };
+        match step {
+            None => return Some(items),
+            Some((h, tl)) => {
+                items.push(h);
+                cur = tl;
+            }
+        }
+    }
+}
+
+/// Church-encoded ADT value for a given shape (field counts per ctor):
+/// λh0..λhN-1. body, body ::= h_i(child_bodies...) — children are folds
+/// over the same binders. Free-headed spines decode as V::App (merge's F).
+pub fn church_adt(shape: &[usize], t: &Rc<Term>) -> Option<V> {
+    let n = shape.len();
+    let mut cur = t;
+    for _ in 0..n {
+        let Term::Lam(b) = cur.as_ref() else {
+            return None;
+        };
+        cur = b;
+    }
+    church_adt_body(shape, cur, n as u32)
+}
+
+fn church_adt_body(shape: &[usize], t: &Rc<Term>, n: u32) -> Option<V> {
+    let mut spine = Vec::new();
+    let mut cur = t;
+    while let Term::App(f, a) = cur.as_ref() {
+        spine.push(a);
+        cur = f;
+    }
+    spine.reverse();
+    match cur.as_ref() {
+        Term::Var(i) if *i < n => {
+            let tag = (n - 1 - i) as usize;
+            if spine.len() != shape[tag] {
+                return None;
+            }
+            let mut fields = Vec::new();
+            for a in spine {
+                fields.push(church_adt_body(shape, a, n)?);
+            }
+            Some(V::Ctr(tag as u32, fields))
+        }
+        Term::Free(_) => {
+            // F(V1, V2) spine: head atom applied to church-adt args.
+            let mut v = decode_value(cur)?;
+            for a in spine {
+                let sub = church_adt(shape, &unshift(a, n)?)
+                    .or_else(|| decode_value(&unshift(a, n).unwrap_or_else(|| a.clone())))?;
+                v = V::App(Box::new(v), Box::new(sub));
+            }
+            Some(v)
+        }
+        _ => None,
+    }
+}
+
+/// Scott-encoded ADT value: λc0..λcN-1. c_i(full child encodings).
+pub fn scott_adt(shape: &[usize], t: &Rc<Term>) -> Option<V> {
+    let n = shape.len();
+    let mut cur = t.clone();
+    for _ in 0..n {
+        let Term::Lam(b) = cur.as_ref() else {
+            return None;
+        };
+        cur = b.clone();
+    }
+    let mut spine = Vec::new();
+    let mut head = cur.clone();
+    while let Term::App(f, a) = head.clone().as_ref() {
+        spine.push(a.clone());
+        head = f.clone();
+    }
+    spine.reverse();
+    match head.as_ref() {
+        Term::Var(i) if (*i as usize) < n => {
+            let tag = n - 1 - *i as usize;
+            if spine.len() != shape[tag] {
+                return None;
+            }
+            let mut fields = Vec::new();
+            for a in &spine {
+                fields.push(scott_adt(shape, &unshift(a, n as u32)?)?);
+            }
+            Some(V::Ctr(tag as u32, fields))
+        }
+        Term::Free(_) => {
+            let mut v = decode_value(&head)?;
+            for a in &spine {
+                let sub = scott_adt(shape, &unshift(a, n as u32)?)?;
+                v = V::App(Box::new(v), Box::new(sub));
+            }
+            Some(v)
+        }
+        _ => None,
+    }
+}
+
 /// N-tuple: λt.t(A, B, C) — Lam over an application spine headed by the
 /// binder. The empty tuple is λt.t.
 pub fn ntuple(t: &Rc<Term>) -> Option<Vec<V>> {

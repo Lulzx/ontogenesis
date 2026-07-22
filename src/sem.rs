@@ -49,6 +49,15 @@ pub enum Op {
     TIdxAp,   // TIdxAp(f, t): leaves f(i, x), i = left-to-right index
     TScanAp,  // TScanAp(f, z, t): exclusive prefix fold over leaves
     TBitRev,  // bit-reversal permutation of leaves (perfect tree)
+    // ── ADT ops (values are V::Ctr constructor trees) ──
+    AdtLen,   // total constructor count
+    AdtIdx,   // outermost constructor tag
+    AdtChi,   // recursive children of the root, as a list
+    AdtRev,   // reverse every constructor's fields recursively
+    AdtEq,    // structural equality
+    AdtSer,   // AdtSer(desc, v): bits — ceil(log2 N) tag bits MSB-first, then children
+    AdtDes,   // AdtDes(desc, bits): parse back
+    AdtMrg,   // AdtMrg(f, a, b): recurse same-ctor-with-children, else f(a, b)
 }
 
 impl Op {
@@ -58,7 +67,8 @@ impl Op {
             Op::Isqrt | Op::IsZero | Op::Not | Op::Range1 => (1, 0),
             Op::Head | Op::Last | Op::Rev | Op::RotL | Op::RotR | Op::Len | Op::SortB => (1, 0),
             Op::TFlat | Op::TBfs | Op::TMirror | Op::TBuild | Op::TBitRev => (1, 0),
-            Op::If | Op::ZipAp | Op::FoldrAp | Op::TMergeAp | Op::TScanAp => (3, 0),
+            Op::AdtLen | Op::AdtIdx | Op::AdtChi | Op::AdtRev => (1, 0),
+            Op::If | Op::ZipAp | Op::FoldrAp | Op::TMergeAp | Op::TScanAp | Op::AdtMrg => (3, 0),
             Op::Count => (1, 1),
             _ => (2, 0),
         }
@@ -102,6 +112,14 @@ impl Op {
             Op::TIdxAp,
             Op::TScanAp,
             Op::TBitRev,
+            Op::AdtLen,
+            Op::AdtIdx,
+            Op::AdtChi,
+            Op::AdtRev,
+            Op::AdtEq,
+            Op::AdtSer,
+            Op::AdtDes,
+            Op::AdtMrg,
         ]
     }
 }
@@ -241,6 +259,99 @@ fn tidx(f: &V, v: &V, i: &mut u64) -> Option<V> {
             *i += 1;
             Some(out)
         }
+    }
+}
+
+fn adt_len(v: &V) -> Option<u64> {
+    match v {
+        V::Ctr(_, fields) => {
+            let mut n = 1u64;
+            for f in fields {
+                n += adt_len(f)?;
+            }
+            Some(n)
+        }
+        _ => None,
+    }
+}
+
+fn adt_rev(v: &V) -> Option<V> {
+    match v {
+        V::Ctr(tag, fields) => {
+            let mut fs: Vec<V> = fields.iter().map(adt_rev).collect::<Option<_>>()?;
+            fs.reverse();
+            Some(V::Ctr(*tag, fs))
+        }
+        _ => None,
+    }
+}
+
+/// Descriptor value: List of List (of anything) → field counts per ctor.
+fn desc_shape(v: &V) -> Option<Vec<usize>> {
+    let specs = list1(v)?;
+    specs.iter().map(|s| Some(list1(s)?.len())).collect()
+}
+
+fn ceil_log2(n: usize) -> u32 {
+    let mut w = 0u32;
+    while (1usize << w) < n {
+        w += 1;
+    }
+    w
+}
+
+fn adt_ser(shape: &[usize], v: &V, out: &mut Vec<V>) -> Option<()> {
+    let V::Ctr(tag, fields) = v else { return None };
+    let w = ceil_log2(shape.len().max(1));
+    for b in (0..w).rev() {
+        out.push(V::Bool((*tag as usize >> b) & 1 == 1));
+    }
+    for f in fields {
+        adt_ser(shape, f, out)?;
+    }
+    Some(())
+}
+
+fn adt_des(shape: &[usize], bits: &[V], pos: &mut usize) -> Option<V> {
+    let w = ceil_log2(shape.len().max(1));
+    let mut tag = 0usize;
+    for _ in 0..w {
+        let b = bits.get(*pos)?;
+        *pos += 1;
+        let bit = match b {
+            V::Bool(x) => *x,
+            V::Nat(0) => false,
+            _ => return None,
+        };
+        tag = tag << 1 | usize::from(bit);
+    }
+    let k = *shape.get(tag)?;
+    let mut fields = Vec::new();
+    for _ in 0..k {
+        fields.push(adt_des(shape, bits, pos)?);
+    }
+    Some(V::Ctr(tag as u32, fields))
+}
+
+fn adt_mrg(f: &V, a: &V, b: &V) -> Option<V> {
+    match (a, b) {
+        (V::Ctr(ta, fa), V::Ctr(tb, _)) if ta == tb && !fa.is_empty() => {
+            let V::Ctr(_, fb) = b else { unreachable!() };
+            if fa.len() != fb.len() {
+                return None;
+            }
+            let fields: Vec<V> = fa
+                .iter()
+                .zip(fb)
+                .map(|(x, y)| adt_mrg(f, x, y))
+                .collect::<Option<_>>()?;
+            Some(V::Ctr(*ta, fields))
+        }
+        (V::Ctr(_, _), V::Ctr(_, _)) => Some(V::App(
+            Box::new(V::App(Box::new(f.clone()), Box::new(a.clone()))),
+            Box::new(b.clone()),
+        )),
+        _ => None,
     }
 }
 
@@ -422,6 +533,45 @@ pub fn eval(e: &E, env: &[V]) -> Option<V> {
                     }
                     tbuild(&out)
                 }
+                AdtLen => Some(V::Nat(adt_len(&eval(&args[0], env)?)?)),
+                AdtIdx => match eval(&args[0], env)? {
+                    V::Ctr(tag, _) => Some(V::Nat(tag as u64)),
+                    _ => None,
+                },
+                AdtChi => match eval(&args[0], env)? {
+                    V::Ctr(_, fields) => Some(V::List(fields)),
+                    _ => None,
+                },
+                AdtRev => adt_rev(&eval(&args[0], env)?),
+                AdtEq => {
+                    let a = eval(&args[0], env)?;
+                    let b = eval(&args[1], env)?;
+                    if !matches!(a, V::Ctr(_, _)) {
+                        return None;
+                    }
+                    Some(V::Bool(a == b))
+                }
+                AdtSer => {
+                    let desc = desc_shape(&eval(&args[0], env)?)?;
+                    let v = eval(&args[1], env)?;
+                    let mut bits = Vec::new();
+                    adt_ser(&desc, &v, &mut bits)?;
+                    Some(V::List(bits))
+                }
+                AdtDes => {
+                    let desc = desc_shape(&eval(&args[0], env)?)?;
+                    let bits = list1(&eval(&args[1], env)?)?;
+                    let mut pos = 0usize;
+                    let v = adt_des(&desc, &bits, &mut pos)?;
+                    if pos != bits.len() {
+                        return None;
+                    }
+                    Some(v)
+                }
+                AdtMrg => {
+                    let f = eval(&args[0], env)?;
+                    adt_mrg(&f, &eval(&args[1], env)?, &eval(&args[2], env)?)
+                }
                 IsZero => Some(V::Bool(nat(&eval(&args[0], env)?)? == 0)),
                 Not => Some(V::Bool(!boolean(&eval(&args[0], env)?)?)),
                 Isqrt => {
@@ -522,6 +672,7 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
     let has_atom =
         all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Atom(_) | V::App(_, _))));
     let has_tree = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Node(_, _))));
+    let has_ctr = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Ctr(_, _))));
     let ops: Vec<Op> = Op::all()
         .iter()
         .copied()
@@ -531,6 +682,7 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
                 TFlat | TBfs | TMirror | TBuild | TMergeAp | TIdxAp | TScanAp | TBitRev => {
                     has_tree
                 }
+                AdtLen | AdtIdx | AdtChi | AdtRev | AdtEq | AdtSer | AdtDes | AdtMrg => has_ctr,
                 MapAp | ZipAp | FoldrAp => has_atom && (has_list || has_tree),
                 Head | Last | Nth | Rev | RotL | RotR | Len | AppendL | SortB => {
                     has_list || has_tree

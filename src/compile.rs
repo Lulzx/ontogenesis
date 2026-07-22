@@ -27,6 +27,8 @@ pub enum Family {
     SBin,
     CTre,
     STre,
+    CAdt,
+    SAdt,
 }
 
 impl Family {
@@ -41,6 +43,8 @@ impl Family {
             "sbin" => Some(Family::SBin),
             "ctre" => Some(Family::CTre),
             "stre" => Some(Family::STre),
+            "cadt" => Some(Family::CAdt),
+            "sadt" => Some(Family::SAdt),
             _ => None,
         }
     }
@@ -53,6 +57,12 @@ pub enum ArgKind {
     List,
     Tuple,
     Tree,
+    /// ADT type descriptor (kept in Scott form, passed through).
+    Desc,
+    /// ADT value in the family's encoding.
+    AdtVal,
+    /// Scott list of Church booleans (serialized bits).
+    Bits,
     Atom,
 }
 
@@ -66,6 +76,15 @@ pub enum OutKind {
     ListS,
     Tuple,
     Tree,
+    /// ADT value, Church-encoded / Scott-encoded.
+    AdtC,
+    AdtS,
+    /// Scott list of Church-encoded ADT values (cadt_chi).
+    ListAdtC,
+    /// Scott list of Scott-encoded ADT values (sadt_chi).
+    ListAdtS,
+    /// Scott list of Church booleans (serialize output).
+    Bits,
     /// Element/application-tree output: passes through with no adapter.
     Raw,
 }
@@ -170,6 +189,36 @@ pub const STDLIB: &str = "\
 @sbuildgo = @Y(λr.λl.l(λh.λt.t(λh2.λt2.r(@spair2(@scons(h, @scons(h2, t2)))), h), @sz))
 @stbuild = λl.@sbuildgo(@smapf(@stleaf, l))
 @stbrev = λt.@stbuild(@sbrp(@stflat(t)))
+@vapply = λf.λl.@l2tgo(l, f)
+@colk = @Y(λr.λn.λa.λk.n(λp.λx.r(p, @scons(x, a), k), k(@srev(a))))
+@mkadt = λn.λi.λfs.@colk(n, @snil, λcs.@vapply(@snth(cs, i), fs))
+@tgo = @Y(λr.λds.λi.λk.ds(λspec.λrest.@sdup(i, λi1.λi2.@scons(@colk(@slen(spec), @snil, λfs.k(i1, fs)), r(rest, @ss(i2), k))), @snil))
+@scase = λd.λv.λk.@l2tgo(@tgo(d, @sz, k), v)
+@hgo = @Y(λr.λds.λi.λn.ds(λspec.λrest.@sdup(i, λi1.λi2.@scons(@colk(@slen(spec), @snil, λfs.@mkadt(n, i1, fs)), r(rest, @ss(i2), n))), @snil))
+@c2sadt = λd.λv.@l2tgo(@hgo(d, @sz, @slen(d)), v)
+@s2cadt = @Y(λr.λd.λv.@scase(d, v, λi.λfs.@colk(@slen(d), @snil, λhs.@vapply(@snth(hs, i), @smapf(λc.@vapply(r(d, c), hs), fs)))))
+@adtidx = λd.λv.@scase(d, v, λi.λfs.i)
+@adtchi = λd.λv.@scase(d, v, λi.λfs.fs)
+@adtlen = @Y(λr.λd.λv.@scase(d, v, λi.λfs.@ss(@sfoldr(λc.λacc.@sadd(r(d, c), acc), @sz, fs))))
+@adtrev = @Y(λr.λd.λv.@scase(d, v, λi.λfs.@mkadt(@slen(d), i, @srev(@smapf(r(d), fs)))))
+@andb = λp.λq.p(q, @false)
+@nonemp = λl.l(λh.λt.@true, @false)
+@andl = @Y(λr.λl.l(λh.λt.h(r(t), @false), @true))
+@adteq = @Y(λr.λd.λa.λb.@scase(d, a, λi.λfs.@scase(d, b, λj.λgs.@ifc(@seq(i, j), @andl(@szipf(r(d), fs, gs)), @false))))
+@swgo = @Y(λr.λw.λp.λn.@sdup(p, λp1.λp2.@ifc(@sleq(n, p1), w, r(@ss(w), @sdbl(p2), n))))
+@swidth = λn.@swgo(@sz, @ss(@sz), n)
+@bitsl = @Y(λr.λw.λi.w(λwp.@sdup(i, λi1.λi2.@scons(@ifc(@seven(i1), @false, @true), r(wp, @shalf(i2)))), @snil))
+@sconcat = @Y(λr.λl.l(λh.λt.@sapp(h, r(t)), @snil))
+@adtser = @Y(λr.λd.λv.@scase(d, v, λi.λfs.@sapp(@srev(@bitsl(@swidth(@slen(d)), i)), @sconcat(@smapf(r(d), fs)))))
+@readn = @Y(λr.λw.λbits.λacc.λk.w(λwp.bits(λb.λrest.r(wp, rest, @ifc(b, @ss(@sdbl(acc)), @sdbl(acc)), k), k(acc, @snil)), k(acc, bits)))
+@pfl = @Y(λr.λrec.λspec.λbits.λacc.λk.spec(λf.λfr.rec(bits, λv.λrest.r(rec, fr, rest, @scons(v, acc), k)), k(@srev(acc), bits)))
+@adtdes = @Y(λr.λd.λbits.λk.@readn(@swidth(@slen(d)), bits, @sz, λi.λrest.@sdup(i, λi1.λi2.@pfl(λbs.λk2.r(d, bs, k2), @snth(d, i1), rest, @snil, λfs.λrest2.k(@mkadt(@slen(d), i2, fs), rest2)))))
+@adtdesv = λd.λbits.@adtdes(d, bits, λv.λrest.v)
+@adtmrg = @Y(λr.λd.λf.λa.λb.@scase(d, a, λi.λfs.@scase(d, b, λj.λgs.@sdup(i, λi1.λi2.@sdup(j, λj1.λj2.@ifc(@andb(@seq(i1, j1), @nonemp(fs)), @mkadt(@slen(d), i2, @szipf(r(d, f), fs, gs)), f(@s2cadt(d, @mkadt(@slen(d), i2, fs)), @s2cadt(d, @mkadt(@slen(d), j2, gs)))))))))
+@adtmrgc = @Y(λr.λd.λf.λa.λb.@scase(d, a, λi.λfs.@scase(d, b, λj.λgs.@sdup(i, λi1.λi2.@sdup(j, λj1.λj2.@ifc(@andb(@seq(i1, j1), @nonemp(fs)), @colk(@slen(d), @snil, λhs.@vapply(@snth(hs, i2), @szipf(r(d, f), fs, gs))), f(@s2cadt(d, @mkadt(@slen(d), i2, fs)), @s2cadt(d, @mkadt(@slen(d), j2, gs)))))))))
+@adtmrgs = @Y(λr.λd.λf.λa.λb.@scase(d, a, λi.λfs.@scase(d, b, λj.λgs.@sdup(i, λi1.λi2.@sdup(j, λj1.λj2.@ifc(@andb(@seq(i1, j1), @nonemp(fs)), @mkadt(@slen(d), i2, @szipf(r(d, f), fs, gs)), f(@mkadt(@slen(d), i2, fs), @mkadt(@slen(d), j2, gs))))))))
+@mkcctor = λd.λi.@sdup(i, λi1.λi2.@colk(@slen(@snth(d, i1)), @snil, λfs.@colk(@slen(d), @snil, λhs.@vapply(@snth(hs, i2), @smapf(λf.@vapply(f, hs), fs)))))
+@mksctor = λd.λi.@sdup(i, λi1.λi2.@colk(@slen(@snth(d, i1)), @snil, λfs.@mkadt(@slen(d), i2, fs)))
 ";
 
 fn op_ref(op: Op) -> &'static str {
@@ -211,12 +260,29 @@ fn op_ref(op: Op) -> &'static str {
         Op::TIdxAp => "@stidx",
         Op::TScanAp => "@stscan",
         Op::TBitRev => "@stbrev",
+        Op::AdtLen => "@adtlen",
+        Op::AdtIdx => "@adtidx",
+        Op::AdtChi => "@adtchi",
+        Op::AdtRev => "@adtrev",
+        Op::AdtEq => "@adteq",
+        Op::AdtSer => "@adtser",
+        Op::AdtDes => "@adtdesv",
+        Op::AdtMrg => "@adtmrg",
     }
+}
+
+/// Ops whose stdlib implementation takes the type descriptor as a leading
+/// extra argument that the DSL-level op elides.
+fn needs_desc(op: Op) -> bool {
+    matches!(
+        op,
+        Op::AdtLen | Op::AdtIdx | Op::AdtChi | Op::AdtRev | Op::AdtEq | Op::AdtMrg
+    )
 }
 
 /// Emit the expression as Lamb source. `arg_name(i)` supplies the source
 /// name for task argument i (already adapted to Church encoding).
-fn emit(e: &E, n_args: usize, arg_name: &dyn Fn(u32) -> String) -> String {
+fn emit(e: &E, n_args: usize, arg_name: &dyn Fn(u32) -> String, desc: Option<usize>) -> String {
     match e {
         E::Var(i) => {
             if (*i as usize) < n_args {
@@ -233,9 +299,14 @@ fn emit(e: &E, n_args: usize, arg_name: &dyn Fn(u32) -> String) -> String {
             }
             s
         }
-        E::Lam1(b) => format!("λp.{}", emit(b, n_args, arg_name)),
+        E::Lam1(b) => format!("λp.{}", emit(b, n_args, arg_name, desc)),
         E::Prim(op, args) => {
-            let parts: Vec<String> = args.iter().map(|a| emit(a, n_args, arg_name)).collect();
+            let mut parts: Vec<String> = Vec::new();
+            if needs_desc(*op) {
+                let d = desc.expect("adt op outside adt family");
+                parts.push(format!("a{d}"));
+            }
+            parts.extend(args.iter().map(|a| emit(a, n_args, arg_name, desc)));
             format!("{}({})", op_ref(*op), parts.join(", "))
         }
     }
@@ -261,12 +332,16 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
             (_, ArgKind::Tuple) => format!("@tup2list(@c2s(a{size_idx}), {a})"),
             (Family::CTre, ArgKind::Tree) => format!("@ct2st({a})"),
             (_, ArgKind::Tree) => a,
+            (_, ArgKind::Desc) | (_, ArgKind::Bits) => a,
+            (Family::CAdt, ArgKind::AdtVal) => format!("@c2sadt(a{size_idx}, {a})"),
+            (_, ArgKind::AdtVal) => a,
             (_, ArgKind::Atom) => a,
         }
     };
-    let core = emit(e, n_args, &adapted);
+    let is_adt = matches!(family, Family::CAdt | Family::SAdt);
+    let core = emit(e, n_args, &adapted, is_adt.then_some(size_idx));
     let wrapped = match (family, out) {
-        (Family::SNat | Family::SList, OutKind::Nat) => core,
+        (Family::SNat | Family::SList | Family::CAdt | Family::SAdt, OutKind::Nat) => core,
         (Family::CBin, OutKind::Nat) => format!("@s2cb({core})"),
         (Family::SBin, OutKind::Nat) => format!("@s2sb({core})"),
         (_, OutKind::Nat) => format!("@s2c({core})"),
@@ -276,6 +351,11 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
         (_, OutKind::Tuple) => format!("@list2tup({core})"),
         (Family::CTre, OutKind::Tree) => format!("@st2ct({core})"),
         (_, OutKind::Tree) => core,
+        (_, OutKind::AdtC) => format!("@s2cadt(a{size_idx}, {core})"),
+        (_, OutKind::AdtS) => core,
+        (_, OutKind::ListAdtC) => format!("@smapf(@s2cadt(a{size_idx}), {core})"),
+        (_, OutKind::ListAdtS) => core,
+        (_, OutKind::Bits) => core,
         (_, OutKind::Bool) | (_, OutKind::Raw) => core,
     };
     let mut lams = String::new();
@@ -358,6 +438,9 @@ pub fn decode_task(
     family: Family,
     task: &Task,
 ) -> Option<(Vec<Vec<V>>, Vec<V>, Vec<ArgKind>, OutKind)> {
+    if matches!(family, Family::CAdt | Family::SAdt) {
+        return None; // adt families use decode_task_adt (multi-candidate)
+    }
     let empty: Env = Rc::new(Vec::new());
     let norm = |t: &Rc<Term>| -> Option<Rc<Term>> {
         let mut fuel = Fuel(1_000_000);
@@ -446,6 +529,7 @@ pub fn decode_task(
                 (ArgKind::Tree, &dec_tree),
                 (ArgKind::Atom, &dec_atomish),
             ],
+            Family::CAdt | Family::SAdt => unreachable!("adt uses decode_task_adt"),
         };
         let mut hit = None;
         for (k, dec) in candidates {
@@ -499,4 +583,178 @@ pub fn decode_task(
         }
     }
     None
+}
+
+/// ADT-family decoding. The descriptor argument is found first; values are
+/// then decoded against each test's own descriptor. Output-kind candidates
+/// are returned in order — Church/Scott zero-field values are syntactically
+/// identical, so the caller tries each candidate until one verifies.
+pub fn decode_task_adt(
+    family: Family,
+    task: &Task,
+) -> Vec<(Vec<Vec<V>>, Vec<V>, Vec<ArgKind>, OutKind, usize)> {
+    let empty: Env = Rc::new(Vec::new());
+    let norm = |t: &Rc<Term>| -> Option<Rc<Term>> {
+        let mut fuel = Fuel(1_000_000);
+        normalize(&empty, t, &mut fuel).ok()
+    };
+    let mut arg_nfs: Vec<Vec<Rc<Term>>> = Vec::new();
+    let mut want_nfs: Vec<Rc<Term>> = Vec::new();
+    for t in &task.tests {
+        let mut row = Vec::new();
+        for a in &t.args {
+            let Some(nf) = norm(a) else { return Vec::new() };
+            row.push(nf);
+        }
+        arg_nfs.push(row);
+        let Some(w) = norm(&t.want).and_then(|nf| crate::parse::strip_outer(&nf, t.outer)) else {
+            return Vec::new();
+        };
+        want_nfs.push(w);
+    }
+    let n_args = task.arity;
+    let n_tests = task.tests.len();
+
+    // Find the descriptor position.
+    let mut desc_pos = None;
+    let mut shapes: Vec<Vec<usize>> = Vec::new();
+    for p in 0..n_args {
+        let sh: Option<Vec<Vec<usize>>> = (0..n_tests)
+            .map(|j| crate::decode::adt_desc(&arg_nfs[j][p]))
+            .collect();
+        if let Some(sh) = sh {
+            desc_pos = Some(p);
+            shapes = sh;
+            break;
+        }
+    }
+    let Some(desc_pos) = desc_pos else { return Vec::new() };
+    let desc_val = |shape: &[usize]| -> V {
+        V::List(
+            shape
+                .iter()
+                .map(|k| V::List(vec![V::Nat(0); *k]))
+                .collect(),
+        )
+    };
+    let fam_adt = |shape: &[usize], t: &Rc<Term>| -> Option<V> {
+        match family {
+            Family::CAdt => crate::decode::church_adt(shape, t),
+            _ => crate::decode::scott_adt(shape, t),
+        }
+    };
+    let dec_bool_v = |t: &Rc<Term>| -> Option<V> {
+        match t.as_ref() {
+            Term::Lam(b1) => match b1.as_ref() {
+                Term::Lam(b2) => match b2.as_ref() {
+                    Term::Var(1) => Some(V::Bool(true)),
+                    Term::Var(0) => Some(V::Bool(false)),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        }
+    };
+    let dec_bits = |t: &Rc<Term>| -> Option<V> {
+        let items = crate::decode::scott_list_raw(t)?;
+        let mut out = Vec::new();
+        for i in items {
+            out.push(dec_bool_v(&i)?);
+        }
+        Some(V::List(out))
+    };
+
+    // Argument kinds and values.
+    let mut kinds: Vec<ArgKind> = Vec::new();
+    let mut cols: Vec<Vec<V>> = Vec::new();
+    for p in 0..n_args {
+        if p == desc_pos {
+            kinds.push(ArgKind::Desc);
+            cols.push(shapes.iter().map(|s| desc_val(s)).collect());
+            continue;
+        }
+        let val: Option<Vec<V>> = (0..n_tests)
+            .map(|j| fam_adt(&shapes[j], &arg_nfs[j][p]))
+            .collect();
+        if let Some(vals) = val {
+            kinds.push(ArgKind::AdtVal);
+            cols.push(vals);
+            continue;
+        }
+        let nat: Option<Vec<V>> = (0..n_tests)
+            .map(|j| Some(V::Nat(crate::decode::scott_nat(&arg_nfs[j][p])?)))
+            .collect();
+        if let Some(vals) = nat {
+            kinds.push(ArgKind::Nat);
+            cols.push(vals);
+            continue;
+        }
+        let bits: Option<Vec<V>> = (0..n_tests).map(|j| dec_bits(&arg_nfs[j][p])).collect();
+        if let Some(vals) = bits {
+            kinds.push(ArgKind::Bits);
+            cols.push(vals);
+            continue;
+        }
+        let atom: Option<Vec<V>> = (0..n_tests)
+            .map(|j| crate::decode::decode_value(&arg_nfs[j][p]))
+            .collect();
+        if let Some(vals) = atom {
+            kinds.push(ArgKind::Atom);
+            cols.push(vals);
+            continue;
+        }
+        return Vec::new();
+    }
+    let inputs: Vec<Vec<V>> = (0..n_tests)
+        .map(|j| (0..n_args).map(|p| cols[p][j].clone()).collect())
+        .collect();
+
+    // Output-kind candidates, in preference order for the family.
+    let church_out = |j: usize| crate::decode::church_adt(&shapes[j], &want_nfs[j]);
+    let scott_out = |j: usize| crate::decode::scott_adt(&shapes[j], &want_nfs[j]);
+    let list_of = |j: usize, church: bool| -> Option<V> {
+        let items = crate::decode::scott_list_raw(&want_nfs[j])?;
+        let mut out = Vec::new();
+        for i in items {
+            out.push(if church {
+                crate::decode::church_adt(&shapes[j], &i)?
+            } else {
+                crate::decode::scott_adt(&shapes[j], &i)?
+            });
+        }
+        Some(V::List(out))
+    };
+
+    let mut cands: Vec<(OutKind, Vec<V>)> = Vec::new();
+    let mut push = |k: OutKind, vals: Option<Vec<V>>| {
+        if let Some(v) = vals {
+            cands.push((k, v));
+        }
+    };
+    let all = |f: &dyn Fn(usize) -> Option<V>| -> Option<Vec<V>> {
+        (0..n_tests).map(f).collect()
+    };
+    match family {
+        Family::CAdt => {
+            push(OutKind::AdtC, all(&church_out));
+            push(OutKind::AdtS, all(&scott_out));
+        }
+        _ => {
+            push(OutKind::AdtS, all(&scott_out));
+            push(OutKind::AdtC, all(&church_out));
+        }
+    }
+    push(OutKind::Nat, all(&|j| {
+        Some(V::Nat(crate::decode::scott_nat(&want_nfs[j])?))
+    }));
+    push(OutKind::Bool, all(&|j| dec_bool_v(&want_nfs[j])));
+    push(OutKind::Bits, all(&|j| dec_bits(&want_nfs[j])));
+    push(OutKind::ListAdtC, all(&|j| list_of(j, true)));
+    push(OutKind::ListAdtS, all(&|j| list_of(j, false)));
+
+    cands
+        .into_iter()
+        .map(|(k, outs)| (inputs.clone(), outs, kinds.clone(), k, desc_pos))
+        .collect()
 }
