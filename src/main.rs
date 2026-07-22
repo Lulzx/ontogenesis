@@ -106,11 +106,16 @@ fn run() {
         };
         attempted += 1;
         // Semantic track first: decode → DSL search → compile → verify.
+        let sem_start = std::time::Instant::now();
         if let Some(src) = try_semantic(&id, &task) {
             solved += 1;
             let out_path = out_dir.join(format!("{id}.lam"));
             fs::write(&out_path, &src).expect("write solution");
-            println!("✓ {id}: semantic track -> {}", out_path.display());
+            println!(
+                "✓ {id}: semantic track in {:.3}s -> {}",
+                sem_start.elapsed().as_secs_f64(),
+                out_path.display()
+            );
             continue;
         }
         let outcome = bank::solve(&task, &opts);

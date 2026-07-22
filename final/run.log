@@ -1,0 +1,122 @@
+✗ algo_bfi: no solution ≤ size 10 in 5.03s (176128 built, 122338 classes, 7 aborted)
+✗ algo_bre: no solution ≤ size 10 in 5.01s (241664 built, 192034 classes, 7 aborted)
+✗ algo_dpl: no solution ≤ size 10 in 5.09s (69632 built, 54769 classes, 7 aborted)
+✗ algo_evl: no solution ≤ size 11 in 5.05s (225280 built, 154650 classes, 47 aborted)
+✗ algo_hul: no solution ≤ size 10 in 5.18s (73728 built, 55721 classes, 7 aborted)
+✗ algo_maz: no solution ≤ size 10 in 5.13s (73728 built, 55247 classes, 7 aborted)
+✗ algo_mst: no solution ≤ size 9 in 5.31s (65536 built, 44233 classes, 3 aborted)
+✗ algo_stl: no solution ≤ size 11 in 5.05s (188416 built, 140689 classes, 31 aborted)
+✗ algo_sud: no solution ≤ size 9 in 5.58s (32768 built, 24440 classes, 3 aborted)
+✗ algo_tsp: no solution ≤ size 9 in 5.26s (49152 built, 28747 classes, 3 aborted)
+✓ cadt_chi: semantic track in 0.188s -> final/cadt_chi.lam
+✓ cadt_ctr: semantic track in 0.001s -> final/cadt_ctr.lam
+✓ cadt_des: semantic track in 0.341s -> final/cadt_des.lam
+✓ cadt_eql: semantic track in 0.355s -> final/cadt_eql.lam
+✓ cadt_fol: semantic track in 0.198s -> final/cadt_fol.lam
+✓ cadt_idx: semantic track in 0.784s -> final/cadt_idx.lam
+✓ cadt_len: semantic track in 0.785s -> final/cadt_len.lam
+✓ cadt_mrg: semantic track in 0.005s -> final/cadt_mrg.lam
+✓ cadt_rev: semantic track in 0.174s -> final/cadt_rev.lam
+✓ cadt_ser: semantic track in 0.188s -> final/cadt_ser.lam
+✓ cbin_add: semantic track in 0.723s -> final/cbin_add.lam
+✓ cbin_div: semantic track in 0.855s -> final/cbin_div.lam
+✓ cbin_exp: semantic track in 0.462s -> final/cbin_exp.lam
+✓ cbin_gcd: semantic track in 1.145s -> final/cbin_gcd.lam
+✓ cbin_log: semantic track in 0.959s -> final/cbin_log.lam
+✓ cbin_mod: semantic track in 0.855s -> final/cbin_mod.lam
+✓ cbin_mul: semantic track in 0.588s -> final/cbin_mul.lam
+✓ cbin_pri: semantic track in 0.506s -> final/cbin_pri.lam
+✓ cbin_sqr: semantic track in 0.434s -> final/cbin_sqr.lam
+✓ cbin_tot: semantic track in 0.614s -> final/cbin_tot.lam
+✓ clst_dot: semantic track in 3.311s -> final/clst_dot.lam
+✓ clst_fol: semantic track in 0.276s -> final/clst_fol.lam
+✓ clst_hed: semantic track in 0.166s -> final/clst_hed.lam
+✓ clst_map: semantic track in 0.218s -> final/clst_map.lam
+✓ clst_nth: semantic track in 1.638s -> final/clst_nth.lam
+✓ clst_rev: semantic track in 0.167s -> final/clst_rev.lam
+✓ clst_shl: semantic track in 0.167s -> final/clst_shl.lam
+✓ clst_shr: semantic track in 0.167s -> final/clst_shr.lam
+✓ clst_srt: semantic track in 0.044s -> final/clst_srt.lam
+✓ clst_zip: semantic track in 0.846s -> final/clst_zip.lam
+✓ cnat_add: semantic track in 0.721s -> final/cnat_add.lam
+✓ cnat_div: semantic track in 0.855s -> final/cnat_div.lam
+✓ cnat_exp: semantic track in 0.462s -> final/cnat_exp.lam
+✓ cnat_gcd: semantic track in 1.146s -> final/cnat_gcd.lam
+✓ cnat_log: semantic track in 0.961s -> final/cnat_log.lam
+✓ cnat_mod: semantic track in 0.856s -> final/cnat_mod.lam
+✓ cnat_mul: semantic track in 0.589s -> final/cnat_mul.lam
+✓ cnat_pri: semantic track in 0.512s -> final/cnat_pri.lam
+✓ cnat_sqr: semantic track in 0.439s -> final/cnat_sqr.lam
+✓ cnat_tot: semantic track in 0.620s -> final/cnat_tot.lam
+✓ ctre_bfs: semantic track in 1.404s -> final/ctre_bfs.lam
+✗ ctre_fft: no solution ≤ size 9 in 5.13s (20480 built, 13338 classes, 289 aborted)
+✓ ctre_idx: semantic track in 1.985s -> final/ctre_idx.lam
+✓ ctre_inv: semantic track in 3.856s -> final/ctre_inv.lam
+✓ ctre_lst: semantic track in 1.357s -> final/ctre_lst.lam
+✓ ctre_mrg: semantic track in 6.147s -> final/ctre_mrg.lam
+✓ ctre_rev: semantic track in 3.839s -> final/ctre_rev.lam
+✓ ctre_rtl: semantic track in 3.860s -> final/ctre_rtl.lam
+✓ ctre_rtr: semantic track in 3.831s -> final/ctre_rtr.lam
+✓ ctre_scn: semantic track in 2.805s -> final/ctre_scn.lam
+✓ ntup_dot: semantic track in 14.165s -> final/ntup_dot.lam
+✓ ntup_fol: semantic track in 2.716s -> final/ntup_fol.lam
+✓ ntup_hed: semantic track in 1.916s -> final/ntup_hed.lam
+✓ ntup_map: semantic track in 2.287s -> final/ntup_map.lam
+✓ ntup_nth: semantic track in 3.728s -> final/ntup_nth.lam
+✓ ntup_rev: semantic track in 1.912s -> final/ntup_rev.lam
+✓ ntup_shl: semantic track in 1.908s -> final/ntup_shl.lam
+✓ ntup_shr: semantic track in 1.922s -> final/ntup_shr.lam
+✓ ntup_srt: semantic track in 0.883s -> final/ntup_srt.lam
+✓ ntup_zip: semantic track in 5.572s -> final/ntup_zip.lam
+✓ sadt_chi: semantic track in 0.189s -> final/sadt_chi.lam
+✓ sadt_ctr: semantic track in 0.001s -> final/sadt_ctr.lam
+✓ sadt_des: semantic track in 0.343s -> final/sadt_des.lam
+✓ sadt_eql: semantic track in 0.361s -> final/sadt_eql.lam
+✓ sadt_fol: semantic track in 0.203s -> final/sadt_fol.lam
+✓ sadt_idx: semantic track in 0.794s -> final/sadt_idx.lam
+✓ sadt_len: semantic track in 0.810s -> final/sadt_len.lam
+✓ sadt_mrg: semantic track in 0.002s -> final/sadt_mrg.lam
+✓ sadt_rev: semantic track in 0.179s -> final/sadt_rev.lam
+✓ sadt_ser: semantic track in 0.192s -> final/sadt_ser.lam
+✓ sbin_add: semantic track in 0.741s -> final/sbin_add.lam
+✓ sbin_div: semantic track in 0.875s -> final/sbin_div.lam
+✓ sbin_exp: semantic track in 0.473s -> final/sbin_exp.lam
+✓ sbin_gcd: semantic track in 1.158s -> final/sbin_gcd.lam
+✓ sbin_log: semantic track in 0.970s -> final/sbin_log.lam
+✓ sbin_mod: semantic track in 0.862s -> final/sbin_mod.lam
+✓ sbin_mul: semantic track in 0.591s -> final/sbin_mul.lam
+✓ sbin_pri: semantic track in 0.515s -> final/sbin_pri.lam
+✓ sbin_sqr: semantic track in 0.440s -> final/sbin_sqr.lam
+✓ sbin_tot: semantic track in 0.619s -> final/sbin_tot.lam
+✓ slst_dot: semantic track in 3.360s -> final/slst_dot.lam
+✓ slst_fol: semantic track in 0.283s -> final/slst_fol.lam
+✓ slst_hed: semantic track in 0.171s -> final/slst_hed.lam
+✓ slst_map: semantic track in 0.223s -> final/slst_map.lam
+✓ slst_nth: semantic track in 1.670s -> final/slst_nth.lam
+✓ slst_rev: semantic track in 0.170s -> final/slst_rev.lam
+✓ slst_shl: semantic track in 0.169s -> final/slst_shl.lam
+✓ slst_shr: semantic track in 0.187s -> final/slst_shr.lam
+✓ slst_srt: semantic track in 0.044s -> final/slst_srt.lam
+✓ slst_zip: semantic track in 0.854s -> final/slst_zip.lam
+✓ snat_add: semantic track in 0.729s -> final/snat_add.lam
+✓ snat_div: semantic track in 0.863s -> final/snat_div.lam
+✓ snat_exp: semantic track in 0.465s -> final/snat_exp.lam
+✓ snat_gcd: semantic track in 1.159s -> final/snat_gcd.lam
+✓ snat_log: semantic track in 0.969s -> final/snat_log.lam
+✓ snat_mod: semantic track in 0.862s -> final/snat_mod.lam
+✓ snat_mul: semantic track in 0.584s -> final/snat_mul.lam
+✓ snat_pri: semantic track in 0.507s -> final/snat_pri.lam
+✓ snat_sqr: semantic track in 0.434s -> final/snat_sqr.lam
+✓ snat_tot: semantic track in 0.615s -> final/snat_tot.lam
+✓ stre_bfs: semantic track in 1.413s -> final/stre_bfs.lam
+✗ stre_fft: no solution ≤ size 10 in 5.60s (36864 built, 28531 classes, 3 aborted)
+✓ stre_idx: semantic track in 1.985s -> final/stre_idx.lam
+✓ stre_inv: semantic track in 3.821s -> final/stre_inv.lam
+✓ stre_lst: semantic track in 1.288s -> final/stre_lst.lam
+✓ stre_mrg: semantic track in 6.167s -> final/stre_mrg.lam
+✓ stre_rev: semantic track in 3.803s -> final/stre_rev.lam
+✓ stre_rtl: semantic track in 3.826s -> final/stre_rtl.lam
+✓ stre_rtr: semantic track in 3.845s -> final/stre_rtr.lam
+✓ stre_scn: semantic track in 2.822s -> final/stre_scn.lam
+
+solved 108/120 attempted (0 skipped)

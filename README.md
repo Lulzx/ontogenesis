@@ -64,14 +64,20 @@ This is not "HVM is pointless." Lévy-optimality is real theory, λ-term enumera
 
 ## Status (LamBench track)
 
-The pure-λ engine is live: NbE normalizer (call-by-need, fuel-limited, semantics ported from the MIT-licensed `lam` interpreter — normal-order β to full normal form, no η), `.tsk` parser, size-ordered bank enumeration with normal-form-keyed behavioral dedup, `.lam` emission in `lam`'s exact canonical syntax. All scores below are certified by running LamBench's own `bun src/check.ts` harness over the emitted files.
+**108/120 certified by LamBench's own harness — tied with the leaderboard leaders
+(GPT-5.3 Codex, Opus 4.6), with no model, no tokens, and ~3.5 minutes of wall-clock.**
+See [RESULTS.md](RESULTS.md) for the full table, timing, attribution chain, findings,
+and honesty notes. The 12 unsolved tasks (algo_ ×10, fft ×2) are the honest wall —
+phase-3 hybrid territory.
 
-**Clean-room guarantee:** the search never reads `lambench/lam/` (the reference solutions). The only inputs are the task descriptions' test cases in `lambench/tsk/`. The `lam` reference solutions are used solely to let the harness compute its size-score denominator.
+**Clean-room guarantee:** the search never reads `lambench/lam/` (the reference
+solutions). The only inputs are the task descriptions' test cases in `lambench/tsk/`.
 
 ### Usage
 
 ```
+git clone https://github.com/VictorTaelin/lambench   # tasks + referee (MIT)
 cargo build --release
-./target/release/supsearch lambench/tsk --filter cnat_ --timeout 120
-cd lambench && bun src/check.ts ../out   # certify with Taelin's referee
+./target/release/supsearch lambench/tsk --out out --timeout 5
+cd lambench && bun src/check.ts ../out               # certify with Taelin's referee
 ```
