@@ -1,5 +1,7 @@
 mod bank;
+mod compile;
 mod decode;
+mod sem;
 mod nbe;
 mod parse;
 mod term;
@@ -103,6 +105,14 @@ fn run() {
             }
         };
         attempted += 1;
+        // Semantic track first: decode → DSL search → compile → verify.
+        if let Some(src) = try_semantic(&id, &task) {
+            solved += 1;
+            let out_path = out_dir.join(format!("{id}.lam"));
+            fs::write(&out_path, &src).expect("write solution");
+            println!("✓ {id}: semantic track -> {}", out_path.display());
+            continue;
+        }
         let outcome = bank::solve(&task, &opts);
         match outcome.solution {
             Some(sol) => {
@@ -133,6 +143,23 @@ fn run() {
     }
 
     println!("\nsolved {solved}/{attempted} attempted ({skipped} skipped)");
+}
+
+/// The semantic track: decode test I/O to native values, search the DSL,
+/// compile through the Lamb stdlib, verify internally against every test.
+/// Any failure at any stage returns None and the λ-bank takes over.
+fn try_semantic(id: &str, task: &parse::Task) -> Option<String> {
+    let family = compile::Family::of_task(id)?;
+    let (inputs, outputs, out_kind) = compile::decode_task(family, task)?;
+    let e = sem::solve(&inputs, &outputs, &sem::SemOptions::default())?;
+    let src = compile::program(family, out_kind, &e, task.arity);
+    let main = compile::inline_main(&src).ok()?;
+    if compile::verify(&main, task, 50_000_000) {
+        Some(src)
+    } else {
+        eprintln!("  {id}: semantic candidate failed internal verification");
+        None
+    }
 }
 
 /// Library mining: extract closed subterms recurring across solved programs
