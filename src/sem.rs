@@ -27,6 +27,19 @@ pub enum Op {
     If,
     Range1, // Range1(n) = {1..n} (order-insensitive uses only)
     Count,  // Count(list, λx.pred)
+    // ── list-structure ops (elements are opaque) ──
+    Head,
+    Last,
+    Nth, // Nth(list, i) — 0-based
+    Rev,
+    RotL,
+    RotR,
+    Len,
+    AppendL,
+    SortB,   // stable partition: falsy (Nat 0 / false) before true
+    MapAp,   // MapAp(f, l) = [f(e) for e in l], f opaque
+    ZipAp,   // ZipAp(f, a, b) = [f(x, y) pairwise]
+    FoldrAp, // FoldrAp(f, z, l) = f(e1, f(e2, ... f(en, z)))
 }
 
 impl Op {
@@ -34,7 +47,8 @@ impl Op {
     pub fn sig(self) -> (usize, usize) {
         match self {
             Op::Isqrt | Op::IsZero | Op::Not | Op::Range1 => (1, 0),
-            Op::If => (3, 0),
+            Op::Head | Op::Last | Op::Rev | Op::RotL | Op::RotR | Op::Len | Op::SortB => (1, 0),
+            Op::If | Op::ZipAp | Op::FoldrAp => (3, 0),
             Op::Count => (1, 1),
             _ => (2, 0),
         }
@@ -58,6 +72,18 @@ impl Op {
             Op::If,
             Op::Range1,
             Op::Count,
+            Op::Head,
+            Op::Last,
+            Op::Nth,
+            Op::Rev,
+            Op::RotL,
+            Op::RotR,
+            Op::Len,
+            Op::AppendL,
+            Op::SortB,
+            Op::MapAp,
+            Op::ZipAp,
+            Op::FoldrAp,
         ]
     }
 }
@@ -91,6 +117,12 @@ fn nat(v: &V) -> Option<u64> {
 fn boolean(v: &V) -> Option<bool> {
     match v {
         V::Bool(b) => Some(*b),
+        _ => None,
+    }
+}
+fn list1(v: &V) -> Option<Vec<V>> {
+    match v {
+        V::List(xs) => Some(xs.clone()),
         _ => None,
     }
 }
@@ -134,6 +166,85 @@ pub fn eval(e: &E, env: &[V]) -> Option<V> {
                         return None;
                     }
                     Some(V::List((1..=n).map(V::Nat).collect()))
+                }
+                Head => list1(&eval(&args[0], env)?)?.first().cloned(),
+                Last => list1(&eval(&args[0], env)?)?.last().cloned(),
+                Nth => {
+                    let xs = list1(&eval(&args[0], env)?)?;
+                    let i = nat(&eval(&args[1], env)?)? as usize;
+                    xs.get(i).cloned()
+                }
+                Rev => {
+                    let mut xs = list1(&eval(&args[0], env)?)?;
+                    xs.reverse();
+                    Some(V::List(xs))
+                }
+                RotL => {
+                    let mut xs = list1(&eval(&args[0], env)?)?;
+                    if !xs.is_empty() {
+                        xs.rotate_left(1);
+                    }
+                    Some(V::List(xs))
+                }
+                RotR => {
+                    let mut xs = list1(&eval(&args[0], env)?)?;
+                    if !xs.is_empty() {
+                        xs.rotate_right(1);
+                    }
+                    Some(V::List(xs))
+                }
+                Len => Some(V::Nat(list1(&eval(&args[0], env)?)?.len() as u64)),
+                AppendL => {
+                    let mut a = list1(&eval(&args[0], env)?)?;
+                    a.extend(list1(&eval(&args[1], env)?)?);
+                    Some(V::List(a))
+                }
+                SortB => {
+                    let xs = list1(&eval(&args[0], env)?)?;
+                    let (t, f): (Vec<V>, Vec<V>) = xs
+                        .into_iter()
+                        .partition(|v| matches!(v, V::Bool(true)));
+                    let mut out = f;
+                    out.extend(t);
+                    Some(V::List(out))
+                }
+                MapAp => {
+                    let f = eval(&args[0], env)?;
+                    let xs = list1(&eval(&args[1], env)?)?;
+                    Some(V::List(
+                        xs.into_iter()
+                            .map(|x| V::App(Box::new(f.clone()), Box::new(x)))
+                            .collect(),
+                    ))
+                }
+                ZipAp => {
+                    let f = eval(&args[0], env)?;
+                    let a = list1(&eval(&args[1], env)?)?;
+                    let b = list1(&eval(&args[2], env)?)?;
+                    Some(V::List(
+                        a.into_iter()
+                            .zip(b)
+                            .map(|(x, y)| {
+                                V::App(
+                                    Box::new(V::App(Box::new(f.clone()), Box::new(x))),
+                                    Box::new(y),
+                                )
+                            })
+                            .collect(),
+                    ))
+                }
+                FoldrAp => {
+                    let f = eval(&args[0], env)?;
+                    let z = eval(&args[1], env)?;
+                    let xs = list1(&eval(&args[2], env)?)?;
+                    let mut acc = z;
+                    for x in xs.into_iter().rev() {
+                        acc = V::App(
+                            Box::new(V::App(Box::new(f.clone()), Box::new(x))),
+                            Box::new(acc),
+                        );
+                    }
+                    Some(acc)
                 }
                 IsZero => Some(V::Bool(nat(&eval(&args[0], env)?)? == 0)),
                 Not => Some(V::Bool(!boolean(&eval(&args[0], env)?)?)),
@@ -214,6 +325,41 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
     let n_args = inputs.first()?.len();
     let n_tests = inputs.len();
 
+    // Restrict the op set to what the task's value shapes can possibly use:
+    // arithmetic needs nats, structure ops need lists, application ops need
+    // opaque atoms. This is type pruning at its crudest and buys the most.
+    fn contains_kind(v: &V, f: &dyn Fn(&V) -> bool) -> bool {
+        if f(v) {
+            return true;
+        }
+        match v {
+            V::List(xs) => xs.iter().any(|x| contains_kind(x, f)),
+            V::App(a, b) => contains_kind(a, f) || contains_kind(b, f),
+            V::Node(a, b) => contains_kind(a, f) || contains_kind(b, f),
+            V::Ctr(_, xs) => xs.iter().any(|x| contains_kind(x, f)),
+            _ => false,
+        }
+    }
+    let all_vals = || inputs.iter().flatten().chain(outputs.iter());
+    let has_nat = all_vals().any(|v| matches!(v, V::Nat(_)));
+    let has_list = all_vals().any(|v| matches!(v, V::List(_)));
+    let has_atom =
+        all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Atom(_) | V::App(_, _))));
+    let ops: Vec<Op> = Op::all()
+        .iter()
+        .copied()
+        .filter(|op| {
+            use Op::*;
+            match op {
+                MapAp | ZipAp | FoldrAp => has_atom && has_list,
+                Head | Last | Nth | Rev | RotL | RotR | Len | AppendL | SortB => has_list,
+                Range1 | Count => has_nat,
+                If | Eq | Not => true,
+                _ => has_nat,
+            }
+        })
+        .collect();
+
     // ── Body bank: 1-param lambda bodies keyed on probe values ─────────
     // Probes: for each test, plausible values the parameter can take
     // (elements of Range1 of nat args, capped). Approximate but sound:
@@ -285,7 +431,7 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
                 push(E::KNat(k), &mut level, &mut bodies_seen);
             }
         } else {
-            for op in Op::all() {
+            for op in &ops {
                 let (va, la) = op.sig();
                 if la > 0 {
                     continue; // no nested lambdas in bodies
@@ -335,7 +481,7 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
                 }
             }
         } else {
-            'ops: for op in Op::all() {
+            'ops: for op in &ops {
                 let (va, la) = op.sig();
                 if la == 0 {
                     enumerate_args(&main, s - 1, va, &mut |args| {

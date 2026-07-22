@@ -150,16 +150,40 @@ fn run() {
 /// Any failure at any stage returns None and the λ-bank takes over.
 fn try_semantic(id: &str, task: &parse::Task) -> Option<String> {
     let family = compile::Family::of_task(id)?;
-    let (inputs, outputs, out_kind) = compile::decode_task(family, task)?;
-    let e = sem::solve(&inputs, &outputs, &sem::SemOptions::default())?;
-    let src = compile::program(family, out_kind, &e, task.arity);
-    let main = compile::inline_main(&src).ok()?;
-    if compile::verify(&main, task, 50_000_000) {
-        Some(src)
+    let Some((inputs, outputs, kinds, out_kind)) = compile::decode_task(family, task) else {
+        eprintln!("  {id}: semantic decode failed");
+        return None;
+    };
+    let Some(e) = sem::solve(&inputs, &outputs, &sem::SemOptions::default()) else {
+        eprintln!("  {id}: no DSL expression found (kinds {kinds:?}, out {out_kind:?})");
+        return None;
+    };
+    // The tuple adapter needs to know which Nat argument is the size; its
+    // position varies per task, so try each Nat position until one verifies.
+    let nat_positions: Vec<usize> = kinds
+        .iter()
+        .enumerate()
+        .filter(|(_, k)| **k == compile::ArgKind::Nat)
+        .map(|(i, _)| i)
+        .collect();
+    let size_choices = if nat_positions.is_empty() {
+        vec![0]
     } else {
-        eprintln!("  {id}: semantic candidate failed internal verification");
-        None
+        nat_positions
+    };
+    for size_idx in size_choices {
+        let src = compile::program(family, out_kind, &e, &kinds, size_idx);
+        let Ok(main) = compile::inline_main(&src) else {
+            continue;
+        };
+        // Fuel bounds recursion depth too: keep it under what the 1GB worker
+        // stack can absorb when a bad candidate diverges.
+        if compile::verify(&main, task, 2_000_000) {
+            return Some(src);
+        }
     }
+    eprintln!("  {id}: semantic candidate failed internal verification");
+    None
 }
 
 /// Library mining: extract closed subterms recurring across solved programs

@@ -23,6 +23,8 @@ pub enum V {
     /// An opaque atom: a free constant (abstract test binder) that flows
     /// through the semantic function untouched.
     Atom(u32),
+    /// Application of one opaque value to another (e.g. F(A) in map tasks).
+    App(Box<V>, Box<V>),
     /// Church/Scott ADT constructor application: (tag, arity, fields).
     Ctr(u32, Vec<V>),
 }
@@ -171,19 +173,46 @@ pub fn scott_list(t: &Rc<Term>) -> Option<Vec<V>> {
     }
 }
 
-/// Generic value decoder: tries atoms, nats, lists (both encodings).
-/// Free constants decode to Atom.
+/// N-tuple: λt.t(A, B, C) — Lam over an application spine headed by the
+/// binder. The empty tuple is λt.t.
+pub fn ntuple(t: &Rc<Term>) -> Option<Vec<V>> {
+    let Term::Lam(b) = t.as_ref() else { return None };
+    let mut args_rev: Vec<&Rc<Term>> = Vec::new();
+    let mut cur = b;
+    while let Term::App(f, a) = cur.as_ref() {
+        args_rev.push(a);
+        cur = f;
+    }
+    if !matches!(cur.as_ref(), Term::Var(0)) {
+        return None;
+    }
+    let mut out = Vec::new();
+    for a in args_rev.iter().rev() {
+        out.push(decode_value(&unshift(a, 1)?)?);
+    }
+    Some(out)
+}
+
+/// Generic value decoder: tries atoms, atom-applications, nats, lists.
+/// Free constants decode to Atom. Church true decodes to Bool(true);
+/// note Church false ≡ nat 0, so predicates are classified at task level.
 pub fn decode_value(t: &Rc<Term>) -> Option<V> {
     if let Term::Free(i) = t.as_ref() {
         return Some(V::Atom(*i));
+    }
+    // Application spine of opaque values: F(A), M(a, x), ...
+    if let Term::App(f, a) = t.as_ref() {
+        return Some(V::App(
+            Box::new(decode_value(f)?),
+            Box::new(decode_value(a)?),
+        ));
     }
     if let Some(n) = church_nat(t) {
         return Some(V::Nat(n));
     }
     if let Some(n) = scott_nat(t) {
-        // Note: scott_nat(0) and church_nat won't both match the same term:
-        // Z = λs.λz.z is church_nat's λf.λx.x = 0 too. Church wins above;
-        // the semantic layer treats Nat uniformly, so the ambiguity at 0 is
+        // Note: Z = λs.λz.z is also Church 0. Church wins above; the
+        // semantic layer treats Nat uniformly, so the ambiguity at 0 is
         // harmless — encoding choice is resolved per-task, not per-value.
         return Some(V::Nat(n));
     }
@@ -193,8 +222,14 @@ pub fn decode_value(t: &Rc<Term>) -> Option<V> {
     if let Some(xs) = scott_list(t) {
         return Some(V::List(xs));
     }
-    // Church booleans: λt.λf.t / λt.λf.f — these collide with nat 0 and
-    // K-like atoms; resolved at the task level by trying interpretations.
+    // Church true = λa.λb.a (false ≡ nat 0, already taken above).
+    if let Term::Lam(b1) = t.as_ref() {
+        if let Term::Lam(b2) = b1.as_ref() {
+            if matches!(b2.as_ref(), Term::Var(1)) {
+                return Some(V::Bool(true));
+            }
+        }
+    }
     None
 }
 

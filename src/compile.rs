@@ -20,18 +20,31 @@ use std::rc::Rc;
 pub enum Family {
     CNat,
     SNat,
+    CList,
+    SList,
+    NTup,
 }
 
 impl Family {
     pub fn of_task(id: &str) -> Option<Family> {
-        if id.starts_with("cnat_") {
-            Some(Family::CNat)
-        } else if id.starts_with("snat_") {
-            Some(Family::SNat)
-        } else {
-            None
+        match id.split('_').next()? {
+            "cnat" => Some(Family::CNat),
+            "snat" => Some(Family::SNat),
+            "clst" => Some(Family::CList),
+            "slst" => Some(Family::SList),
+            "ntup" => Some(Family::NTup),
+            _ => None,
         }
     }
+}
+
+/// Per-argument-position structural kind, decided across all tests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArgKind {
+    Nat,
+    List,
+    Tuple,
+    Atom,
 }
 
 /// What the task's expected outputs are, structurally.
@@ -39,6 +52,10 @@ impl Family {
 pub enum OutKind {
     Nat,
     Bool,
+    List,
+    Tuple,
+    /// Element/application-tree output: passes through with no adapter.
+    Raw,
 }
 
 /// The standard library. Order matters: each definition only references
@@ -84,6 +101,30 @@ pub const STDLIB: &str = "\
 @scons = λh.λt.λc.λn.c(h, t)
 @srange1 = @Y(λr.λn.n(λp.@sdup(p, λp1.λp2.@scons(@ss(p1), r(p2))), @snil))
 @scount = @Y(λr.λl.λf.l(λh.λt.@ifc(f(h), @ss(r(t, f)), r(t, f)), @sz))
+@cnil = λc.λn.n
+@ccons = λh.λt.λc.λn.c(h, t(c, n))
+@c2sl = λl.l(@scons, @snil)
+@s2cl = @Y(λr.λl.l(λh.λt.@ccons(h, r(t)), @cnil))
+@shead = λl.l(λh.λt.h, @sz)
+@stail = λl.l(λh.λt.t, @snil)
+@slast = @Y(λr.λl.l(λh.λt.t(λh2.λt2.r(@scons(h2, t2)), h), @sz))
+@snth = @Y(λr.λl.λi.i(λp.r(@stail(l), p), @shead(l)))
+@srevgo = @Y(λr.λl.λa.l(λh.λt.r(t, @scons(h, a)), a))
+@srev = λl.@srevgo(l, @snil)
+@sapp = @Y(λr.λa.λb.a(λh.λt.@scons(h, r(t, b)), b))
+@srotl = λl.l(λh.λt.@sapp(t, @scons(h, @snil)), @snil)
+@srotr = λl.@srev(@srotl(@srev(l)))
+@slen = @Y(λr.λl.l(λh.λt.@ss(r(t)), @sz))
+@smapf = @Y(λr.λf.λl.l(λh.λt.@scons(f(h), r(f, t)), @snil))
+@szipf = @Y(λr.λf.λa.λb.a(λha.λta.b(λhb.λtb.@scons(f(ha, hb), r(f, ta, tb)), @snil), @snil))
+@sfoldr = @Y(λr.λf.λz.λl.l(λh.λt.f(h, r(f, z, t)), z))
+@sfilter = @Y(λr.λf.λl.l(λh.λt.@ifc(f(h), @scons(h, r(f, t)), r(f, t)), @snil))
+@id = λx.x
+@ssortb = λl.@sapp(@sfilter(@not, l), @sfilter(@id, l))
+@tupcol = @Y(λr.λn.λa.n(λp.λx.r(p, @scons(x, a)), @srev(a)))
+@tup2list = λn.λt.t(@tupcol(n, @snil))
+@l2tgo = @Y(λr.λl.λk.l(λh.λt.r(t, k(h)), k))
+@list2tup = λl.λk.@l2tgo(l, k)
 ";
 
 fn op_ref(op: Op) -> &'static str {
@@ -105,6 +146,18 @@ fn op_ref(op: Op) -> &'static str {
         Op::If => "@ifc",
         Op::Range1 => "@srange1",
         Op::Count => "@scount",
+        Op::Head => "@shead",
+        Op::Last => "@slast",
+        Op::Nth => "@snth",
+        Op::Rev => "@srev",
+        Op::RotL => "@srotl",
+        Op::RotR => "@srotr",
+        Op::Len => "@slen",
+        Op::AppendL => "@sapp",
+        Op::SortB => "@ssortb",
+        Op::MapAp => "@smapf",
+        Op::ZipAp => "@szipf",
+        Op::FoldrAp => "@sfoldr",
     }
 }
 
@@ -136,19 +189,32 @@ fn emit(e: &E, n_args: usize, arg_name: &dyn Fn(u32) -> String) -> String {
 }
 
 /// Build the full .lam source for a solved task.
-pub fn program(family: Family, out: OutKind, e: &E, n_args: usize) -> String {
-    // Internal representation is Scott; adapt at the boundary.
-    let arg = |i: u32| -> String { format!("a{i}") };
-    let adapted: Box<dyn Fn(u32) -> String> = match family {
-        Family::CNat => Box::new(move |i| format!("@c2s({})", arg(i))),
-        Family::SNat => Box::new(move |i| arg(i)),
+/// Internal representation is Scott; adapters sit at the boundary.
+pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx: usize) -> String {
+    let n_args = kinds.len();
+    let kinds_owned: Vec<ArgKind> = kinds.to_vec();
+    let adapted = move |i: u32| -> String {
+        let a = format!("a{i}");
+        match (family, kinds_owned[i as usize]) {
+            (Family::SNat | Family::SList, ArgKind::Nat) => a,
+            (_, ArgKind::Nat) => format!("@c2s({a})"),
+            (Family::SList, ArgKind::List) => a,
+            (_, ArgKind::List) => format!("@c2sl({a})"),
+            // N-tuples arrive with a Church-nat size argument; its position
+            // varies per task, so the caller tries each Nat position until
+            // one verifies.
+            (_, ArgKind::Tuple) => format!("@tup2list(@c2s(a{size_idx}), {a})"),
+            (_, ArgKind::Atom) => a,
+        }
     };
-    let core = emit(e, n_args, adapted.as_ref());
+    let core = emit(e, n_args, &adapted);
     let wrapped = match (family, out) {
-        (Family::CNat, OutKind::Nat) => format!("@s2c({core})"),
-        (Family::SNat, OutKind::Nat) => core,
-        // Both families state Church booleans for predicates.
-        (_, OutKind::Bool) => core,
+        (Family::SNat | Family::SList, OutKind::Nat) => core,
+        (_, OutKind::Nat) => format!("@s2c({core})"),
+        (Family::SList, OutKind::List) => core,
+        (_, OutKind::List) => format!("@s2cl({core})"),
+        (_, OutKind::Tuple) => format!("@list2tup({core})"),
+        (_, OutKind::Bool) | (_, OutKind::Raw) => core,
     };
     let mut lams = String::new();
     for i in 0..n_args {
@@ -224,27 +290,41 @@ pub fn verify(main: &Rc<Term>, task: &Task, fuel: i64) -> bool {
 
 // ── Task-level decoding for the supported families ──────────────────
 
-/// Decode all tests of a cnat_/snat_ task into native I/O, and classify the
-/// output kind. Returns None if anything fails to decode.
-pub fn decode_task(family: Family, task: &Task) -> Option<(Vec<Vec<V>>, Vec<V>, OutKind)> {
+/// Decode all tests of a supported-family task into native I/O, classify
+/// each argument position and the output kind. None if anything fails.
+pub fn decode_task(
+    family: Family,
+    task: &Task,
+) -> Option<(Vec<Vec<V>>, Vec<V>, Vec<ArgKind>, OutKind)> {
     let empty: Env = Rc::new(Vec::new());
     let norm = |t: &Rc<Term>| -> Option<Rc<Term>> {
         let mut fuel = Fuel(1_000_000);
         normalize(&empty, t, &mut fuel).ok()
     };
-    let dec_nat = |t: &Rc<Term>| -> Option<u64> {
-        match family {
-            Family::CNat => crate::decode::church_nat(t),
-            Family::SNat => crate::decode::scott_nat(t),
-        }
+    let scott_side = matches!(family, Family::SNat | Family::SList);
+    let dec_nat = |t: &Rc<Term>| -> Option<V> {
+        let n = if scott_side {
+            crate::decode::scott_nat(t)?
+        } else {
+            crate::decode::church_nat(t)?
+        };
+        Some(V::Nat(n))
     };
-    let dec_bool = |t: &Rc<Term>| -> Option<bool> {
-        // Church booleans: λa.λb.a / λa.λb.b (used by both families).
+    let dec_list = |t: &Rc<Term>| -> Option<V> {
+        let xs = match family {
+            Family::SList => crate::decode::scott_list(t)?,
+            _ => crate::decode::church_list(t)?,
+        };
+        Some(V::List(xs))
+    };
+    let dec_tuple = |t: &Rc<Term>| -> Option<V> { Some(V::List(crate::decode::ntuple(t)?)) };
+    let dec_atomish = |t: &Rc<Term>| -> Option<V> { crate::decode::decode_value(t) };
+    let dec_bool = |t: &Rc<Term>| -> Option<V> {
         match t.as_ref() {
             Term::Lam(b1) => match b1.as_ref() {
                 Term::Lam(b2) => match b2.as_ref() {
-                    Term::Var(1) => Some(true),
-                    Term::Var(0) => Some(false),
+                    Term::Var(1) => Some(V::Bool(true)),
+                    Term::Var(0) => Some(V::Bool(false)),
                     _ => None,
                 },
                 _ => None,
@@ -253,27 +333,81 @@ pub fn decode_task(family: Family, task: &Task) -> Option<(Vec<Vec<V>>, Vec<V>, 
         }
     };
 
-    let mut inputs = Vec::new();
-    let mut want_nfs = Vec::new();
+    // Normalize everything once.
+    let mut arg_nfs: Vec<Vec<Rc<Term>>> = Vec::new(); // [test][arg]
+    let mut want_nfs: Vec<Rc<Term>> = Vec::new();
     for t in &task.tests {
-        if t.outer != 0 {
-            return None; // abstract binders don't occur in nat tasks
-        }
         let mut row = Vec::new();
         for a in &t.args {
-            let nf = norm(a)?;
-            row.push(V::Nat(dec_nat(&nf)?));
+            row.push(norm(a)?);
         }
-        inputs.push(row);
-        want_nfs.push(norm(&t.want)?);
+        arg_nfs.push(row);
+        // Strip the test's outer binders (λA.λB. wrappers) and substitute
+        // them with the same Free constants the parser used in the args.
+        want_nfs.push(crate::parse::strip_outer(&norm(&t.want)?, t.outer)?);
     }
-    // Church false is also Church 0, so classify the output kind globally:
-    // all outputs decode as nats, else all as booleans.
-    if let Some(nats) = want_nfs.iter().map(|t| dec_nat(t)).collect::<Option<Vec<_>>>() {
-        return Some((inputs, nats.into_iter().map(V::Nat).collect(), OutKind::Nat));
+    let n_args = task.arity;
+
+    // Per-position kind: first interpretation that decodes in every test.
+    type Dec<'d> = &'d dyn Fn(&Rc<Term>) -> Option<V>;
+    let try_all = |dec: Dec, col: &dyn Fn(usize) -> Rc<Term>, n: usize| -> Option<Vec<V>> {
+        (0..n).map(|j| dec(&col(j))).collect()
+    };
+    let mut kinds: Vec<ArgKind> = Vec::new();
+    let mut cols: Vec<Vec<V>> = Vec::new(); // [arg][test]
+    for p in 0..n_args {
+        let col = |j: usize| arg_nfs[j][p].clone();
+        let candidates: Vec<(ArgKind, Dec)> = match family {
+            Family::CNat | Family::SNat => vec![(ArgKind::Nat, &dec_nat)],
+            Family::CList | Family::SList => vec![
+                (ArgKind::Nat, &dec_nat),
+                (ArgKind::List, &dec_list),
+                (ArgKind::Atom, &dec_atomish),
+            ],
+            Family::NTup => vec![
+                (ArgKind::Nat, &dec_nat),
+                (ArgKind::Tuple, &dec_tuple),
+                (ArgKind::Atom, &dec_atomish),
+            ],
+        };
+        let mut hit = None;
+        for (k, dec) in candidates {
+            if let Some(vals) = try_all(dec, &col, task.tests.len()) {
+                hit = Some((k, vals));
+                break;
+            }
+        }
+        let (k, vals) = hit?;
+        kinds.push(k);
+        cols.push(vals);
     }
-    if let Some(bs) = want_nfs.iter().map(|t| dec_bool(t)).collect::<Option<Vec<_>>>() {
-        return Some((inputs, bs.into_iter().map(V::Bool).collect(), OutKind::Bool));
+    let inputs: Vec<Vec<V>> = (0..task.tests.len())
+        .map(|j| (0..n_args).map(|p| cols[p][j].clone()).collect())
+        .collect();
+
+    // Output kind: ordered attempts.
+    let wcol = |j: usize| want_nfs[j].clone();
+    let out_candidates: Vec<(OutKind, Dec)> = match family {
+        Family::CNat | Family::SNat => {
+            vec![(OutKind::Nat, &dec_nat), (OutKind::Bool, &dec_bool)]
+        }
+        Family::NTup => vec![
+            (OutKind::Tuple, &dec_tuple),
+            (OutKind::Nat, &dec_nat),
+            (OutKind::Bool, &dec_bool),
+            (OutKind::Raw, &dec_atomish),
+        ],
+        _ => vec![
+            (OutKind::List, &dec_list),
+            (OutKind::Nat, &dec_nat),
+            (OutKind::Bool, &dec_bool),
+            (OutKind::Raw, &dec_atomish),
+        ],
+    };
+    for (k, dec) in out_candidates {
+        if let Some(outs) = try_all(dec, &wcol, task.tests.len()) {
+            return Some((inputs, outs, kinds, k));
+        }
     }
     None
 }
