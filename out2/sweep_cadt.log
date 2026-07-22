@@ -1,0 +1,3 @@
+✗ cadt_chi: no solution ≤ size 8 in 300.04s (1384448 built, 584769 classes, 386899 aborted)
+✗ cadt_ctr: no solution ≤ size 8 in 300.78s (1261568 built, 530244 classes, 353564 aborted)
+✗ cadt_des: no solution ≤ size 8 in 301.71s (1097728 built, 428212 classes, 301018 aborted)

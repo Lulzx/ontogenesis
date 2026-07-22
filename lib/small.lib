@@ -1,0 +1,7 @@
+// Small combinators mined from round-0 solutions (K, reverse-compose, pair,
+// fold-head idiom). Whole-solution seeds deliberately excluded: they speed
+// re-solves but widen branching without helping new tasks.
+λa.λb.a
+λa.λb.λc.b(a(c))
+λa.λb.λc.c(a, b)
+λa.a(λb.λc.b, a)

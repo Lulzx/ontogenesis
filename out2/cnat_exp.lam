@@ -1,0 +1,1 @@
+@main = λa.λb.(λc.λd.λe.λf.d(c, e, f))(a, b)

@@ -1,0 +1,6 @@
+✗ clst_dot: no solution ≤ size 8 in 300.00s (1781760 built, 967746 classes, 374710 aborted)
+✓ clst_fol: size 8 in 0.77s (5828 built, 3431 classes) -> out2/clst_fol.lam
+✓ clst_hed: size 11 in 0.01s (114 built, 103 classes) -> out2/clst_hed.lam
+✓ clst_map: size 17 in 0.70s (5610 built, 3263 classes) -> out2/clst_map.lam
+✗ clst_nth: no solution ≤ size 8 in 301.48s (1163264 built, 515829 classes, 332884 aborted)
+✗ clst_rev: no solution ≤ size 8 in 300.45s (987136 built, 433451 classes, 307430 aborted)

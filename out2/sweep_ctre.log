@@ -1,0 +1,3 @@
+✗ ctre_bfs: no solution ≤ size 8 in 302.10s (1282048 built, 509033 classes, 387228 aborted)
+✗ ctre_fft: no solution ≤ size 8 in 301.57s (835584 built, 310895 classes, 269603 aborted)
+✗ ctre_idx: no solution ≤ size 8 in 300.06s (1101824 built, 538816 classes, 304274 aborted)

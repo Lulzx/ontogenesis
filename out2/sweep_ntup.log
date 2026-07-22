@@ -1,0 +1,4 @@
+✗ ntup_dot: no solution ≤ size 7 in 303.19s (1429504 built, 693061 classes, 314201 aborted)
+✗ ntup_fol: no solution ≤ size 7 in 305.00s (1257472 built, 685099 classes, 308037 aborted)
+✓ ntup_hed: size 17 in 0.84s (5689 built, 3235 classes) -> out2/ntup_hed.lam
+✗ ntup_map: no solution ≤ size 8 in 301.15s (1073152 built, 627320 classes, 258410 aborted)

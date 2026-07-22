@@ -1,0 +1,3 @@
+✗ sbin_add: no solution ≤ size 8 in 301.02s (1417216 built, 658254 classes, 389919 aborted)
+✗ sbin_div: no solution ≤ size 8 in 300.69s (1286144 built, 582037 classes, 345390 aborted)
+✗ sbin_exp: no solution ≤ size 8 in 301.71s (1155072 built, 508670 classes, 308534 aborted)

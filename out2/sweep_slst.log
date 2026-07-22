@@ -1,0 +1,4 @@
+✗ slst_dot: no solution ≤ size 8 in 300.17s (1835008 built, 970434 classes, 386089 aborted)
+✗ slst_fol: no solution ≤ size 8 in 300.04s (1429504 built, 707233 classes, 354864 aborted)
+✓ slst_hed: size 11 in 0.01s (114 built, 103 classes) -> out2/slst_hed.lam
+✗ slst_map: no solution ≤ size 8 in 301.01s (1142784 built, 493106 classes, 313043 aborted)

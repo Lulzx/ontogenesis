@@ -1,0 +1,3 @@
+✗ stre_bfs: no solution ≤ size 8 in 302.20s (1302528 built, 511414 classes, 394208 aborted)
+✗ stre_fft: no solution ≤ size 8 in 301.36s (987136 built, 387952 classes, 311210 aborted)
+✗ stre_idx: no solution ≤ size 8 in 303.09s (1183744 built, 558246 classes, 312421 aborted)

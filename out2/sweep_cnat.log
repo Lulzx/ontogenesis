@@ -1,1 +1,5 @@
 ✓ cnat_add: size 19 in 0.81s (5165 built, 2866 classes) -> out2/cnat_add.lam
+✗ cnat_div: no solution ≤ size 8 in 300.10s (1216512 built, 523895 classes, 371284 aborted)
+✓ cnat_exp: size 17 in 0.78s (5344 built, 3058 classes) -> out2/cnat_exp.lam
+✗ cnat_gcd: no solution ≤ size 8 in 301.54s (1015808 built, 417407 classes, 329542 aborted)
+✗ cnat_log: no solution ≤ size 8 in 300.84s (880640 built, 411425 classes, 288142 aborted)

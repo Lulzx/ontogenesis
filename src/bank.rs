@@ -396,6 +396,9 @@ pub fn solve(task: &Task, opts: &Options) -> Outcome {
                     let aso: Vec<Rc<Term>> =
                         lvl.opaque.get(s2 as usize).cloned().unwrap_or_default();
 
+                    // Opaque terms act only as application *heads* (the
+                    // Y(F) recursion shape); allowing them as arguments
+                    // cascades divergent junk through every level.
                     for f in &fs {
                         for a in &asn {
                             let t = app(f.term.clone(), a.term.clone());
@@ -408,25 +411,15 @@ pub fn solve(task: &Task, opts: &Options) -> Outcome {
                             );
                             step!(search, r);
                         }
-                        for a in &aso {
-                            let t = app(f.term.clone(), a.clone());
-                            let r = search.process(
-                                c,
-                                t,
-                                Make::Apply(f, ArgSrc::Thunk(a.clone())),
-                                &mut kept,
-                                &mut opq,
-                            );
-                            step!(search, r);
-                        }
                     }
                     for f in &fo {
-                        for a in asn.iter().map(|e| &e.term).chain(aso.iter()) {
-                            let t = app(f.clone(), a.clone());
+                        for a in &asn {
+                            let t = app(f.clone(), a.term.clone());
                             let r = search.process(c, t, Make::Eval, &mut kept, &mut opq);
                             step!(search, r);
                         }
                     }
+                    let _ = &aso;
                 }
             }
 

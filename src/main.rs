@@ -26,6 +26,7 @@ fn run() {
     let mut tsk_dir: Option<PathBuf> = None;
     let mut out_dir = PathBuf::from("out");
     let mut filter = String::new();
+    let mut skip_existing = false;
     let mut opts = bank::Options::default();
 
     while let Some(a) = args.next() {
@@ -37,6 +38,7 @@ fn run() {
             "--fuel" => opts.fuel = args.next().unwrap().parse().unwrap(),
             "--timeout" => opts.time_budget_secs = args.next().unwrap().parse().unwrap(),
             "--seed-y" => opts.seeds.push(bank::y_combinator()),
+            "--skip-existing" => skip_existing = true,
             "--lib" => {
                 let path = args.next().expect("--lib FILE");
                 let text = fs::read_to_string(&path).expect("read lib file");
@@ -80,6 +82,9 @@ fn run() {
     for path in &files {
         let id = path.file_stem().unwrap().to_string_lossy().to_string();
         if !filter.is_empty() && !id.starts_with(&filter) {
+            continue;
+        }
+        if skip_existing && out_dir.join(format!("{id}.lam")).exists() {
             continue;
         }
         let text = fs::read_to_string(path).expect("read task");

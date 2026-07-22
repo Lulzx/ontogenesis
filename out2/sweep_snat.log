@@ -1,0 +1,3 @@
+✗ snat_add: no solution ≤ size 8 in 300.84s (1400832 built, 643292 classes, 388096 aborted)
+✗ snat_div: no solution ≤ size 8 in 300.15s (1228800 built, 520032 classes, 345155 aborted)
+✗ snat_exp: no solution ≤ size 8 in 301.25s (1163264 built, 519955 classes, 309744 aborted)
