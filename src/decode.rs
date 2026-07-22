@@ -38,20 +38,6 @@ pub enum V {
     Tup(Vec<V>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Enc {
-    ChurchNat,
-    ChurchBin, // list of bits, LSB first, as Church list of Church bools? (per task spec)
-    ScottNat,
-    ScottBin,
-    ChurchList,
-    ScottList,
-    ChurchTree,
-    ScottTree,
-    NTuple,
-    ChurchBool,
-}
-
 // ── Recognizers ─────────────────────────────────────────────────────
 //
 // All recognizers take a *closed-up-to-Free* normal form. de Bruijn indices
@@ -81,14 +67,6 @@ pub fn church_nat(t: &Term) -> Option<u64> {
     }
 }
 
-pub fn church_nat_term(n: u64) -> Rc<Term> {
-    let mut body = var(0);
-    for _ in 0..n {
-        body = app(var(1), body);
-    }
-    lam(lam(body))
-}
-
 /// Scott nat: Z = λs.λz.z, S(n) = λs.λz.s(n)
 pub fn scott_nat(t: &Term) -> Option<u64> {
     let mut n = 0u64;
@@ -110,14 +88,6 @@ pub fn scott_nat(t: &Term) -> Option<u64> {
             _ => return None,
         }
     }
-}
-
-pub fn scott_nat_term(n: u64) -> Rc<Term> {
-    let mut t = lam(lam(var(0)));
-    for _ in 0..n {
-        t = lam(lam(app(var(1), t)));
-    }
-    t
 }
 
 /// Church list: [a,b,c] = λc.λn.c(a, c(b, c(c', n)))
@@ -520,47 +490,6 @@ pub fn church_bt(t: &Term) -> Option<i64> {
             _ => return None,
         }
     }
-}
-
-/// Balanced-ternary digits of n, LSB first (empty for 0).
-fn bt_digits(mut n: i64) -> Vec<i64> {
-    let mut ds = Vec::new();
-    while n != 0 {
-        let mut r = n.rem_euclid(3);
-        n = n.div_euclid(3);
-        if r == 2 {
-            r = -1;
-            n += 1;
-        }
-        ds.push(r);
-    }
-    ds
-}
-
-pub fn scott_bt_term(n: i64) -> Rc<Term> {
-    let mut t = lam(lam(lam(lam(var(0)))));
-    for &d in bt_digits(n).iter().rev() {
-        let idx = match d {
-            -1 => 3,
-            0 => 2,
-            _ => 1,
-        };
-        t = lam(lam(lam(lam(app(var(idx), t)))));
-    }
-    t
-}
-
-pub fn church_bt_term(n: i64) -> Rc<Term> {
-    let mut body = var(0);
-    for &d in bt_digits(n).iter().rev() {
-        let idx = match d {
-            -1 => 3,
-            0 => 2,
-            _ => 1,
-        };
-        body = app(var(idx), body);
-    }
-    lam(lam(lam(lam(body))))
 }
 
 /// Church GN tree (ctre_fft): root spines are plain (`n(a,b)` / `l(x)`),
@@ -1015,6 +944,22 @@ mod tests {
 
     fn t(src: &str) -> Rc<Term> {
         to_term(&parse_expr(src).unwrap()).unwrap()
+    }
+
+    fn church_nat_term(n: u64) -> Rc<Term> {
+        let mut body = var(0);
+        for _ in 0..n {
+            body = app(var(1), body);
+        }
+        lam(lam(body))
+    }
+
+    fn scott_nat_term(n: u64) -> Rc<Term> {
+        let mut t = lam(lam(var(0)));
+        for _ in 0..n {
+            t = lam(lam(app(var(1), t)));
+        }
+        t
     }
 
     #[test]

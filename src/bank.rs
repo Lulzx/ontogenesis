@@ -112,7 +112,6 @@ enum Make<'e> {
 
 enum ArgSrc<'e> {
     Val(&'e Entry),
-    Thunk(Rc<Term>),
 }
 
 enum Step {
@@ -141,7 +140,6 @@ impl<'a> Search<'a> {
             Make::Apply(f, a) => {
                 let arg: Thunk = match a {
                     ArgSrc::Val(e) => thunk_of_val_rc(e.vals[j].clone()),
-                    ArgSrc::Thunk(at) => thunk_delayed(env.clone(), at.clone()),
                 };
                 crate::nbe::apply(f.vals[j].clone(), arg, fuel)
             }

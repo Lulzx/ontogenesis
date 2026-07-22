@@ -1,6 +1,7 @@
 mod bank;
 mod compile;
 mod decode;
+mod dsl;
 mod sem;
 mod nbe;
 mod parse;
@@ -24,6 +25,14 @@ fn run() {
     if argv.first().map(String::as_str) == Some("mine") {
         mine(&argv[1..]);
         return;
+    }
+    if argv.first().map(String::as_str) == Some("grow") {
+        grow(&argv[1..]);
+        return;
+    }
+    if let Ok(path) = std::env::var("SUP_LIB") {
+        let n = dsl::load_library(std::path::Path::new(&path)).expect("load SUP_LIB");
+        eprintln!("loaded {n} library entries from {path}");
     }
     let mut args = argv.into_iter();
     let mut tsk_dir: Option<PathBuf> = None;
@@ -107,10 +116,11 @@ fn run() {
         attempted += 1;
         // Semantic track first: decode → DSL search → compile → verify.
         let sem_start = std::time::Instant::now();
-        if let Some(src) = try_semantic(&id, &task) {
+        if let Some((src, e, n_args)) = try_semantic(&id, &task, &sem::SemOptions::default()) {
             solved += 1;
             let out_path = out_dir.join(format!("{id}.lam"));
             fs::write(&out_path, &src).expect("write solution");
+            write_dsl(&out_dir, &id, n_args, &e);
             println!(
                 "✓ {id}: semantic track in {:.3}s -> {}",
                 sem_start.elapsed().as_secs_f64(),
@@ -150,13 +160,26 @@ fn run() {
     println!("\nsolved {solved}/{attempted} attempted ({skipped} skipped)");
 }
 
+/// Persist the winning DSL term next to the compiled solution — the mining
+/// corpus. Format: `args=N` then the S-expression.
+fn write_dsl(out_dir: &std::path::Path, id: &str, n_args: usize, e: &sem::E) {
+    let path = out_dir.join(format!("{id}.dsl"));
+    let text = format!("args={n_args}\n{}\n", dsl::print_e(e));
+    fs::write(path, text).expect("write dsl");
+}
+
 /// The semantic track: decode test I/O to native values, search the DSL,
 /// compile through the Lamb stdlib, verify internally against every test.
 /// Any failure at any stage returns None and the λ-bank takes over.
-fn try_semantic(id: &str, task: &parse::Task) -> Option<String> {
+/// On success returns (lam source, DSL term, task arity).
+fn try_semantic(
+    id: &str,
+    task: &parse::Task,
+    opts: &sem::SemOptions,
+) -> Option<(String, sem::E, usize)> {
     let family = compile::Family::of_task(id)?;
     if matches!(family, compile::Family::CAdt | compile::Family::SAdt) {
-        return try_semantic_adt(id, family, task);
+        return try_semantic_adt(id, family, task, opts);
     }
     let Some((inputs, outputs, kinds, out_kind)) = compile::decode_task(family, task) else {
         eprintln!("  {id}: semantic decode failed");
@@ -171,7 +194,7 @@ fn try_semantic(id: &str, task: &parse::Task) -> Option<String> {
     if dbg {
         eprintln!("  {id}: searching...");
     }
-    let Some(e) = sem::solve(&inputs, &outputs, &sem::SemOptions::default()) else {
+    let Some(e) = sem::solve(&inputs, &outputs, opts) else {
         eprintln!("  {id}: no DSL expression found (kinds {kinds:?}, out {out_kind:?})");
         return None;
     };
@@ -205,7 +228,8 @@ fn try_semantic(id: &str, task: &parse::Task) -> Option<String> {
             continue;
         };
         if compile::verify(&main, task, fuel) {
-            return Some(src);
+            let n_args = kinds.len();
+            return Some((src, e, n_args));
         }
     }
     eprintln!("  {id}: semantic candidate failed internal verification");
@@ -216,7 +240,12 @@ fn try_semantic(id: &str, task: &parse::Task) -> Option<String> {
 /// syntactically identical, so output-kind choice is settled by verifying),
 /// plus template fallback for the constructor-builder tasks whose outputs
 /// are functions rather than data.
-fn try_semantic_adt(id: &str, family: compile::Family, task: &parse::Task) -> Option<String> {
+fn try_semantic_adt(
+    id: &str,
+    family: compile::Family,
+    task: &parse::Task,
+    opts: &sem::SemOptions,
+) -> Option<(String, sem::E, usize)> {
     let cands = compile::decode_task_adt(family, task);
     if std::env::var("SUP_DEBUG").is_ok() {
         eprintln!("  {id}: {} adt candidates", cands.len());
@@ -226,7 +255,7 @@ fn try_semantic_adt(id: &str, family: compile::Family, task: &parse::Task) -> Op
     }
     for (inputs, outputs, kinds, out_kind, desc_pos) in cands
     {
-        let Some(e) = sem::solve(&inputs, &outputs, &sem::SemOptions::default()) else {
+        let Some(e) = sem::solve(&inputs, &outputs, opts) else {
             continue;
         };
         let src = compile::program(family, out_kind, &e, &kinds, desc_pos);
@@ -234,11 +263,163 @@ fn try_semantic_adt(id: &str, family: compile::Family, task: &parse::Task) -> Op
             continue;
         };
         if compile::verify(&main, task, 2_000_000) {
-            return Some(src);
+            let n_args = kinds.len();
+            return Some((src, e, n_args));
         }
     }
     eprintln!("  {id}: semantic track exhausted");
     None
+}
+
+/// The library-growth experiment: solve with the seed tier only, compress
+/// the solved corpus into library abstractions, re-search with the grown
+/// library, and repeat to a fixed point. Nothing here touches the certified
+/// full-tier configuration.
+fn grow(args: &[String]) {
+    let mut tsk_dir: Option<PathBuf> = None;
+    let mut out_dir = PathBuf::from("outgrow");
+    let mut lib_path = PathBuf::from("lib/dsl.lib");
+    let mut rounds = 8usize;
+    let mut budget = 20u64;
+    let mut per_round = 6usize;
+    let mut filter = String::new();
+    let mut fresh = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--out" => {
+                out_dir = PathBuf::from(&args[i + 1]);
+                i += 2;
+            }
+            "--lib" => {
+                lib_path = PathBuf::from(&args[i + 1]);
+                i += 2;
+            }
+            "--rounds" => {
+                rounds = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--per-round" => {
+                per_round = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--filter" => {
+                filter = args[i + 1].clone();
+                i += 2;
+            }
+            "--fresh" => {
+                fresh = true;
+                i += 1;
+            }
+            other => {
+                if tsk_dir.is_none() {
+                    tsk_dir = Some(PathBuf::from(other));
+                    i += 1;
+                } else {
+                    eprintln!("unknown grow arg: {other}");
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+    let tsk_dir = tsk_dir.unwrap_or_else(|| {
+        eprintln!("usage: supsearch grow <tsk_dir> [--out DIR] [--lib FILE] [--rounds N] [--budget SECS] [--per-round N] [--filter PREFIX] [--fresh]");
+        std::process::exit(1);
+    });
+    fs::create_dir_all(&out_dir).expect("create out dir");
+    if let Some(parent) = lib_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if !fresh && lib_path.exists() {
+        let n = dsl::load_library(&lib_path).expect("load library");
+        println!("loaded {n} library entries from {}", lib_path.display());
+    }
+
+    // Parse every task once.
+    let mut files: Vec<PathBuf> = fs::read_dir(&tsk_dir)
+        .expect("read tsk dir")
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|e| e == "tsk"))
+        .collect();
+    files.sort();
+    let mut tasks: Vec<(String, parse::Task)> = Vec::new();
+    for path in &files {
+        let id = path.file_stem().unwrap().to_string_lossy().to_string();
+        if !filter.is_empty() && !id.starts_with(&filter) {
+            continue;
+        }
+        let text = fs::read_to_string(path).expect("read task");
+        if let Ok(t) = parse::parse_task(&id, &text) {
+            tasks.push((id, t));
+        }
+    }
+    println!("grow: {} tasks, seed tier, {budget}s budget/task", tasks.len());
+
+    let mut corpus: Vec<dsl::CorpusEntry> = Vec::new();
+    let mut solved: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for round in 0..rounds {
+        let opts = sem::SemOptions {
+            tier: sem::Tier::Seed,
+            budget_secs: budget,
+            ..Default::default()
+        };
+        let round_start = std::time::Instant::now();
+        let mut new_solves = 0usize;
+        for (id, task) in &tasks {
+            if solved.contains(id) {
+                continue;
+            }
+            let t0 = std::time::Instant::now();
+            if let Some((src, e, n_args)) = try_semantic(id, task, &opts) {
+                fs::write(out_dir.join(format!("{id}.lam")), &src).expect("write solution");
+                write_dsl(&out_dir, id, n_args, &e);
+                println!(
+                    "✓ {id} (round {round}, {:.2}s): {}",
+                    t0.elapsed().as_secs_f64(),
+                    dsl::print_e(&e)
+                );
+                corpus.push(dsl::CorpusEntry {
+                    id: id.clone(),
+                    n_args: n_args as u32,
+                    e,
+                });
+                solved.insert(id.clone());
+                new_solves += 1;
+            }
+        }
+        let added = dsl::mine_round(&mut corpus, per_round);
+        for (idx, body) in &added {
+            let arity = dsl::lib_arity(*idx as u16);
+            println!("  + L{idx}/{arity} = {body}");
+        }
+        dsl::save_library(&lib_path).expect("save library");
+        // Refresh persisted corpus (rewritten by compression).
+        for entry in &corpus {
+            write_dsl(&out_dir, &entry.id, entry.n_args as usize, &entry.e);
+        }
+        println!(
+            "round {round}: solved {}/{} (+{new_solves}), library {} entries, {:.1}s",
+            solved.len(),
+            tasks.len(),
+            dsl::lib_len(),
+            round_start.elapsed().as_secs_f64()
+        );
+        if new_solves == 0 && added.is_empty() {
+            println!("fixed point reached");
+            break;
+        }
+    }
+    println!(
+        "\ngrow finished: {}/{} solved with seed tier + mined library ({} entries -> {})",
+        solved.len(),
+        tasks.len(),
+        dsl::lib_len(),
+        lib_path.display()
+    );
 }
 
 /// Library mining: extract closed subterms recurring across solved programs

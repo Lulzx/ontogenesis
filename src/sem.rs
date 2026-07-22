@@ -80,6 +80,15 @@ pub enum Op {
     GnDft,    // DFT over the GN number tower (collapsed L/B tree, Int leaves)
     GnDftN,   // same, output storage in natural order (ctre convention)
     CtorOf,   // CtorOf(desc, i) = the i-th constructor function (opaque)
+    // ── seed-tier combinators (library-growth track; not in Op::all()) ──
+    Iter,     // Iter(n, x, λs.body): apply body n times to x
+    FoldB,    // FoldB(list, z, λp.body): left fold, p = Tup(elem, acc)
+    Tail,     // list without its head ([] on empty)
+    MkTup,    // MkTup(a, b) = Tup(a, b)
+    Cons,     // Cons(x, list)
+    Nil,      // the empty list (zero-arg leaf)
+    /// A mined library abstraction (index into dsl::LIBRARY).
+    Lib(u16),
 }
 
 impl Op {
@@ -95,6 +104,10 @@ impl Op {
             Op::Fst | Op::Snd | Op::Range0 | Op::SumL | Op::MinL | Op::Perms => (1, 0),
             Op::SatCnf | Op::GridBfs | Op::Hull | Op::Sudoku | Op::StlcOk | Op::LamNf
             | Op::GnDft | Op::GnDftN => (1, 0),
+            Op::Iter | Op::FoldB => (2, 1),
+            Op::Tail => (1, 0),
+            Op::Nil => (0, 0),
+            Op::Lib(i) => (crate::dsl::lib_arity(i), 0),
             _ => (2, 0),
         }
     }
@@ -167,6 +180,57 @@ impl Op {
             Op::CtorOf,
         ]
     }
+
+    /// Combinators that exist only for the seed tier (library-growth track).
+    /// Kept out of all() so the certified full-tier sweep is untouched.
+    pub fn seed_extras() -> &'static [Op] {
+        &[Op::Iter, Op::FoldB, Op::Tail, Op::MkTup, Op::Cons, Op::Nil]
+    }
+
+    /// The seed tier: generic constructors, destructors, iteration,
+    /// arithmetic and control — nothing benchmark-shaped. Everything else
+    /// must be mined as a composition of these (or stay in the declared
+    /// hand-written algorithm tier).
+    pub fn seed_ops() -> &'static [Op] {
+        &[
+            Op::Add,
+            Op::Sub,
+            Op::Mul,
+            Op::Div,
+            Op::Mod,
+            Op::Eq,
+            Op::Lt,
+            Op::Leq,
+            Op::IsZero,
+            Op::Not,
+            Op::If,
+            Op::Head,
+            Op::Tail,
+            Op::Len,
+            Op::Cons,
+            Op::Nil,
+            Op::AppendL,
+            Op::Count,
+            Op::MapB,
+            Op::FoldB,
+            Op::Iter,
+            Op::MkTup,
+            Op::Fst,
+            Op::Snd,
+            Op::MapAp,
+            Op::ZipAp,
+            Op::FoldrAp,
+        ]
+    }
+}
+
+/// Which op set the search draws from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tier {
+    /// The full hand-written op set (the certified 120/120 configuration).
+    Full,
+    /// Seed combinators plus the mined library — the growth experiment.
+    Seed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -566,7 +630,7 @@ fn grid_bfs(g: &[Vec<bool>]) -> Option<u64> {
             return Some(dist[i][j]);
         }
         let d = dist[i][j];
-        let mut push = |ni: usize, nj: usize, dist: &mut Vec<Vec<u64>>,
+        let push = |ni: usize, nj: usize, dist: &mut Vec<Vec<u64>>,
                         queue: &mut std::collections::VecDeque<(usize, usize)>| {
             if g[ni][nj] && dist[ni][nj] == u64::MAX {
                 dist[ni][nj] = d + 1;
@@ -632,7 +696,7 @@ fn hull(pts: &[(i64, i64)]) -> Vec<(i64, i64)> {
     let cross = |o: (i64, i64), a: (i64, i64), b: (i64, i64)| -> i64 {
         (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
     };
-    let mut build = |it: &mut dyn Iterator<Item = &(i64, i64)>| -> Vec<(i64, i64)> {
+    let build = |it: &mut dyn Iterator<Item = &(i64, i64)>| -> Vec<(i64, i64)> {
         let mut st: Vec<(i64, i64)> = Vec::new();
         for &p in it {
             while st.len() >= 2 && cross(st[st.len() - 2], st[st.len() - 1], p) <= 0 {
@@ -843,14 +907,6 @@ fn bf_exec(prog: &[V], st: &mut BfState) -> Option<()> {
 }
 
 // GN numbers: collapsed L/B tree — V::Node internal, V::Int leaves.
-fn gn_neg(v: &V) -> Option<V> {
-    match v {
-        V::Int(n) => Some(V::Int(-n)),
-        V::Node(a, b) => Some(V::Node(Box::new(gn_neg(a)?), Box::new(gn_neg(b)?))),
-        _ => None,
-    }
-}
-
 /// Multiply a GN(m) value by its own root w_m (w_m² = w_{m-1}, w_0 = −1).
 fn gn_mulw(v: &V) -> Option<V> {
     match v {
@@ -1000,6 +1056,23 @@ fn gn_dft(t: &V) -> Option<V> {
 
 const NAT_CAP: u64 = 1 << 40;
 const LIST_CAP: usize = 4096;
+const ACC_CAP: usize = 65_536;
+
+/// Cheap structural-size check with early exit: guards Iter/FoldB
+/// accumulators against exponential growth (MkTup(s,s), AppendL(s,s)
+/// double the value every iteration — the deadline can't catch an
+/// allocation hang inside a single candidate).
+fn v_small(v: &V, budget: &mut usize) -> bool {
+    if *budget == 0 {
+        return false;
+    }
+    *budget -= 1;
+    match v {
+        V::List(xs) | V::Ctr(_, xs) | V::Tup(xs) => xs.iter().all(|x| v_small(x, budget)),
+        V::App(a, b) | V::Node(a, b) => v_small(a, budget) && v_small(b, budget),
+        _ => true,
+    }
+}
 
 /// Evaluate an expression under an environment (task args, then any lambda
 /// params appended). Returns None on type mismatch / overflow / undefined.
@@ -1341,6 +1414,68 @@ pub fn eval(e: &E, env: &[V]) -> Option<V> {
                 }
                 GnDft => gn_dft_ord(&eval(&args[0], env)?, false),
                 GnDftN => gn_dft_ord(&eval(&args[0], env)?, true),
+                Iter => {
+                    let n = nat(&eval(&args[0], env)?)?;
+                    if n > 1024 {
+                        return None;
+                    }
+                    let E::Lam1(body) = &args[2] else { return None };
+                    let mut acc = eval(&args[1], env)?;
+                    let mut env2 = env.to_vec();
+                    env2.push(V::Nat(0));
+                    for _ in 0..n {
+                        *env2.last_mut().unwrap() = acc;
+                        acc = eval(body, &env2)?;
+                        let mut cap = ACC_CAP;
+                        if !v_small(&acc, &mut cap) {
+                            return None;
+                        }
+                    }
+                    Some(acc)
+                }
+                FoldB => {
+                    let xs = list1(&eval(&args[0], env)?)?;
+                    let E::Lam1(body) = &args[2] else { return None };
+                    let mut acc = eval(&args[1], env)?;
+                    let mut env2 = env.to_vec();
+                    env2.push(V::Nat(0));
+                    for x in xs {
+                        *env2.last_mut().unwrap() = V::Tup(vec![x, acc]);
+                        acc = eval(body, &env2)?;
+                        let mut cap = ACC_CAP;
+                        if !v_small(&acc, &mut cap) {
+                            return None;
+                        }
+                    }
+                    Some(acc)
+                }
+                Tail => {
+                    let mut xs = list1(&eval(&args[0], env)?)?;
+                    if !xs.is_empty() {
+                        xs.remove(0);
+                    }
+                    Some(V::List(xs))
+                }
+                MkTup => Some(V::Tup(vec![eval(&args[0], env)?, eval(&args[1], env)?])),
+                Cons => {
+                    let x = eval(&args[0], env)?;
+                    let xs = list1(&eval(&args[1], env)?)?;
+                    if xs.len() >= LIST_CAP {
+                        return None;
+                    }
+                    let mut out = Vec::with_capacity(xs.len() + 1);
+                    out.push(x);
+                    out.extend(xs);
+                    Some(V::List(out))
+                }
+                Nil => Some(V::List(Vec::new())),
+                Lib(i) => {
+                    let vals: Vec<V> = args
+                        .iter()
+                        .map(|a| eval(a, env))
+                        .collect::<Option<_>>()?;
+                    crate::dsl::eval_lib(*i, &vals)
+                }
                 IsZero => Some(V::Bool(nat(&eval(&args[0], env)?)? == 0)),
                 Not => Some(V::Bool(!boolean(&eval(&args[0], env)?)?)),
                 Isqrt => {
@@ -1403,6 +1538,7 @@ pub struct SemOptions {
     pub max_body_size: u32,
     pub max_entries: usize,
     pub budget_secs: u64,
+    pub tier: Tier,
 }
 
 impl Default for SemOptions {
@@ -1412,6 +1548,7 @@ impl Default for SemOptions {
             max_body_size: 6,
             max_entries: 200_000,
             budget_secs: 90,
+            tier: Tier::Full,
         }
     }
 }
@@ -1433,6 +1570,10 @@ fn body_op(op: Op) -> bool {
             | Op::BfRun
             | Op::GnDft
             | Op::Perms
+            // seed-tier loops: per-probe iteration inside body candidates
+            // grinds the pre-pass
+            | Op::Iter
+            | Op::FoldB
     )
 }
 
@@ -1440,7 +1581,7 @@ fn body_op(op: Op) -> bool {
 /// examples. `inputs[j]` are test j's decoded arguments.
 pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
     let n_args = inputs.first()?.len();
-    let n_tests = inputs.len();
+    let _n_tests = inputs.len();
 
     // Restrict the op set to what the task's value shapes can possibly use:
     // arithmetic needs nats, structure ops need lists, application ops need
@@ -1488,9 +1629,16 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
         }
     }
     let noops = std::env::var("SUP_NOOPS").unwrap_or_default();
-    let ops: Vec<Op> = Op::all()
-        .iter()
-        .copied()
+    let seed = matches!(opts.tier, Tier::Seed);
+    let base: Vec<Op> = if seed {
+        let mut v = Op::seed_ops().to_vec();
+        v.extend(crate::dsl::lib_ops());
+        v
+    } else {
+        Op::all().to_vec()
+    };
+    let ops: Vec<Op> = base
+        .into_iter()
         .filter(|op| !noops.split(',').any(|n| !n.is_empty() && n == format!("{op:?}")))
         .filter(|op| {
             use Op::*;
@@ -1505,7 +1653,11 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
                 }
                 Range1 | Count => has_nat,
                 If | Eq | Not => true,
-                Fst | Snd => has_tup,
+                // Seed tier: tuples/lists get built internally (pair-state
+                // iteration), so constructors can't be shape-gated on I/O.
+                Iter | FoldB | MkTup | Cons | Nil | Tail => true,
+                Lib(_) => true,
+                Fst | Snd => has_tup || seed,
                 LineRas | Hull => has_tup,
                 MstW => has_tup && has_nat,
                 SatCnf => has_int && has_list && !has_tree,
@@ -1576,6 +1728,22 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
                 probes.push((j, V::List(rev)));
             }
         }
+        // Seed tier: FoldB/Iter bodies see pair-state params, so bodies must
+        // be distinguishable on Tup probes (and list-accumulator pairs).
+        if matches!(opts.tier, Tier::Seed) {
+            for (a, b) in [(0u64, 0u64), (1, 0), (0, 1), (2, 1)] {
+                probes.push((j, V::Tup(vec![V::Nat(a), V::Nat(b)])));
+            }
+            for v in inp {
+                if let V::List(xs) = v {
+                    if let Some(x) = xs.first() {
+                        probes.push((j, V::Tup(vec![x.clone(), V::Nat(0)])));
+                        probes.push((j, V::Tup(vec![x.clone(), V::List(Vec::new())])));
+                        probes.push((j, V::Tup(vec![x.clone(), V::List(vec![x.clone()])])));
+                    }
+                }
+            }
+        }
     }
 
     let key_hash = |outs: &[Option<V>]| -> u64 {
@@ -1604,13 +1772,31 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(opts.budget_secs);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(budget);
+    // A single size level can dwarf the whole budget (seed-tier Iter/FoldB
+    // candidates run loops per eval), so the deadline is also polled every
+    // few thousand candidates from inside the enumeration.
+    let tick = std::cell::Cell::new(0u32);
+    let expired = std::cell::Cell::new(false);
+    let check_deadline = || -> bool {
+        if expired.get() {
+            return true;
+        }
+        tick.set(tick.get().wrapping_add(1));
+        if tick.get() & 0x0FFF == 0 && std::time::Instant::now() > deadline {
+            expired.set(true);
+        }
+        expired.get()
+    };
 
     for s in 1..=opts.max_body_size {
-        if std::time::Instant::now() > deadline {
+        if expired.get() || std::time::Instant::now() > deadline {
             break;
         }
         let mut level: Vec<E> = Vec::new();
-        let mut push = |e: E, level: &mut Vec<E>, seen: &mut HashSet<u64>| {
+        let push = |e: E, level: &mut Vec<E>, seen: &mut HashSet<u64>| {
+            if check_deadline() {
+                return;
+            }
             let outs = body_eval(&e);
             if outs.iter().all(|o| o.is_none()) {
                 return;
@@ -1626,6 +1812,9 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
             push(E::Var(param), &mut level, &mut bodies_seen);
             for k in [0u64, 1, 2] {
                 push(E::KNat(k), &mut level, &mut bodies_seen);
+            }
+            if ops.contains(&Op::Nil) {
+                push(E::Prim(Op::Nil, vec![]), &mut level, &mut bodies_seen);
             }
         } else {
             for op in &ops {
@@ -1654,12 +1843,15 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
     let mut main_seen: HashSet<u64> = HashSet::new();
 
     for s in 1..=opts.max_size {
-        if std::time::Instant::now() > deadline {
+        if expired.get() || std::time::Instant::now() > deadline {
             break;
         }
         let mut level: Vec<E> = Vec::new();
         let mut found: Option<E> = None;
-        let mut push = |e: E, level: &mut Vec<E>, seen: &mut HashSet<u64>| -> Option<E> {
+        let push = |e: E, level: &mut Vec<E>, seen: &mut HashSet<u64>| -> Option<E> {
+            if check_deadline() {
+                return None;
+            }
             let outs = main_eval(&e);
             if outs == target {
                 return Some(e);
@@ -1683,8 +1875,16 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
                     return Some(e);
                 }
             }
+            if ops.contains(&Op::Nil) {
+                if let Some(e) = push(E::Prim(Op::Nil, vec![]), &mut level, &mut main_seen) {
+                    return Some(e);
+                }
+            }
         } else {
             'ops: for op in &ops {
+                if expired.get() {
+                    break;
+                }
                 let (va, la) = op.sig();
                 if la == 0 {
                     enumerate_args(&main, s - 1, va, &mut |args| {
@@ -1697,21 +1897,29 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
                         }
                     });
                 } else {
-                    // ops with one value arg + one lambda arg (Count)
-                    for s1 in 1..(s - 1) {
-                        let s2 = s - 1 - s1;
-                        if main.len() <= s1 as usize || bodies.len() <= s2 as usize {
+                    // ops with va value args + one trailing lambda body
+                    // (Count, MapB, Iter, FoldB)
+                    for bs in 1..s.saturating_sub(va as u32) {
+                        if bodies.len() <= bs as usize {
                             continue;
                         }
-                        for l in main[s1 as usize].clone() {
-                            for b in &bodies[s2 as usize] {
-                                let e =
-                                    E::Prim(*op, vec![l.clone(), E::Lam1(Box::new(b.clone()))]);
-                                if let Some(e) = push(e, &mut level, &mut main_seen) {
+                        enumerate_args(&main, s - 1 - bs, va, &mut |vargs| {
+                            if found.is_some() {
+                                return;
+                            }
+                            for b in &bodies[bs as usize] {
+                                let mut a = vargs.to_vec();
+                                a.push(E::Lam1(Box::new(b.clone())));
+                                if let Some(e) =
+                                    push(E::Prim(*op, a), &mut level, &mut main_seen)
+                                {
                                     found = Some(e);
-                                    break 'ops;
+                                    break;
                                 }
                             }
+                        });
+                        if found.is_some() {
+                            break 'ops;
                         }
                     }
                 }

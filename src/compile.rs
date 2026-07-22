@@ -227,6 +227,11 @@ pub const STDLIB: &str = "\
 @adtmrgs = @Y(λr.λd.λf.λa.λb.@scase(d, a, λi.λfs.@scase(d, b, λj.λgs.@sdup(i, λi1.λi2.@sdup(j, λj1.λj2.@ifc(@andb(@seq(i1, j1), @nonemp(fs)), @mkadt(@slen(d), i2, @szipf(r(d, f), fs, gs)), f(@mkadt(@slen(d), i2, fs), @mkadt(@slen(d), j2, gs))))))))
 @mkcctor = λd.λi.@sdup(i, λi1.λi2.@colk(@slen(@snth(d, i1)), @snil, λfs.@colk(@slen(d), @snil, λhs.@vapply(@snth(hs, i2), @smapf(λf.@vapply(f, hs), fs)))))
 @mksctor = λd.λi.@sdup(i, λi1.λi2.@colk(@slen(@snth(d, i1)), @snil, λfs.@mkadt(@slen(d), i2, fs)))
+@spair = λx.λy.λp.p(x, y)
+@sfst = λp.p(λx.λy.x)
+@ssnd = λp.p(λx.λy.y)
+@siter = @Y(λr.λn.λx.λf.n(λp.r(p, f(x), f), x))
+@sfoldb = @Y(λr.λl.λz.λf.l(λh.λt.r(t, f(@spair(h, z)), f), z))
 ";
 
 /// Algorithm-track library. Same affine discipline as STDLIB: computed
@@ -421,6 +426,13 @@ fn op_ref(op: Op) -> &'static str {
         Op::GnDft => "@gndft",
         Op::GnDftN => "@gndftn",
         Op::CtorOf => "@mkctorx",
+        Op::Iter => "@siter",
+        Op::FoldB => "@sfoldb",
+        Op::Tail => "@stail",
+        Op::MkTup => "@spair",
+        Op::Cons => "@scons",
+        Op::Nil => "@snil",
+        Op::Lib(_) => unreachable!("library ops are expanded before emit"),
     }
 }
 
@@ -434,14 +446,22 @@ fn needs_desc(op: Op) -> bool {
 }
 
 /// Emit the expression as Lamb source. `arg_name(i)` supplies the source
-/// name for task argument i (already adapted to Church encoding).
-fn emit(e: &E, n_args: usize, arg_name: &dyn Fn(u32) -> String, desc: Option<usize>) -> String {
+/// name for task argument i (already adapted to Church encoding). `depth`
+/// counts enclosing lambda binders: the param bound at depth d is `pd`
+/// (library expansion can nest lambdas, so one fixed name won't do).
+fn emit(
+    e: &E,
+    n_args: usize,
+    arg_name: &dyn Fn(u32) -> String,
+    desc: Option<usize>,
+    depth: u32,
+) -> String {
     match e {
         E::Var(i) => {
             if (*i as usize) < n_args {
                 arg_name(*i)
             } else {
-                "p".to_string() // the single lambda-body parameter
+                format!("p{}", i - n_args as u32)
             }
         }
         E::KNat(n) => {
@@ -452,15 +472,19 @@ fn emit(e: &E, n_args: usize, arg_name: &dyn Fn(u32) -> String, desc: Option<usi
             }
             s
         }
-        E::Lam1(b) => format!("λp.{}", emit(b, n_args, arg_name, desc)),
+        E::Lam1(b) => format!("λp{depth}.{}", emit(b, n_args, arg_name, desc, depth + 1)),
         E::Prim(op, args) => {
             let mut parts: Vec<String> = Vec::new();
             if needs_desc(*op) {
                 let d = desc.expect("adt op outside adt family");
                 parts.push(format!("a{d}"));
             }
-            parts.extend(args.iter().map(|a| emit(a, n_args, arg_name, desc)));
-            format!("{}({})", op_ref(*op), parts.join(", "))
+            parts.extend(args.iter().map(|a| emit(a, n_args, arg_name, desc, depth)));
+            if parts.is_empty() {
+                op_ref(*op).to_string()
+            } else {
+                format!("{}({})", op_ref(*op), parts.join(", "))
+            }
         }
     }
 }
@@ -494,8 +518,11 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
             (_, ArgKind::Atom) => a,
         }
     };
+    // Mined library ops compile by expansion: a Lib entry is by construction
+    // a composition of real ops, so the λ backend never needs new code.
+    let expanded = crate::dsl::expand(e, n_args);
     let is_adt = matches!(family, Family::CAdt | Family::SAdt);
-    let core = emit(e, n_args, &adapted, is_adt.then_some(size_idx));
+    let core = emit(&expanded, n_args, &adapted, is_adt.then_some(size_idx), 0);
     let wrapped = match (family, out) {
         (Family::Algo, _) => core,
         (Family::CTre, OutKind::Gn) => format!("@gns2c({core})"),

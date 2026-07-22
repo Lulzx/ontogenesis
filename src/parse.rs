@@ -23,8 +23,6 @@ pub struct Test {
 
 #[derive(Debug)]
 pub struct Task {
-    pub id: String,
-    pub desc: String,
     pub tests: Vec<Test>,
     pub arity: usize,
 }
@@ -187,7 +185,6 @@ pub fn parse_task(id: &str, text: &str) -> Result<Task, TaskError> {
             secs.len()
         )));
     }
-    let desc = secs[0].trim().to_string();
     let lines: Vec<&str> = secs[1]
         .trim()
         .lines()
@@ -229,12 +226,7 @@ pub fn parse_task(id: &str, text: &str) -> Result<Task, TaskError> {
     }
 
     let arity = arity.ok_or_else(|| TaskError::Parse(format!("{id}: no tests")))?;
-    Ok(Task {
-        id: id.to_string(),
-        desc,
-        tests,
-        arity,
-    })
+    Ok(Task { tests, arity })
 }
 
 /// If `e` is `λA1...λAm. @main(a1, ..., ak)`, return `(m, args)` where the
