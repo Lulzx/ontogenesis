@@ -147,3 +147,86 @@ pub fn normalize(env: &Env, t: &Rc<Term>, fuel: &mut Fuel) -> Result<Rc<Term>, A
     let v = eval(env, t, fuel)?;
     quote(&v, 0, fuel)
 }
+
+/// Stream a value's normal form into a hasher without materializing it.
+pub fn quote_hash<H: std::hash::Hasher>(
+    v: &Val,
+    depth: u32,
+    fuel: &mut Fuel,
+    h: &mut H,
+) -> Result<(), Abort> {
+    fuel.spend()?;
+    match v {
+        Val::Lam(env, body) => {
+            h.write_u8(0);
+            let fresh = thunk_of_val(Val::Neu(Head::Bound(depth), Vec::new()));
+            let mut env2 = (**env).clone();
+            env2.push(fresh);
+            let bv = eval(&Rc::new(env2), body, fuel)?;
+            quote_hash(&bv, depth + 1, fuel, h)
+        }
+        Val::Neu(head, sp) => {
+            match head {
+                Head::Ctx(i) => {
+                    h.write_u8(1);
+                    h.write_u32(*i);
+                }
+                Head::Bound(l) => {
+                    h.write_u8(2);
+                    h.write_u32(depth - 1 - l);
+                }
+            }
+            for th in sp {
+                h.write_u8(3);
+                let av = force(th, fuel)?;
+                quote_hash(&av, depth, fuel, h)?;
+            }
+            h.write_u8(4);
+            Ok(())
+        }
+    }
+}
+
+/// Structurally compare a value's normal form against a target term while
+/// quoting, without materializing the normal form.
+pub fn quote_eq(v: &Val, t: &Term, depth: u32, fuel: &mut Fuel) -> Result<bool, Abort> {
+    fuel.spend()?;
+    match (v, t) {
+        (Val::Lam(env, body), Term::Lam(tb)) => {
+            let fresh = thunk_of_val(Val::Neu(Head::Bound(depth), Vec::new()));
+            let mut env2 = (**env).clone();
+            env2.push(fresh);
+            let bv = eval(&Rc::new(env2), body, fuel)?;
+            quote_eq(&bv, tb, depth + 1, fuel)
+        }
+        (Val::Neu(head, sp), _) => {
+            // Peel the target's application spine to match ours.
+            let mut targs: Vec<&Term> = Vec::new();
+            let mut cur = t;
+            while let Term::App(f, a) = cur {
+                targs.push(a);
+                cur = f;
+            }
+            targs.reverse();
+            if targs.len() != sp.len() {
+                return Ok(false);
+            }
+            let head_ok = match (head, cur) {
+                (Head::Ctx(i), Term::Free(j)) => i == j,
+                (Head::Bound(l), Term::Var(x)) => depth - 1 - l == *x,
+                _ => false,
+            };
+            if !head_ok {
+                return Ok(false);
+            }
+            for (th, ta) in sp.iter().zip(targs) {
+                let av = force(th, fuel)?;
+                if !quote_eq(&av, ta, depth, fuel)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}

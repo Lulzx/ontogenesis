@@ -31,6 +31,7 @@ fn run() {
             "--max-depth" => opts.max_depth = args.next().unwrap().parse().unwrap(),
             "--fuel" => opts.fuel = args.next().unwrap().parse().unwrap(),
             "--timeout" => opts.time_budget_secs = args.next().unwrap().parse().unwrap(),
+            "--seed-y" => opts.seeds.push(bank::y_combinator()),
             _ if tsk_dir.is_none() => tsk_dir = Some(PathBuf::from(a)),
             other => {
                 eprintln!("unknown arg: {other}");
