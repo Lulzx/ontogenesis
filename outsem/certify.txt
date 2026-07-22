@@ -1,0 +1,23 @@
+✓ cnat_add: 2013 bits, score: 0.010
+✓ cnat_div: 2013 bits, score: 0.062
+✓ cnat_exp: 2013 bits, score: 0.008
+✓ cnat_gcd: 2013 bits, score: 0.074
+✓ cnat_log: 2013 bits, score: 0.088
+✓ cnat_mod: 2013 bits, score: 0.056
+✓ cnat_mul: 2013 bits, score: 0.006
+✓ cnat_pri: 2060 bits, score: 0.152
+✓ cnat_sqr: 1995 bits, score: 0.074
+✓ cnat_tot: 2068 bits, score: 0.105
+✓ snat_add: 1983 bits, score: 0.012
+✓ snat_div: 1983 bits, score: 0.062
+✓ snat_exp: 1983 bits, score: 0.040
+✓ snat_gcd: 1983 bits, score: 0.052
+✓ snat_log: 1983 bits, score: 0.069
+✓ snat_mod: 1983 bits, score: 0.042
+✓ snat_mul: 1983 bits, score: 0.024
+✓ snat_pri: 2020 bits, score: 0.103
+✓ snat_sqr: 1975 bits, score: 0.071
+✓ snat_tot: 2038 bits, score: 0.115
+
+20/120 passed
+score: 1.0

@@ -44,64 +44,67 @@ pub enum OutKind {
 /// The standard library. Order matters: each definition only references
 /// earlier ones (except @Y's internal self-application), so the verifier
 /// can inline top-to-bottom.
+// The referee (lam) evaluates call-by-NAME with no sharing: any state value
+// consumed twice gets re-evaluated, and chained through recursion that goes
+// exponential. So the stdlib is written affine-style — Scott data consumed
+// by single case-analysis, Y recursion, and explicit @sdup where a computed
+// value is genuinely needed twice. (Hand-rolled interaction-net dup nodes,
+// which is exactly the bookkeeping HVM automates.) Re-evaluating *data*
+// (test inputs, dup outputs) is cheap; only computed chains need dup.
 pub const STDLIB: &str = "\
-@c0 = λf.λx.x
-@c1 = λf.λx.f(x)
-@c2 = λf.λx.f(f(x))
-@cnorm = λn.λf.λx.n(f, x)
-@succ = λn.λf.λx.f(n(f, x))
-@add = λm.λn.λf.λx.m(f, n(f, x))
-@mul = λm.λn.λf.m(n(f))
-@pow = λb.λe.@cnorm(e(b))
 @true = λa.λb.a
 @false = λa.λb.b
 @not = λp.λa.λb.p(b, a)
-@and = λp.λq.p(q, @false)
 @ifc = λp.λt.λf.p(t, f)
-@pair = λa.λb.λs.s(a, b)
-@fst = λp.p(λa.λb.a)
-@snd = λp.p(λa.λb.b)
-@pred = λn.@fst(n(λp.@pair(@snd(p), @succ(@snd(p))), @pair(@c0, @c0)))
-@sub = λm.λn.@cnorm(n(@pred, m))
-@iszero = λn.n(λw.@false, @true)
-@leq = λm.λn.@iszero(@sub(m, n))
-@lt = λm.λn.@leq(@succ(m), n)
-@eq = λm.λn.@and(@leq(m, n), @leq(n, m))
-@div = λa.λb.@cnorm(@fst(a(λp.@ifc(@leq(b, @snd(p)), @pair(@succ(@fst(p)), @sub(@snd(p), b)), p), @pair(@c0, a))))
-@mod = λa.λb.@cnorm(@snd(a(λp.@ifc(@leq(b, @snd(p)), @pair(@succ(@fst(p)), @sub(@snd(p), b)), p), @pair(@c0, a))))
-@gcd = λa.λb.@cnorm(@fst(@add(a, b)(λp.@ifc(@iszero(@snd(p)), p, @pair(@snd(p), @mod(@fst(p), @snd(p)))), @pair(a, b))))
-@isqrt = λn.@cnorm(@fst(n(λp.@ifc(@leq(@mul(@snd(p), @snd(p)), n), @pair(@snd(p), @succ(@snd(p))), p), @pair(@c0, @c1))))
-@ilog = λn.λb.@cnorm(@fst(n(λp.@ifc(@leq(@snd(p), n), @pair(@succ(@fst(p)), @mul(@snd(p), b)), p), @pair(@c0, b))))
-@nil = λc.λn.n
-@cons = λh.λt.λc.λn.c(h, t(c, n))
-@range1 = λn.@snd(n(λp.@pair(@succ(@fst(p)), @cons(@succ(@fst(p)), @snd(p))), @pair(@c0, @nil)))
-@count = λl.λf.@cnorm(l(λh.λr.@ifc(f(h), @succ(r), r), @c0))
 @Y = λf.(λx.f(x(x)))(λx.f(x(x)))
 @sz = λs.λz.z
-@ssucc = λn.λs.λz.s(n)
-@c2s = λn.n(@ssucc, @sz)
-@s2c = @Y(λr.λn.n(λp.@succ(r(p)), @c0))
+@ss = λn.λs.λz.s(n)
+@c2s = λn.n(@ss, @sz)
+@csucc = λn.λf.λx.f(n(f, x))
+@c0 = λf.λx.x
+@s2c = @Y(λr.λn.n(λp.@csucc(r(p)), @c0))
+@sdup = @Y(λr.λn.λk.n(λp.r(p, λx.λy.k(@ss(x), @ss(y))), k(@sz, @sz)))
+@spred = λn.n(λp.p, @sz)
+@sadd = @Y(λr.λa.λb.a(λp.@ss(r(p, b)), b))
+@ssub = @Y(λr.λa.λb.b(λp.r(@spred(a), p), a))
+@smul = @Y(λr.λa.λb.a(λp.@sadd(b, r(p, b)), @sz))
+@siszero = λn.n(λp.@false, @true)
+@sleq = @Y(λr.λa.λb.a(λpa.b(λpb.r(pa, pb), @false), @true))
+@slt = λa.λb.@sleq(@ss(a), b)
+@seq = @Y(λr.λa.λb.a(λpa.b(λpb.r(pa, pb), @false), b(λpb.@false, @true)))
+@sdiv = @Y(λr.λa.λb.@sdup(b, λb1.λbb.@sdup(bb, λb2.λb3.@sdup(a, λa1.λa2.@ifc(@sleq(b1, a1), @ss(r(@ssub(a2, b2), b3)), @sz)))))
+@smod = @Y(λr.λa.λb.@sdup(b, λb1.λbb.@sdup(bb, λb2.λb3.@sdup(a, λa1.λaa.@sdup(aa, λa2.λa3.@ifc(@sleq(b1, a1), r(@ssub(a2, b2), b3), a3))))))
+@sgcd = @Y(λr.λa.λb.@sdup(b, λb1.λbb.@sdup(bb, λb2.λb3.b1(λp.r(b2, @smod(a, b3)), a))))
+@spow = @Y(λr.λb.λe.e(λp.@smul(b, r(b, p)), @ss(@sz)))
+@ssqgo = @Y(λr.λk.λn.@sdup(k, λka.λkb.@sdup(ka, λk1.λk2.@ifc(@sleq(@smul(@ss(k1), @ss(k2)), n), r(@ss(kb), n), kb))))
+@ssqrt = λn.@ssqgo(@sz, n)
+@sloggo = @Y(λr.λl.λp.λn.λb.@sdup(p, λp1.λp2.@ifc(@sleq(p1, n), r(@ss(l), @smul(p2, b), n, b), l)))
+@silog = λn.λb.@sloggo(@sz, b, n, b)
+@snil = λc.λn.n
+@scons = λh.λt.λc.λn.c(h, t)
+@srange1 = @Y(λr.λn.n(λp.@sdup(p, λp1.λp2.@scons(@ss(p1), r(p2))), @snil))
+@scount = @Y(λr.λl.λf.l(λh.λt.@ifc(f(h), @ss(r(t, f)), r(t, f)), @sz))
 ";
 
 fn op_ref(op: Op) -> &'static str {
     match op {
-        Op::Add => "@add",
-        Op::Sub => "@sub",
-        Op::Mul => "@mul",
-        Op::Div => "@div",
-        Op::Mod => "@mod",
-        Op::Gcd => "@gcd",
-        Op::Pow => "@pow",
-        Op::Isqrt => "@isqrt",
-        Op::IlogB => "@ilog",
-        Op::Eq => "@eq",
-        Op::Lt => "@lt",
-        Op::Leq => "@leq",
-        Op::IsZero => "@iszero",
+        Op::Add => "@sadd",
+        Op::Sub => "@ssub",
+        Op::Mul => "@smul",
+        Op::Div => "@sdiv",
+        Op::Mod => "@smod",
+        Op::Gcd => "@sgcd",
+        Op::Pow => "@spow",
+        Op::Isqrt => "@ssqrt",
+        Op::IlogB => "@silog",
+        Op::Eq => "@seq",
+        Op::Lt => "@slt",
+        Op::Leq => "@sleq",
+        Op::IsZero => "@siszero",
         Op::Not => "@not",
         Op::If => "@ifc",
-        Op::Range1 => "@range1",
-        Op::Count => "@count",
+        Op::Range1 => "@srange1",
+        Op::Count => "@scount",
     }
 }
 
@@ -116,16 +119,13 @@ fn emit(e: &E, n_args: usize, arg_name: &dyn Fn(u32) -> String) -> String {
                 "p".to_string() // the single lambda-body parameter
             }
         }
-        E::KNat(0) => "@c0".to_string(),
-        E::KNat(1) => "@c1".to_string(),
-        E::KNat(2) => "@c2".to_string(),
         E::KNat(n) => {
-            // λf.λx.f(...f(x))
-            let mut body = "x".to_string();
+            // Scott literal: @ss(...@ss(@sz))
+            let mut s = "@sz".to_string();
             for _ in 0..*n {
-                body = format!("f({body})");
+                s = format!("@ss({s})");
             }
-            format!("(λf.λx.{body})")
+            s
         }
         E::Lam1(b) => format!("λp.{}", emit(b, n_args, arg_name)),
         E::Prim(op, args) => {
@@ -137,18 +137,18 @@ fn emit(e: &E, n_args: usize, arg_name: &dyn Fn(u32) -> String) -> String {
 
 /// Build the full .lam source for a solved task.
 pub fn program(family: Family, out: OutKind, e: &E, n_args: usize) -> String {
+    // Internal representation is Scott; adapt at the boundary.
     let arg = |i: u32| -> String { format!("a{i}") };
     let adapted: Box<dyn Fn(u32) -> String> = match family {
-        Family::CNat => Box::new(move |i| arg(i)),
-        Family::SNat => Box::new(move |i| format!("@s2c({})", arg(i))),
+        Family::CNat => Box::new(move |i| format!("@c2s({})", arg(i))),
+        Family::SNat => Box::new(move |i| arg(i)),
     };
     let core = emit(e, n_args, adapted.as_ref());
     let wrapped = match (family, out) {
-        (Family::CNat, OutKind::Nat) => format!("@cnorm({core})"),
-        (Family::CNat, OutKind::Bool) => core,
-        (Family::SNat, OutKind::Nat) => format!("@c2s({core})"),
-        // Scott tasks state "Church booleans" for predicates too.
-        (Family::SNat, OutKind::Bool) => core,
+        (Family::CNat, OutKind::Nat) => format!("@s2c({core})"),
+        (Family::SNat, OutKind::Nat) => core,
+        // Both families state Church booleans for predicates.
+        (_, OutKind::Bool) => core,
     };
     let mut lams = String::new();
     for i in 0..n_args {
