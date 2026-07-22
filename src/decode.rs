@@ -29,6 +29,10 @@ pub enum V {
     Ctr(u32, Vec<V>),
     /// Signed integer (balanced-ternary tasks, signed literals).
     Int(i64),
+    /// The i-th constructor *function* of an ADT (ctr tasks).
+    CtorFn(u32),
+    /// The pairing combinator λa.λb.λp.p(a,b) (mrg tasks' F).
+    PairFn,
     /// Fixed-width tuple (Scott pair/triple λp.p(x, y[, z])) — distinct from
     /// List so the compiler can emit the right encoding.
     Tup(Vec<V>),
@@ -622,6 +626,146 @@ pub fn church_gn(t: &Rc<Term>) -> Option<V> {
         }
     }
     plain(t)
+}
+
+
+/// The pairing combinator λa.λb.λp.p(a, b).
+pub fn pair_fn(t: &Term) -> bool {
+    // Lam(Lam(Lam(App(App(Var0, Var2), Var1))))
+    let Term::Lam(b1) = t else { return false };
+    let Term::Lam(b2) = b1.as_ref() else {
+        return false;
+    };
+    let Term::Lam(b3) = b2.as_ref() else {
+        return false;
+    };
+    let Term::App(f, a1) = b3.as_ref() else {
+        return false;
+    };
+    let Term::App(p, a2) = f.as_ref() else {
+        return false;
+    };
+    matches!(p.as_ref(), Term::Var(0))
+        && matches!(a2.as_ref(), Term::Var(2))
+        && matches!(a1.as_ref(), Term::Var(1))
+}
+
+/// Build the i-th constructor function's normal form for a shape, in the
+/// family's encoding, and compare against `t`. λf1..fk.λc0..cN-1.body where
+/// body = c_i(fields), fields = f-vars (Scott) or f-var folds (Church).
+pub fn ctor_fn(shape: &[usize], t: &Rc<Term>, church: bool) -> Option<u32> {
+    let n = shape.len() as u32;
+    for (i, &k) in shape.iter().enumerate() {
+        let k = k as u32;
+        // head variable c_i at de Bruijn n-1-i from innermost ctor binder
+        let mut body: Rc<Term> = var(n - 1 - i as u32);
+        for j in 0..k {
+            // field j: outer param f_{j+1} sits above the n ctor binders
+            let fv = var(n + (k - 1 - j));
+            let field = if church {
+                // church fields are folds: f(c0, .., cN-1)
+                let mut e = fv;
+                for c in (0..n).rev() {
+                    e = app(e, var(c));
+                }
+                e
+            } else {
+                fv
+            };
+            body = app(body, field);
+        }
+        let mut full = body;
+        for _ in 0..n {
+            full = lam(full);
+        }
+        for _ in 0..k {
+            full = lam(full);
+        }
+        if full == *t {
+            return Some(i as u32);
+        }
+    }
+    None
+}
+
+/// Scott ADT value that may contain 2-tuples (merge results) at any value
+/// position: value ::= Ctr(tag, [value..]) | Tup([value, value]).
+pub fn scott_adt_p(shape: &[usize], t: &Rc<Term>) -> Option<V> {
+    if let Some(items) = ntuple_raw(t) {
+        if items.len() == 2 {
+            return Some(V::Tup(vec![
+                scott_adt_p(shape, &items[0])?,
+                scott_adt_p(shape, &items[1])?,
+            ]));
+        }
+    }
+    let (tag, fields) = scott_ctr(t, shape)?;
+    let fs: Option<Vec<V>> = fields.iter().map(|f| scott_adt_p(shape, f)).collect();
+    Some(V::Ctr(tag as u32, fs?))
+}
+
+/// Church ADT value with 2-tuples allowed at value positions. Pairs are
+/// opaque (not folded), so they appear as raw λp.p(A, B) subterms whose
+/// elements are full encodings.
+pub fn church_adt_p(shape: &[usize], t: &Rc<Term>) -> Option<V> {
+    if let Some(items) = ntuple_raw(t) {
+        if items.len() == 2 {
+            return Some(V::Tup(vec![
+                church_adt_p(shape, &items[0])?,
+                church_adt_p(shape, &items[1])?,
+            ]));
+        }
+    }
+    let n = shape.len();
+    let mut cur = t.clone();
+    for _ in 0..n {
+        let Term::Lam(b) = cur.as_ref() else {
+            return None;
+        };
+        cur = b.clone();
+    }
+    church_adt_p_body(shape, &cur, n as u32)
+}
+
+fn church_adt_p_body(shape: &[usize], t: &Rc<Term>, n: u32) -> Option<V> {
+    // A field that doesn't use the shared fold binders is a foreign closed
+    // subterm: either a pair, or a full re-bound value (which happens when a
+    // constructor's field contains pairs and so can't be a shared fold).
+    if let Some(lifted) = unshift(t, n) {
+        if let Some(items) = ntuple_raw(&lifted) {
+            if items.len() == 2 {
+                return Some(V::Tup(vec![
+                    church_adt_p(shape, &items[0])?,
+                    church_adt_p(shape, &items[1])?,
+                ]));
+            }
+        }
+        if let Some(v) = church_adt_p(shape, &lifted) {
+            return Some(v);
+        }
+    }
+    let mut spine = Vec::new();
+    let mut cur = t.clone();
+    while let Term::App(f, a) = cur.clone().as_ref() {
+        spine.push(a.clone());
+        cur = f.clone();
+    }
+    spine.reverse();
+    let Term::Var(i) = cur.as_ref() else {
+        return None;
+    };
+    if *i >= n {
+        return None;
+    }
+    let tag = (n - 1 - i) as usize;
+    if spine.len() != shape.get(tag).copied()? {
+        return None;
+    }
+    let mut fields = Vec::new();
+    for a in &spine {
+        fields.push(church_adt_p_body(shape, a, n)?);
+    }
+    Some(V::Ctr(tag as u32, fields))
 }
 
 /// Strict Church bool: λa.λb.a / λa.λb.b only.

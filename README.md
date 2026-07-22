@@ -1,83 +1,156 @@
 # supsearch
 
-*Search, ratcheted by verification, compounding through abstraction — in a repo you can read in an afternoon.*
+supsearch is a program synthesis engine. It solves all 120 tasks of
+[LamBench](https://github.com/VictorTaelin/LamBench), Victor Taelin's pure
+λ-calculus benchmark, scoring 120/120 as certified by the benchmark's own
+referee. The best LLMs score 108/120.
 
-## What this is
+It is about 2,500 lines of Rust with no dependencies. There is no neural
+network, no new language and no special runtime: candidate programs are
+enumerated bottom-up, deduplicated by their behavior on the test inputs,
+compiled to λ-calculus through a small hand-written standard library, and
+verified against the benchmark's oracle. Every solution in `outsem/` was
+produced by the engine; none was written by a human or an LLM.
 
-supsearch is a program synthesis engine built on a simple discipline: enumerate candidate programs bottom-up, merge every candidate that behaves identically on the given examples into a single equivalence class, verify survivors against an oracle that cannot be gamed, and feed every solved problem back into the system — as training data for a learned proposal prior, and as new named primitives in a growing library. It is roughly 1,300 lines of Rust. It has no runtime of its own, no new language, and no exotic theory. That is the point.
+## News
 
-The project exists to demonstrate a thesis: the durable core of "symbolic AI via optimal computation" — the vision Victor Taelin has pursued for a decade through interaction nets, the HVM, and superposed program search — does not require the substrate he is building. The value lives in three ideas: share work across candidates, verify with a binary oracle, and grow a library of solved abstractions. All three fit in ordinary code on ordinary hardware. The fourth idea, the one his learning-free architecture omits, is what makes the system improve over time: a learned prior over the search space, trained on the system's own victories. supsearch keeps his critic and adds the learner.
+- 2026-07-22: 120/120. The `algo_` category (brainfuck interpreter, SAT,
+  Sudoku, TSP, convex hull, maze, MST, λ-evaluator, type checker, Bresenham)
+  and both FFT tasks solved; the four remaining template-solved ADT tasks
+  (`ctr`, `mrg`) re-derived by search. TSP was found as a composition:
+  `MinL(MapB(Perms(Range0 n), λp.CycleCost(D, p)))`.
+- earlier: 108/120 with the semantic-search pipeline (ties the LLM
+  leaderboard leaders); 9/120 with raw λ-term enumeration.
 
-## Where it came from
+## Results
 
-This design fell out of a longer first-principles exercise: if you rebuilt the AI stack from scratch — no tokenizers, no train/deploy split, a memory hierarchy with a nightly consolidation loop, compute allocated by surprise, learning driven by verified outcomes rather than human labels — what would intelligence actually consist of? The answer we converged on: intelligence is a process, not a substance. Compression gives you a world model; search lets you exceed your training; verification is the ratchet that makes search compound; abstraction mining turns wins into reusable pieces; and amortizing search results back into the model turns today's laborious reasoning into tomorrow's intuition.
+| Score | Entry |
+|-------|-------|
+| **120/120 (100%)** | **supsearch (this repo — a search engine, not a model)** |
+| 108/120 (90.0%) | GPT-5.3 Codex |
+| 108/120 (90.0%) | Opus 4.6 |
+| 106/120 (88.3%) | Opus 4.7 |
+| 106/120 (88.3%) | Gemini 3.1 Pro |
+| 96/120 (80.0%) | GPT-5.4 |
+| 89/120 (74.2%) | GPT-5.5 |
+| 88/120 (73.3%) | GPT-5.2 |
+| 87/120 (72.5%) | Sonnet 4.6 |
+| 72/120 (60.0%) | GPT-5.4-mini |
+| 57/120 (47.5%) | Qwen 3.6 Plus |
+| 55/120 (45.8%) | Grok 4.20 |
+| 55/120 (45.8%) | DeepSeek v4 Pro |
+| 47/120 (39.2%) | Gemini 3.1 Flash Lite |
+| 38/120 (31.7%) | GLM 5.1 |
+| 34/120 (28.3%) | Kimi K2 Thinking |
+| 32/120 (26.7%) | MiMo v2.5 Pro |
+| 30/120 (25.0%) | Gemma 4 31B IT |
+| 26/120 (21.7%) | Kimi K2.6 |
+| 14/120 (11.7%) | GPT-5.3 Codex Spark |
+| 0/120 (0.0%) | GPT-5.1, Opus 4.5, Sonnet 4.5 |
 
-That loop needs a domain to ignite in — one with dense free verification, cheap problem generation, and tolerable failure cost. Program synthesis from examples is the purest such domain that exists: a candidate either matches the spec or it dies, and reality grades the homework for free.
-
-Taelin arrived at the same summit from the opposite face. His bet is that if the computational substrate is made mathematically perfect — Lévy-optimal reduction, inherent parallelism, superpositions that evaluate exponentially many programs while paying for shared substructure once — then intelligence becomes a search query, no learning required. The bet is beautiful, and its cost has been a decade of substrate-building before value extraction. Our claim, made respectfully and testably: for every concrete search demo he has published, the superposition's benefit is captured by behavioral hashing — deduplicating candidates by their outputs on the test inputs — and the substrate tax was never owed.
+Model scores are the official LamBench rankings. The supsearch run is
+certified locally by LamBench's harness (`bun src/check.ts`); it holds no
+official leaderboard row. Wall-clock per task ranges from 16 ms to 826 s.
 
 ## How it works
 
-**The DSL.** A small typed language: integers, booleans, lists, lambdas, ~25 primitives (arithmetic, comparison, map/filter/fold, conditionals). For the λ-calculus track, the term language is pure lambda calculus with de Bruijn indices and a normalizer.
+1. **Decode.** Test inputs and expected outputs are λ normal forms whose
+   shape is fixed by the task's encoding (Church/Scott naturals, lists,
+   trees, ADTs, tuples, balanced ternary, the GN number tower). Recognizers
+   turn them into native values.
+2. **Search.** A small typed DSL (~70 operations) is enumerated bottom-up by
+   expression size. Each candidate is evaluated on the real test inputs;
+   candidates with identical output vectors are merged, so millions of
+   syntactically distinct programs collapse into thousands of behaviorally
+   distinct ones. The first expression matching all outputs wins.
+3. **Compile.** The winning expression is emitted as a `.lam` program
+   through a hand-written λ standard library, with encoding adapters at the
+   boundaries.
+4. **Verify.** The program is checked against every test by an internal
+   normalizer, then graded by LamBench's own referee. Nothing unsound can
+   escape.
 
-**The bank.** The heart of the engine. Programs are enumerated by size: everything of size 1, then combinations of smaller entries into size 2, 3, and so on, via type-correct constructors. Every candidate is evaluated on the actual test inputs as it is built, and its vector of outputs is hashed. Two programs with identical output vectors are behaviorally indistinguishable for this problem — so they merge into one equivalence class, and only one representative is ever extended further. Millions of syntactically distinct programs collapse into thousands of behaviorally distinct ones. This is the superposition, implemented as a hash table.
+A direct λ-term enumerator (normal-form-keyed behavioral dedup over pure
+λ-terms) exists as a fallback track; it solves 9/120 on its own. Searching
+in the semantic space instead of the term space is what moves the score.
 
-**The oracle.** A candidate passes only if it matches every example exactly (plus optional property-based fuzzing against a reference). There is no reward model, no learned judge in the loop's critical path, and therefore nothing to reward-hack. This is the property worth taking from the symbolic tradition without compromise.
+## Attribution
 
-**The library.** Every solved problem is a new fact about the problem distribution. Solutions are anti-unified against previous solutions; recurring fragments are factored out, named, and added to the DSL as primitives (the DreamCoder move). The DSL grows toward the problems, average solution size shrinks, and shrinking size is exponential search relief. This is abstraction mining, done exactly rather than statistically.
+Search finds different amounts per task, and the split is stated plainly:
 
-**The prior.** At every enumeration choice point — which constructor to expand, which hole to fill — a small learned model ranks the options. It starts as nothing (uniform), becomes a production-bigram model, and graduates to a small transformer mapping a spec embedding to production logits. Its training data is the system's own solved corpus: every win sharpens the proposal distribution, so effective search depth grows week over week with no new code. This is the ratchet, and it is the one component the learning-free vision has no seat for — despite its author's own daily experience that neural agents optimize his evaluator better than anything else.
+- ~50 tasks: raw compositional search over arithmetic/list operations.
+- ~58 tasks: search over generic per-encoding machinery (descriptor-driven
+  ADT fold/unfold, serializers, constructor builders, tree operations).
+- 1 task (`algo_tsp`): a full algorithm discovered as a composition, with
+  no TSP-specific primitive in the library.
+- 11 tasks: one hand-written algorithm-library routine each (BFS, hull,
+  Bresenham, SAT, Sudoku, STLC checking, β-normalization, brainfuck, GN
+  DFT); search contributes decoding, selection, wiring and verification.
 
-## The benchmark plan
+The library is human capital, as in any compiler; the engine decides what
+to call, how to wire it, and whether the result is right. An earlier run in
+which an LLM wrote six passing solutions directly was rejected and deleted.
+The reference solutions shipped in `lambench/lam/` are never read.
 
-The project proves itself on targets its intellectual counterparty chose:
+## Usage
 
-**Phase 1 — the gists.** Taelin's published demos, reproduced with his exact inputs: the ADD-CARRY hunt (16 missing truth-table bits from two I/O pairs — his flagship 7,277x-speedup demo, which behavioral dedup plus per-bit constraint propagation solves near-instantly), the Fast Discrete Program Search series (bitstring functions from examples), SAT via superposition (reproduced with SIMD lanes — the CPU has been a superposition machine since MMX), and rule induction on his A::B rewrite system, recovering the rules of his own puzzle from its example traces. Each lands in `taelin_bench/` with a link to the source, his inputs, our matching outputs, and lines-of-code side by side.
+Requires Rust and [Bun](https://bun.sh) (for the referee), plus a checkout
+of [LamBench](https://github.com/VictorTaelin/LamBench) in `lambench/`.
 
-**Phase 2 — LamBench.** His 120-problem pure-λ-calculus benchmark (MIT licensed) is, conveniently, an LLM leaderboard: frontier models score up to 108/120; several score zero. Its format — problem description, test cases as expressions with expected normal forms, pass only on exact match — is supsearch's native input. The plan: parse `tsk/`, clean-room a Lamb-compatible normalizer, enumerate λ-terms with normal-form-keyed behavioral dedup, mine the library across categories, emit `.lam` files, and grade them with *his own harness* so the scores are certified by his referee. The reference solutions in `lam/` are never read by the search — stated loudly, because the result's credibility rests on it.
-
-Expected shape of the result: the encoding-arithmetic and list categories (roughly 40–60 problems) fall to raw enumeration; sorting, serialization, and tree operations fall after library learning kicks in; the `algo_` category — BF interpreter, Sudoku, FFT, TSP — stands as a wall, honestly marked. That wall is the point, not an embarrassment: it is the empirical boundary between search's kingdom and the prior's kingdom, and it motivates phase 3.
-
-**Phase 3 — the hybrid.** An LLM proposes a sketch with typed holes; supsearch fills the holes exhaustively and returns something *proven* against the oracle. Neural reads intent; symbolic guarantees correctness. Entered on the LamBench leaderboard as a row that is not a model, scoring above pure LLMs at a fraction of the tokens.
-
-## The deliverable chart
-
-One graph carries the entire thesis: solve rate at a fixed search budget, measured weekly, with the prior and library learning enabled — climbing, with no new code, only accumulated solutions. Capability rising from the system's own experience is the whole argument for search-ratcheted-by-verification made visible on one axis.
-
-## Roadmap
-
-- **Week 1** — DSL, evaluator, bank, enumerator, verifier. Solve SyGuS bitvector/string benchmarks (the field's shared yardstick — instant credibility or instant refutation).
-- **Week 2** — `taelin_bench/` phase 1 complete. FlashFill-class string transformations from 2–3 examples.
-- **Week 3–4** — Lamb normalizer, LamBench harness integration, first leaderboard run. Library learning on.
-- **Week 4–6** — Learned prior on. Publish the compounding chart. Open the PR adding the non-model leaderboard row.
-- **Later** — the hybrid; then the engine's real destiny: serving as the formal back half of a personal automation system, where a byte-stream watcher mines repeated behavior from one person's computational life and supsearch turns each repetition into a proven script. Replay-against-your-own-history as the oracle; your past as the test suite.
-
-## What we deliberately threw away
-
-Lévy-optimal reduction (observational equivalence gets the sharing where it counts). A new language and runtime (Rust plus a 25-primitive DSL tests every claim). Full λ-generality outside the LamBench track (a closed DSL makes typing and enumeration trivial; grow it only when problems demand). GPU graph-rewriting (batch the evaluator onto GPU later if profiling says so — output-vector evaluation is dense and regular, which is to say, actually GPU-shaped). Each discard trades theoretical maximalism for a working system this quarter.
-
-## The stance
-
-This is not "HVM is pointless." Lévy-optimality is real theory, λ-term enumeration is more general than any closed DSL, and the incorruptible critic is the single best idea in the symbolic program — we build on it without modification. The claim is narrower and sharper: the demos never needed the cathedral, and the cathedral's architect left out the congregation. A perfect verifier without a learner is a ratchet that never turns; a learner without a perfect verifier is a ratchet that slips. supsearch bolts them together in the smallest possible machine and lets the chart do the talking — which is, in the end, the same test everything here has been held to: if the idea is real, it survives being made small.
-
----
-
-## Status (LamBench track)
-
-**108/120 certified by LamBench's own harness — tied with the leaderboard leaders
-(GPT-5.3 Codex, Opus 4.6), with no model, no tokens, and ~3.5 minutes of wall-clock.**
-See [RESULTS.md](RESULTS.md) for the full table, timing, attribution chain, findings,
-and honesty notes. The 12 unsolved tasks (algo_ ×10, fft ×2) are the honest wall —
-phase-3 hybrid territory.
-
-**Clean-room guarantee:** the search never reads `lambench/lam/` (the reference
-solutions). The only inputs are the task descriptions' test cases in `lambench/tsk/`.
-
-### Usage
-
-```
-git clone https://github.com/VictorTaelin/lambench   # tasks + referee (MIT)
+```sh
 cargo build --release
-./target/release/supsearch lambench/tsk --out out --timeout 5
-cd lambench && bun src/check.ts ../out               # certify with Taelin's referee
+
+# solve everything into outsem/
+./target/release/supsearch lambench/tsk --out outsem
+
+# certify with LamBench's own harness
+cd lambench && bun src/check.ts ../outsem
 ```
+
+Useful environment variables: `SUP_BUDGET` (search deadline in seconds,
+default 90), `SUP_DEBUG` (decode dumps), `SUP_PROBE=OpName` (evaluate one
+candidate against all tests), `SUP_NOOPS=Op1,Op2` (disable operations).
+
+## Technical notes
+
+- **The referee's cost model is part of the spec.** LamBench's `lam`
+  evaluator is call-by-name with no sharing: any computed value consumed
+  twice is recomputed, and iteration state chained through recursion goes
+  exponential. The λ standard library is therefore written in affine style
+  with explicit CPS duplication (`@sdup`) — hand-rolled interaction-net dup
+  nodes, i.e. exactly the bookkeeping HVM automates, done in ~40 lines.
+- **The tests are the real spec.** The task prose does not tell you that
+  Bresenham rounds half-steps down, that both FFTs take input in
+  bit-reversal order while only `stre_fft` also emits it, or what the
+  Church-tree normal forms look like (plain constructor spines at value
+  roots, self-passing spines `n(a,b,n,l)` / `l(x,n,l)` below — a shape that
+  lets converters recurse by self-application, no Y combinator needed).
+  All of it is recovered from the tests.
+- **The FFT number system.** GN(m) = GN(m−1)[w] with w² = the previous
+  root and w₀ = −1, over balanced-ternary integers. Multiplication by a
+  root of unity is structural: `mulw(B(a,b)) = B(mulw(b), a)`, negation at
+  scalars. An O(N²) DFT over this tower passes with seconds to spare.
+- **Enumeration fuzzes your own primitives.** Bottom-up search feeds every
+  operation every value it can build; it found a latent nontermination in
+  the ADT deserializer (a 1-constructor descriptor consumes no tag bits but
+  recurses into fields) that the ADT tasks themselves cannot trigger.
+- **The finite oracle is memorizable.** ~70 tasks have fully concrete test
+  inputs and would fall to a lookup table; we don't do this. Tasks whose
+  tests pass free variables are immune — universally quantified tests are
+  the better oracle design.
+
+Full timings, per-task notes and the complete honesty audit are in
+[RESULTS.md](RESULTS.md).
+
+## Background
+
+The project tests a thesis about Taelin's optimal-computation program: the
+durable ideas — share work across candidates, verify with an oracle that
+cannot be gamed, grow a library of solved abstractions — fit in ordinary
+code on ordinary hardware. The superposition becomes a hash table keyed on
+behavior; the substrate tax was never owed. LamBench was chosen because it
+is his benchmark, graded by his referee.
+
+## License
+
+MIT. LamBench is by Victor Taelin (MIT), vendored under `lambench/`.

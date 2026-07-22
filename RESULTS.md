@@ -60,9 +60,13 @@ Attribution chain from the frozen baseline (git tag `baseline-raw-search-50`):
   mining sped re-solves ~50×); the ADT/tree generic machinery was written by hand, as
   any compiler backend is. The synthesis contribution is *which composition* of ops
   matches the examples — decided by search alone.
-- **Two tasks per ADT family use verified templates** (`ctr`: outputs are functions, not
-  data; `mrg`: F arrives concrete with pre-reduced expectations). The template is a fixed
-  generic program accepted only after passing every test.
+- **(Retired 2026-07-22.)** Two tasks per ADT family originally used verified templates
+  (`ctr`: outputs are functions, not data; `mrg`: F arrives concrete with pre-reduced
+  expectations). Both are now search-derived: constructor-function outputs decode to a
+  `CtorFn` value found via a `CtorOf` op, and merge outputs decode through pair-aware
+  ADT recognizers with the pairing combinator recognized as a first-class value, so the
+  standard `AdtMrg` op composition is found by enumeration. The template fallback code
+  was deleted.
 - **Clean room**: the search never reads `lambench/lam/` (reference solutions). Inputs
   are task descriptions and test cases only. Reference solutions are used solely by
   LamBench's own scorer to compute its size-score denominator.

@@ -400,7 +400,7 @@ fn op_ref(op: Op) -> &'static str {
         Op::AdtEq => "@adteq",
         Op::AdtSer => "@adtser",
         Op::AdtDes => "@adtdesv",
-        Op::AdtMrg => "@adtmrg",
+        Op::AdtMrg => "@adtmrgx",
         Op::Fst => "@sfst",
         Op::Snd => "@ssnd",
         Op::Range0 => "@srange0",
@@ -420,6 +420,7 @@ fn op_ref(op: Op) -> &'static str {
         Op::BfRun => "@sbfrun",
         Op::GnDft => "@gndft",
         Op::GnDftN => "@gndftn",
+        Op::CtorOf => "@mkctorx",
     }
 }
 
@@ -523,6 +524,17 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
     let mut lib = String::from(STDLIB);
     if matches!(family, Family::Algo) {
         lib.push_str(ALGO_LIB);
+    }
+    // Family-encoded aliases for ops whose λ implementation differs per
+    // encoding (the DSL op is encoding-agnostic; the alias resolves it).
+    match family {
+        Family::CAdt => {
+            lib.push_str("@adtmrgx = @adtmrgc\n@mkctorx = @mkcctor\n");
+        }
+        Family::SAdt | Family::Algo => {
+            lib.push_str("@adtmrgx = @adtmrgs\n@mkctorx = @mksctor\n");
+        }
+        _ => {}
     }
     if kinds.contains(&ArgKind::Gn) || matches!(out, OutKind::Gn) {
         lib.push_str(GN_LIB);
@@ -923,6 +935,11 @@ pub fn decode_task_adt(
             cols.push(vals);
             continue;
         }
+        if (0..n_tests).all(|j| crate::decode::pair_fn(&arg_nfs[j][p])) {
+            kinds.push(ArgKind::Atom);
+            cols.push(vec![V::PairFn; n_tests]);
+            continue;
+        }
         let atom: Option<Vec<V>> = (0..n_tests)
             .map(|j| crate::decode::decode_value(&arg_nfs[j][p]))
             .collect();
@@ -930,6 +947,9 @@ pub fn decode_task_adt(
             kinds.push(ArgKind::Atom);
             cols.push(vals);
             continue;
+        }
+        if std::env::var("SUP_DEBUG").is_ok() {
+            eprintln!("    adt arg column {p} undecodable");
         }
         return Vec::new();
     }
@@ -955,6 +975,9 @@ pub fn decode_task_adt(
 
     let mut cands: Vec<(OutKind, Vec<V>)> = Vec::new();
     let mut push = |k: OutKind, vals: Option<Vec<V>>| {
+        if std::env::var("SUP_DEBUG").is_ok() {
+            eprintln!("    out candidate {k:?}: {}", vals.is_some());
+        }
         if let Some(v) = vals {
             cands.push((k, v));
         }
@@ -979,6 +1002,21 @@ pub fn decode_task_adt(
     push(OutKind::Bits, all(&|j| dec_bits(&want_nfs[j])));
     push(OutKind::ListAdtC, all(&|j| list_of(j, true)));
     push(OutKind::ListAdtS, all(&|j| list_of(j, false)));
+    let church = matches!(family, Family::CAdt);
+    push(OutKind::Raw, all(&|j| {
+        crate::decode::ctor_fn(&shapes[j], &want_nfs[j], church).map(V::CtorFn)
+    }));
+    push(OutKind::Raw, all(&|j| {
+        let r = if church {
+            crate::decode::church_adt_p(&shapes[j], &want_nfs[j])
+        } else {
+            crate::decode::scott_adt_p(&shapes[j], &want_nfs[j])
+        };
+        if std::env::var("SUP_DEBUG").is_ok() && r.is_none() {
+            eprintln!("    adt_p failed on test {j}");
+        }
+        r
+    }));
 
     cands
         .into_iter()

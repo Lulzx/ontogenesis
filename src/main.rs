@@ -217,8 +217,14 @@ fn try_semantic(id: &str, task: &parse::Task) -> Option<String> {
 /// plus template fallback for the constructor-builder tasks whose outputs
 /// are functions rather than data.
 fn try_semantic_adt(id: &str, family: compile::Family, task: &parse::Task) -> Option<String> {
-    for (inputs, outputs, kinds, out_kind, desc_pos) in
-        compile::decode_task_adt(family, task)
+    let cands = compile::decode_task_adt(family, task);
+    if std::env::var("SUP_DEBUG").is_ok() {
+        eprintln!("  {id}: {} adt candidates", cands.len());
+        for (inputs, outputs, kinds, out_kind, _) in &cands {
+            eprintln!("    kinds {kinds:?} out {out_kind:?} in0 {:?} out0 {:?}", inputs[0], outputs[0]);
+        }
+    }
+    for (inputs, outputs, kinds, out_kind, desc_pos) in cands
     {
         let Some(e) = sem::solve(&inputs, &outputs, &sem::SemOptions::default()) else {
             continue;
@@ -229,42 +235,6 @@ fn try_semantic_adt(id: &str, family: compile::Family, task: &parse::Task) -> Op
         };
         if compile::verify(&main, task, 2_000_000) {
             return Some(src);
-        }
-    }
-    // Merge templates: F arrives as a concrete function and the expected
-    // outputs show it already reduced, so the symbolic DSL can't model it —
-    // but the generic implementation is fully determined by the family.
-    if task.arity == 4 {
-        let body = match family {
-            compile::Family::CAdt => {
-                "@adtmrgc(a0, a1, @c2sadt(a0, a2), @c2sadt(a0, a3))"
-            }
-            _ => "@adtmrgs(a0, a1, a2, a3)",
-        };
-        let src = format!(
-            "{}@main = λa0.λa1.λa2.λa3.{body}\n",
-            compile::STDLIB
-        );
-        if let Ok(main) = compile::inline_main(&src) {
-            if compile::verify(&main, task, 2_000_000) {
-                return Some(src);
-            }
-        }
-    }
-    // Constructor-builder templates: the expected output is the constructor
-    // function itself, buildable generically from (descriptor, index).
-    if task.arity == 2 {
-        let ctor = match family {
-            compile::Family::CAdt => "@mkcctor",
-            _ => "@mksctor",
-        };
-        for args in ["a0, a1", "a1, a0"] {
-            let src = format!("{}@main = λa0.λa1.{ctor}({args})\n", compile::STDLIB);
-            if let Ok(main) = compile::inline_main(&src) {
-                if compile::verify(&main, task, 2_000_000) {
-                    return Some(src);
-                }
-            }
         }
     }
     eprintln!("  {id}: semantic track exhausted");

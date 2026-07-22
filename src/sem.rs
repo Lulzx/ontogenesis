@@ -79,6 +79,7 @@ pub enum Op {
     BfRun,    // brainfuck: BfRun(prog, input) → output list
     GnDft,    // DFT over the GN number tower (collapsed L/B tree, Int leaves)
     GnDftN,   // same, output storage in natural order (ctre convention)
+    CtorOf,   // CtorOf(desc, i) = the i-th constructor function (opaque)
 }
 
 impl Op {
@@ -163,6 +164,7 @@ impl Op {
             Op::BfRun,
             Op::GnDft,
             Op::GnDftN,
+            Op::CtorOf,
         ]
     }
 }
@@ -395,10 +397,13 @@ fn adt_mrg(f: &V, a: &V, b: &V) -> Option<V> {
                 .collect::<Option<_>>()?;
             Some(V::Ctr(*ta, fields))
         }
-        (V::Ctr(_, _), V::Ctr(_, _)) => Some(V::App(
-            Box::new(V::App(Box::new(f.clone()), Box::new(a.clone()))),
-            Box::new(b.clone()),
-        )),
+        (V::Ctr(_, _), V::Ctr(_, _)) => match f {
+            V::PairFn => Some(V::Tup(vec![a.clone(), b.clone()])),
+            _ => Some(V::App(
+                Box::new(V::App(Box::new(f.clone()), Box::new(a.clone()))),
+                Box::new(b.clone()),
+            )),
+        },
         _ => None,
     }
 }
@@ -1325,6 +1330,15 @@ pub fn eval(e: &E, env: &[V]) -> Option<V> {
                     bf_exec(&prog, &mut st)?;
                     Some(V::List(st.out.into_iter().map(V::Nat).collect()))
                 }
+                CtorOf => {
+                    let shape = desc_shape(&eval(&args[0], env)?)?;
+                    let i = nat(&eval(&args[1], env)?)? as usize;
+                    if i < shape.len() {
+                        Some(V::CtorFn(i as u32))
+                    } else {
+                        None
+                    }
+                }
                 GnDft => gn_dft_ord(&eval(&args[0], env)?, false),
                 GnDftN => gn_dft_ord(&eval(&args[0], env)?, true),
                 IsZero => Some(V::Bool(nat(&eval(&args[0], env)?)? == 0)),
@@ -1453,6 +1467,7 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
     let has_ctr = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Ctr(_, _))));
     let has_tup = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Tup(_))));
     let has_int = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Int(_))));
+    let has_ctorfn = outputs.iter().any(|v| matches!(v, V::CtorFn(_)));
     let has_bool_grid = all_vals().any(|v| bool_grid(v).is_some());
     let has_nat_grid = all_vals().any(|v| nat_grid(v).map_or(false, |g| g.len() > 1));
     if let Ok(probe_op) = std::env::var("SUP_PROBE") {
@@ -1495,6 +1510,7 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
                 MstW => has_tup && has_nat,
                 SatCnf => has_int && has_list && !has_tree,
                 GnDft | GnDftN => has_int && has_tree,
+                CtorOf => has_ctorfn,
                 GridBfs => has_bool_grid,
                 Sudoku => has_nat_grid,
                 StlcOk | LamNf | BfRun => has_ctr,

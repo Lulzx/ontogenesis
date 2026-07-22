@@ -117,4 +117,6 @@
 @adtmrgs = @Y(λr.λd.λf.λa.λb.@scase(d, a, λi.λfs.@scase(d, b, λj.λgs.@sdup(i, λi1.λi2.@sdup(j, λj1.λj2.@ifc(@andb(@seq(i1, j1), @nonemp(fs)), @mkadt(@slen(d), i2, @szipf(r(d, f), fs, gs)), f(@mkadt(@slen(d), i2, fs), @mkadt(@slen(d), j2, gs))))))))
 @mkcctor = λd.λi.@sdup(i, λi1.λi2.@colk(@slen(@snth(d, i1)), @snil, λfs.@colk(@slen(d), @snil, λhs.@vapply(@snth(hs, i2), @smapf(λf.@vapply(f, hs), fs)))))
 @mksctor = λd.λi.@sdup(i, λi1.λi2.@colk(@slen(@snth(d, i1)), @snil, λfs.@mkadt(@slen(d), i2, fs)))
-@main = λa0.λa1.λa2.λa3.@adtmrgc(a0, a1, @c2sadt(a0, a2), @c2sadt(a0, a3))
+@adtmrgx = @adtmrgc
+@mkctorx = @mkcctor
+@main = λa0.λa1.λa2.λa3.@adtmrgx(a0, a1, @c2sadt(a0, a2), @c2sadt(a0, a3))
