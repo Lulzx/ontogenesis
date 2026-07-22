@@ -25,6 +25,8 @@ pub enum Family {
     NTup,
     CBin,
     SBin,
+    CTre,
+    STre,
 }
 
 impl Family {
@@ -37,6 +39,8 @@ impl Family {
             "ntup" => Some(Family::NTup),
             "cbin" => Some(Family::CBin),
             "sbin" => Some(Family::SBin),
+            "ctre" => Some(Family::CTre),
+            "stre" => Some(Family::STre),
             _ => None,
         }
     }
@@ -48,6 +52,7 @@ pub enum ArgKind {
     Nat,
     List,
     Tuple,
+    Tree,
     Atom,
 }
 
@@ -57,7 +62,10 @@ pub enum OutKind {
     Nat,
     Bool,
     List,
+    /// Scott-list output in a family whose default list is Church.
+    ListS,
     Tuple,
+    Tree,
     /// Element/application-tree output: passes through with no adapter.
     Raw,
 }
@@ -142,6 +150,26 @@ pub const STDLIB: &str = "\
 @sbI = λx.λo.λi.λe.i(x)
 @s2cb = @Y(λr.λn.n(λp.@sdup(@ss(p), λn1.λn2.@ifc(@seven(n1), @cbO(r(@shalf(n2))), @cbI(r(@shalf(n2))))), @cbE))
 @s2sb = @Y(λr.λn.n(λp.@sdup(@ss(p), λn1.λn2.@ifc(@seven(n1), @sbO(r(@shalf(n2))), @sbI(r(@shalf(n2))))), @sbE))
+@stleaf = λx.λn.λl.l(x)
+@stnode = λa.λb.λn.λl.n(a, b)
+@ct2st = λt.t(@stnode, @stleaf)
+@st2ct = @Y(λr.λt.t(λa.λb.λn.λl.n(r(a)(n, l), r(b)(n, l)), λx.λn.λl.l(x)))
+@stflat = @Y(λr.λt.t(λa.λb.@sapp(r(a), r(b)), λx.@scons(x, @snil)))
+@stmirror = @Y(λr.λt.t(λa.λb.@stnode(r(b), r(a)), λx.@stleaf(x)))
+@sbfsq = @Y(λr.λq.q(λh.λt.h(λa.λb.r(@sapp(t, @scons(a, @scons(b, @snil)))), λx.@scons(x, r(t))), @snil))
+@stbfs = λt.@sbfsq(@scons(t, @snil))
+@stmerge = @Y(λr.λf.λa.λb.a(λa1.λa2.b(λb1.λb2.@stnode(r(f, a1, b1), r(f, a2, b2)), @stleaf(@sz)), λx.b(λw1.λw2.@stleaf(@sz), λy.@stleaf(f(x, y)))))
+@stidxgo = @Y(λr.λt.λi.λf.λk.t(λa.λb.r(a, i, f, λa2.λi2.r(b, i2, f, λb2.λi3.k(@stnode(a2, b2), i3))), λx.@sdup(i, λi1.λi2.k(@stleaf(f(i1, x)), @ss(i2)))))
+@stidx = λf.λt.@stidxgo(t, @sz, f, λt2.λi.t2)
+@stscango = @Y(λr.λt.λz.λf.λk.t(λa.λb.r(a, z, f, λa2.λz2.r(b, z2, f, λb2.λz3.k(@stnode(a2, b2), z3))), λx.k(@stleaf(z), f(z, x))))
+@stscan = λf.λz.λt.@stscango(t, z, f, λt2.λz2.t2)
+@sevns = @Y(λr.λl.l(λh.λt.@scons(h, t(λh2.λt2.r(t2), @snil)), @snil))
+@sodds = λl.l(λh.λt.@sevns(t), @snil)
+@sbrp = @Y(λr.λl.l(λh.λt.t(λh2.λt2.@sapp(r(@sevns(@scons(h, @scons(h2, t2)))), r(@sodds(@scons(h, @scons(h2, t2))))), @scons(h, @snil)), @snil))
+@spair2 = @Y(λr.λl.l(λh.λt.t(λh2.λt2.@scons(@stnode(h, h2), r(t2)), @snil), @snil))
+@sbuildgo = @Y(λr.λl.l(λh.λt.t(λh2.λt2.r(@spair2(@scons(h, @scons(h2, t2)))), h), @sz))
+@stbuild = λl.@sbuildgo(@smapf(@stleaf, l))
+@stbrev = λt.@stbuild(@sbrp(@stflat(t)))
 ";
 
 fn op_ref(op: Op) -> &'static str {
@@ -175,6 +203,14 @@ fn op_ref(op: Op) -> &'static str {
         Op::MapAp => "@smapf",
         Op::ZipAp => "@szipf",
         Op::FoldrAp => "@sfoldr",
+        Op::TFlat => "@stflat",
+        Op::TBfs => "@stbfs",
+        Op::TMirror => "@stmirror",
+        Op::TBuild => "@stbuild",
+        Op::TMergeAp => "@stmerge",
+        Op::TIdxAp => "@stidx",
+        Op::TScanAp => "@stscan",
+        Op::TBitRev => "@stbrev",
     }
 }
 
@@ -223,6 +259,8 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
             // varies per task, so the caller tries each Nat position until
             // one verifies.
             (_, ArgKind::Tuple) => format!("@tup2list(@c2s(a{size_idx}), {a})"),
+            (Family::CTre, ArgKind::Tree) => format!("@ct2st({a})"),
+            (_, ArgKind::Tree) => a,
             (_, ArgKind::Atom) => a,
         }
     };
@@ -234,7 +272,10 @@ pub fn program(family: Family, out: OutKind, e: &E, kinds: &[ArgKind], size_idx:
         (_, OutKind::Nat) => format!("@s2c({core})"),
         (Family::SList, OutKind::List) => core,
         (_, OutKind::List) => format!("@s2cl({core})"),
+        (_, OutKind::ListS) => core,
         (_, OutKind::Tuple) => format!("@list2tup({core})"),
+        (Family::CTre, OutKind::Tree) => format!("@st2ct({core})"),
+        (_, OutKind::Tree) => core,
         (_, OutKind::Bool) | (_, OutKind::Raw) => core,
     };
     let mut lams = String::new();
@@ -340,6 +381,14 @@ pub fn decode_task(
         Some(V::List(xs))
     };
     let dec_tuple = |t: &Rc<Term>| -> Option<V> { Some(V::List(crate::decode::ntuple(t)?)) };
+    let dec_tree = |t: &Rc<Term>| -> Option<V> {
+        match family {
+            Family::CTre => crate::decode::church_tree(t),
+            _ => crate::decode::scott_tree(t),
+        }
+    };
+    let dec_slist = |t: &Rc<Term>| -> Option<V> { Some(V::List(crate::decode::scott_list(t)?)) };
+    let dec_clist = |t: &Rc<Term>| -> Option<V> { Some(V::List(crate::decode::church_list(t)?)) };
     let dec_atomish = |t: &Rc<Term>| -> Option<V> { crate::decode::decode_value(t) };
     let dec_bool = |t: &Rc<Term>| -> Option<V> {
         match t.as_ref() {
@@ -393,6 +442,10 @@ pub fn decode_task(
                 (ArgKind::Tuple, &dec_tuple),
                 (ArgKind::Atom, &dec_atomish),
             ],
+            Family::CTre | Family::STre => vec![
+                (ArgKind::Tree, &dec_tree),
+                (ArgKind::Atom, &dec_atomish),
+            ],
         };
         let mut hit = None;
         for (k, dec) in candidates {
@@ -419,6 +472,18 @@ pub fn decode_task(
             (OutKind::Tuple, &dec_tuple),
             (OutKind::Nat, &dec_nat),
             (OutKind::Bool, &dec_bool),
+            (OutKind::Raw, &dec_atomish),
+        ],
+        Family::CTre => vec![
+            (OutKind::Tree, &dec_tree),
+            (OutKind::List, &dec_clist),
+            (OutKind::ListS, &dec_slist),
+            (OutKind::Raw, &dec_atomish),
+        ],
+        Family::STre => vec![
+            (OutKind::Tree, &dec_tree),
+            (OutKind::ListS, &dec_slist),
+            (OutKind::List, &dec_clist),
             (OutKind::Raw, &dec_atomish),
         ],
         _ => vec![

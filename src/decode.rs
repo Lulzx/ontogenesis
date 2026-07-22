@@ -251,6 +251,48 @@ pub fn scott_bin(t: &Term) -> Option<u64> {
     }
 }
 
+/// Church tree in normal form: peel λn.λl., then body ::= l(x) | n(B, B).
+pub fn church_tree(t: &Rc<Term>) -> Option<V> {
+    let Term::Lam(b1) = t.as_ref() else { return None };
+    let Term::Lam(b2) = b1.as_ref() else {
+        return None;
+    };
+    fn body(t: &Rc<Term>) -> Option<V> {
+        match t.as_ref() {
+            Term::App(h, x) => match h.as_ref() {
+                Term::Var(0) => decode_value(&unshift(x, 2)?),
+                Term::App(n, a) if matches!(n.as_ref(), Term::Var(1)) => Some(V::Node(
+                    Box::new(body(a)?),
+                    Box::new(body(x)?),
+                )),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    body(b2)
+}
+
+/// Scott tree: Leaf(x) = λn.λl.l(x), Node(a,b) = λn.λl.n(a, b) with full
+/// sub-encodings as children.
+pub fn scott_tree(t: &Rc<Term>) -> Option<V> {
+    let Term::Lam(b1) = t.as_ref() else { return None };
+    let Term::Lam(b2) = b1.as_ref() else {
+        return None;
+    };
+    match b2.as_ref() {
+        Term::App(h, x) => match h.as_ref() {
+            Term::Var(0) => decode_value(&unshift(x, 2)?),
+            Term::App(n, a) if matches!(n.as_ref(), Term::Var(1)) => Some(V::Node(
+                Box::new(scott_tree(&unshift(a, 2)?)?),
+                Box::new(scott_tree(&unshift(x, 2)?)?),
+            )),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// N-tuple: λt.t(A, B, C) — Lam over an application spine headed by the
 /// binder. The empty tuple is λt.t.
 pub fn ntuple(t: &Rc<Term>) -> Option<Vec<V>> {

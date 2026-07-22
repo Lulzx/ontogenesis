@@ -40,6 +40,15 @@ pub enum Op {
     MapAp,   // MapAp(f, l) = [f(e) for e in l], f opaque
     ZipAp,   // ZipAp(f, a, b) = [f(x, y) pairwise]
     FoldrAp, // FoldrAp(f, z, l) = f(e1, f(e2, ... f(en, z)))
+    // ── tree ops (perfect or arbitrary binary trees, leaf-valued) ──
+    TFlat,   // depth-first leaves
+    TBfs,    // breadth-first leaves (shallowest first)
+    TMirror, // swap children recursively
+    TBuild,  // perfect tree from list (len = 2^k)
+    TMergeAp, // TMergeAp(f, t1, t2): same-shape zip, leaves f(x, y)
+    TIdxAp,   // TIdxAp(f, t): leaves f(i, x), i = left-to-right index
+    TScanAp,  // TScanAp(f, z, t): exclusive prefix fold over leaves
+    TBitRev,  // bit-reversal permutation of leaves (perfect tree)
 }
 
 impl Op {
@@ -48,7 +57,8 @@ impl Op {
         match self {
             Op::Isqrt | Op::IsZero | Op::Not | Op::Range1 => (1, 0),
             Op::Head | Op::Last | Op::Rev | Op::RotL | Op::RotR | Op::Len | Op::SortB => (1, 0),
-            Op::If | Op::ZipAp | Op::FoldrAp => (3, 0),
+            Op::TFlat | Op::TBfs | Op::TMirror | Op::TBuild | Op::TBitRev => (1, 0),
+            Op::If | Op::ZipAp | Op::FoldrAp | Op::TMergeAp | Op::TScanAp => (3, 0),
             Op::Count => (1, 1),
             _ => (2, 0),
         }
@@ -84,6 +94,14 @@ impl Op {
             Op::MapAp,
             Op::ZipAp,
             Op::FoldrAp,
+            Op::TFlat,
+            Op::TBfs,
+            Op::TMirror,
+            Op::TBuild,
+            Op::TMergeAp,
+            Op::TIdxAp,
+            Op::TScanAp,
+            Op::TBitRev,
         ]
     }
 }
@@ -124,6 +142,126 @@ fn list1(v: &V) -> Option<Vec<V>> {
     match v {
         V::List(xs) => Some(xs.clone()),
         _ => None,
+    }
+}
+
+fn is_treeish(v: &V) -> bool {
+    matches!(v, V::Node(_, _) | V::Atom(_) | V::App(_, _) | V::Nat(_) | V::Bool(_))
+}
+
+/// Depth-first leaves of a tree value (a non-Node value is a single leaf).
+fn tleaves(v: &V) -> Option<Vec<V>> {
+    if matches!(v, V::List(_) | V::Ctr(_, _)) {
+        return None;
+    }
+    match v {
+        V::Node(a, b) => {
+            let mut l = tleaves(a)?;
+            l.extend(tleaves(b)?);
+            Some(l)
+        }
+        _ => Some(vec![v.clone()]),
+    }
+}
+
+fn tbfs(v: &V) -> Option<Vec<V>> {
+    if !is_treeish(v) {
+        return None;
+    }
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back(v.clone());
+    let mut out = Vec::new();
+    while let Some(t) = queue.pop_front() {
+        match t {
+            V::Node(a, b) => {
+                queue.push_back(*a);
+                queue.push_back(*b);
+            }
+            leaf => out.push(leaf),
+        }
+    }
+    Some(out)
+}
+
+fn tmirror(v: &V) -> Option<V> {
+    if !is_treeish(v) {
+        return None;
+    }
+    Some(match v {
+        V::Node(a, b) => V::Node(Box::new(tmirror(b)?), Box::new(tmirror(a)?)),
+        other => other.clone(),
+    })
+}
+
+/// Perfect tree from a list of leaves (len must be a power of two ≥ 1).
+fn tbuild(xs: &[V]) -> Option<V> {
+    match xs.len() {
+        0 => None,
+        1 => Some(xs[0].clone()),
+        n if n % 2 == 0 => {
+            let (a, b) = xs.split_at(n / 2);
+            Some(V::Node(Box::new(tbuild(a)?), Box::new(tbuild(b)?)))
+        }
+        _ => None,
+    }
+}
+
+fn tmerge(f: &V, a: &V, b: &V) -> Option<V> {
+    if !is_treeish(a) || !is_treeish(b) {
+        return None;
+    }
+    match (a, b) {
+        (V::Node(a1, a2), V::Node(b1, b2)) => Some(V::Node(
+            Box::new(tmerge(f, a1, b1)?),
+            Box::new(tmerge(f, a2, b2)?),
+        )),
+        (V::Node(_, _), _) | (_, V::Node(_, _)) => None,
+        (x, y) => Some(V::App(
+            Box::new(V::App(Box::new(f.clone()), Box::new(x.clone()))),
+            Box::new(y.clone()),
+        )),
+    }
+}
+
+fn tidx(f: &V, v: &V, i: &mut u64) -> Option<V> {
+    if !is_treeish(v) {
+        return None;
+    }
+    match v {
+        V::Node(a, b) => {
+            let l = tidx(f, a, i)?;
+            let r = tidx(f, b, i)?;
+            Some(V::Node(Box::new(l), Box::new(r)))
+        }
+        leaf => {
+            let out = V::App(
+                Box::new(V::App(Box::new(f.clone()), Box::new(V::Nat(*i)))),
+                Box::new(leaf.clone()),
+            );
+            *i += 1;
+            Some(out)
+        }
+    }
+}
+
+fn tscan(f: &V, v: &V, acc: &mut V) -> Option<V> {
+    if !is_treeish(v) {
+        return None;
+    }
+    match v {
+        V::Node(a, b) => {
+            let l = tscan(f, a, acc)?;
+            let r = tscan(f, b, acc)?;
+            Some(V::Node(Box::new(l), Box::new(r)))
+        }
+        leaf => {
+            let out = acc.clone();
+            *acc = V::App(
+                Box::new(V::App(Box::new(f.clone()), Box::new(acc.clone()))),
+                Box::new(leaf.clone()),
+            );
+            Some(out)
+        }
     }
 }
 
@@ -246,6 +384,44 @@ pub fn eval(e: &E, env: &[V]) -> Option<V> {
                     }
                     Some(acc)
                 }
+                TFlat => Some(V::List(tleaves(&eval(&args[0], env)?)?)),
+                TBfs => Some(V::List(tbfs(&eval(&args[0], env)?)?)),
+                TMirror => tmirror(&eval(&args[0], env)?),
+                TBuild => tbuild(&list1(&eval(&args[0], env)?)?),
+                TMergeAp => {
+                    let f = eval(&args[0], env)?;
+                    tmerge(&f, &eval(&args[1], env)?, &eval(&args[2], env)?)
+                }
+                TIdxAp => {
+                    let f = eval(&args[0], env)?;
+                    let mut i = 0u64;
+                    tidx(&f, &eval(&args[1], env)?, &mut i)
+                }
+                TScanAp => {
+                    let f = eval(&args[0], env)?;
+                    let mut acc = eval(&args[1], env)?;
+                    tscan(&f, &eval(&args[2], env)?, &mut acc)
+                }
+                TBitRev => {
+                    let t = eval(&args[0], env)?;
+                    let leaves = tleaves(&t)?;
+                    let n = leaves.len();
+                    if n == 0 || (n & (n - 1)) != 0 {
+                        return None;
+                    }
+                    let bits = n.trailing_zeros();
+                    let mut out = leaves.clone();
+                    for (i, v) in leaves.into_iter().enumerate() {
+                        let mut j = 0usize;
+                        for b in 0..bits {
+                            if i >> b & 1 == 1 {
+                                j |= 1 << (bits - 1 - b);
+                            }
+                        }
+                        out[j] = v;
+                    }
+                    tbuild(&out)
+                }
                 IsZero => Some(V::Bool(nat(&eval(&args[0], env)?)? == 0)),
                 Not => Some(V::Bool(!boolean(&eval(&args[0], env)?)?)),
                 Isqrt => {
@@ -345,14 +521,20 @@ pub fn solve(inputs: &[Vec<V>], outputs: &[V], opts: &SemOptions) -> Option<E> {
     let has_list = all_vals().any(|v| matches!(v, V::List(_)));
     let has_atom =
         all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Atom(_) | V::App(_, _))));
+    let has_tree = all_vals().any(|v| contains_kind(v, &|x| matches!(x, V::Node(_, _))));
     let ops: Vec<Op> = Op::all()
         .iter()
         .copied()
         .filter(|op| {
             use Op::*;
             match op {
-                MapAp | ZipAp | FoldrAp => has_atom && has_list,
-                Head | Last | Nth | Rev | RotL | RotR | Len | AppendL | SortB => has_list,
+                TFlat | TBfs | TMirror | TBuild | TMergeAp | TIdxAp | TScanAp | TBitRev => {
+                    has_tree
+                }
+                MapAp | ZipAp | FoldrAp => has_atom && (has_list || has_tree),
+                Head | Last | Nth | Rev | RotL | RotR | Len | AppendL | SortB => {
+                    has_list || has_tree
+                }
                 Range1 | Count => has_nat,
                 If | Eq | Not => true,
                 _ => has_nat,
