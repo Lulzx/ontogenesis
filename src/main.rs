@@ -30,6 +30,22 @@ fn run() {
         grow(&argv[1..]);
         return;
     }
+    if argv.first().map(String::as_str) == Some("validate") {
+        let path = argv
+            .get(1)
+            .map(String::as_str)
+            .unwrap_or("lib/dsl.lib")
+            .to_string();
+        let path = std::path::PathBuf::from(path);
+        let n = dsl::load_library(&path).expect("load library");
+        println!("validating {n} entries from {}", path.display());
+        for (i, verdict) in dsl::validate_all() {
+            let arity = dsl::lib_arity(i as u16);
+            println!("L{i}/{arity}: {verdict}");
+        }
+        dsl::save_library(&path).expect("save library");
+        return;
+    }
     if let Ok(path) = std::env::var("SUP_LIB") {
         let n = dsl::load_library(std::path::Path::new(&path)).expect("load SUP_LIB");
         eprintln!("loaded {n} library entries from {path}");
@@ -394,7 +410,8 @@ fn grow(args: &[String]) {
         let added = dsl::mine_round(&mut corpus, per_round);
         for (idx, body) in &added {
             let arity = dsl::lib_arity(*idx as u16);
-            println!("  + L{idx}/{arity} = {body}");
+            let note = dsl::lib_note(*idx as u16);
+            println!("  + L{idx}/{arity} = {body}  [{note}]");
         }
         dsl::save_library(&lib_path).expect("save library");
         // Refresh persisted corpus (rewritten by compression).

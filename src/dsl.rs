@@ -21,6 +21,9 @@ pub struct LibEntry {
     /// Lib-free body: Var(0..arity-1) are params, Var(arity+d) internal
     /// lambda params.
     pub body: E,
+    /// Held-out-validation verdict (see validate_entry), persisted as a
+    /// trailing comment in the library file.
+    pub note: String,
 }
 
 pub static LIBRARY: RwLock<Vec<LibEntry>> = RwLock::new(Vec::new());
@@ -31,6 +34,14 @@ pub fn lib_len() -> usize {
 
 pub fn lib_arity(i: u16) -> usize {
     LIBRARY.read().unwrap().get(i as usize).map_or(0, |e| e.arity)
+}
+
+pub fn lib_note(i: u16) -> String {
+    LIBRARY
+        .read()
+        .unwrap()
+        .get(i as usize)
+        .map_or(String::new(), |e| e.note.clone())
 }
 
 pub fn lib_ops() -> Vec<Op> {
@@ -152,7 +163,11 @@ pub fn save_library(path: &std::path::Path) -> std::io::Result<()> {
     let lib = LIBRARY.read().unwrap();
     let mut out = String::new();
     for e in lib.iter() {
-        out.push_str(&format!("{} {}\n", e.arity, print_e(&e.body)));
+        if e.note.is_empty() {
+            out.push_str(&format!("{} {}\n", e.arity, print_e(&e.body)));
+        } else {
+            out.push_str(&format!("{} {}  // {}\n", e.arity, print_e(&e.body), e.note));
+        }
     }
     std::fs::write(path, out)
 }
@@ -166,10 +181,14 @@ pub fn load_library(path: &std::path::Path) -> Result<usize, String> {
         if line.is_empty() || line.starts_with("//") {
             continue;
         }
+        let (line, note) = match line.split_once("  //") {
+            Some((l, n)) => (l.trim(), n.trim().to_string()),
+            None => (line, String::new()),
+        };
         let (k, body) = line.split_once(' ').ok_or_else(|| format!("bad lib line: {line}"))?;
         let arity: usize = k.parse().map_err(|_| format!("bad arity: {line}"))?;
         let body = parse_e(body).ok_or_else(|| format!("bad body: {line}"))?;
-        lib.push(LibEntry { arity, body });
+        lib.push(LibEntry { arity, body, note });
     }
     Ok(lib.len())
 }
@@ -213,6 +232,136 @@ pub fn expand(e: &E, n_args: usize) -> E {
         }
     }
     go(e, n_args, 0)
+}
+
+// ── Held-out validation ─────────────────────────────────────────────
+//
+// A finite test set can't distinguish the intended function from the
+// smallest hypothesis consistent with it (the mined "gcd" surrogate
+// s ← s − (b mod s) passes every benchmark pair yet disagrees with gcd
+// on 31% of small inputs). So every mined entry is differentially tested
+// on deterministic-random inputs against every hand-written op of the
+// same arity:
+//   ≡ Op   — agrees everywhere both are defined: a validated rediscovery
+//   ~ Op   — best match agrees only partially: an overfit surrogate
+//   novel  — matches nothing: a new abstraction (neither refuted nor named)
+
+const VAL_SAMPLES: u64 = 200;
+const VAL_MIN_OVERLAP: usize = 30;
+
+/// Deterministic LCG so validation verdicts are reproducible.
+fn lcg(x: &mut u64) -> u64 {
+    *x = x
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    *x >> 33
+}
+
+/// Random probe value: mostly small nats (where surrogates diverge),
+/// sometimes short nat lists.
+fn rand_val(x: &mut u64) -> V {
+    match lcg(x) % 10 {
+        0..=6 => V::Nat(lcg(x) % 48),
+        7 => V::Nat(lcg(x) % 8),
+        _ => {
+            let len = (lcg(x) % 7) as usize;
+            V::List((0..len).map(|_| V::Nat(lcg(x) % 20)).collect())
+        }
+    }
+}
+
+/// Differentially test library entry `idx` against the full op set and
+/// return a human-readable verdict.
+pub fn validate_entry(idx: u16) -> String {
+    let (arity, body) = {
+        let lib = LIBRARY.read().unwrap();
+        let Some(e) = lib.get(idx as usize) else {
+            return "missing entry".into();
+        };
+        (e.arity, e.body.clone())
+    };
+    // Sample once; reuse the same inputs for every candidate op.
+    let mut seed = 0x5eed_0000 + idx as u64;
+    let samples: Vec<Vec<V>> = (0..VAL_SAMPLES)
+        .map(|_| (0..arity).map(|_| rand_val(&mut seed)).collect())
+        .collect();
+    let mine: Vec<Option<V>> = samples
+        .iter()
+        .map(|vals| crate::sem::eval(&body, vals))
+        .collect();
+    if mine.iter().all(|o| o.is_none()) {
+        return "novel (undefined on random probes)".into();
+    }
+
+    // (op, agree, comparable, permuted) — mined holes are ordered by first
+    // occurrence, so a rediscovery can carry the op's args in any order.
+    let mut best: Option<(Op, usize, usize, bool)> = None;
+    for op in Op::all().iter().chain(Op::seed_extras()) {
+        let (va, la) = op.sig();
+        if la != 0 || va != arity || matches!(op, Op::Lib(_)) {
+            continue;
+        }
+        for perm in permutations(arity) {
+            let call = E::Prim(*op, perm.iter().map(|i| E::Var(*i)).collect());
+            let mut agree = 0usize;
+            let mut comparable = 0usize;
+            for (vals, m) in samples.iter().zip(&mine) {
+                let theirs = crate::sem::eval(&call, vals);
+                if let (Some(a), Some(b)) = (m, &theirs) {
+                    comparable += 1;
+                    if a == b {
+                        agree += 1;
+                    }
+                }
+            }
+            let permuted = !perm.iter().enumerate().all(|(i, p)| i as u32 == *p);
+            if comparable >= VAL_MIN_OVERLAP
+                && best.map_or(true, |(_, ba, bc, _)| agree * bc > ba * comparable)
+            {
+                best = Some((*op, agree, comparable, permuted));
+            }
+        }
+    }
+    match best {
+        Some((op, agree, comparable, permuted)) if agree == comparable => {
+            let tag = if permuted { ", args reordered" } else { "" };
+            format!("VALIDATED ≡ {op:?} ({comparable} random inputs{tag})")
+        }
+        Some((op, agree, comparable, _)) if agree * 100 >= comparable * 60 => {
+            format!(
+                "OVERFIT ~ {op:?} ({}% of {comparable} random inputs)",
+                agree * 100 / comparable
+            )
+        }
+        _ => "novel (matches no single op)".into(),
+    }
+}
+
+fn permutations(n: usize) -> Vec<Vec<u32>> {
+    if n == 0 {
+        return vec![Vec::new()];
+    }
+    let mut out = Vec::new();
+    for rest in permutations(n - 1) {
+        for pos in 0..=rest.len() {
+            let mut p = rest.clone();
+            p.insert(pos, (n - 1) as u32);
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// Validate every entry, store verdicts in their notes, and return them.
+pub fn validate_all() -> Vec<(usize, String)> {
+    let n = lib_len();
+    let mut out = Vec::new();
+    for i in 0..n {
+        let v = validate_entry(i as u16);
+        LIBRARY.write().unwrap()[i].note = v.clone();
+        out.push((i, v));
+    }
+    out
 }
 
 // ── The miner ───────────────────────────────────────────────────────
@@ -384,9 +533,13 @@ pub fn mine_round(corpus: &mut [CorpusEntry], max_new: usize) -> Vec<(usize, Str
         let body = expand(&pat.body, pat.k as usize);
         let idx = {
             let mut lib = LIBRARY.write().unwrap();
-            lib.push(LibEntry { arity: pat.k as usize, body });
+            lib.push(LibEntry { arity: pat.k as usize, body, note: String::new() });
             (lib.len() - 1) as u16
         };
+        let verdict = validate_entry(idx);
+        if let Some(e) = LIBRARY.write().unwrap().get_mut(idx as usize) {
+            e.note = verdict;
+        }
         for entry in corpus.iter_mut() {
             entry.e = rewrite(&entry.e, entry.n_args, &pat, idx);
         }
@@ -408,6 +561,9 @@ fn collect_subterms(e: &E, env: u32, f: &mut impl FnMut(&E, u32)) {
 mod tests {
     use super::*;
     use crate::sem::eval;
+
+    /// Both tests mutate the global LIBRARY; serialize them.
+    static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn totient() -> E {
         // Count(Range1($0), lam Eq(Gcd(p, $0), 1)) with n_args = 1 (p = $1)
@@ -436,7 +592,49 @@ mod tests {
     }
 
     #[test]
+    fn validation_separates_rediscovery_from_overfit() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // Body context: params $0,$1; internal lambda param $2.
+        let pow = E::Prim(
+            Op::Iter,
+            vec![
+                E::Var(0),
+                E::KNat(1),
+                E::Lam1(Box::new(E::Prim(Op::Mul, vec![E::Var(1), E::Var(2)]))),
+            ],
+        );
+        // The benchmark-gcd surrogate: Iter(a, a, λs. s − (b mod s)).
+        let gcd_like = E::Prim(
+            Op::Iter,
+            vec![
+                E::Var(0),
+                E::Var(0),
+                E::Lam1(Box::new(E::Prim(
+                    Op::Sub,
+                    vec![
+                        E::Var(2),
+                        E::Prim(Op::Mod, vec![E::Var(1), E::Var(2)]),
+                    ],
+                ))),
+            ],
+        );
+        let (vp, vg);
+        {
+            let mut lib = LIBRARY.write().unwrap();
+            lib.clear();
+            lib.push(LibEntry { arity: 2, body: pow, note: String::new() });
+            lib.push(LibEntry { arity: 2, body: gcd_like, note: String::new() });
+        }
+        vp = validate_entry(0);
+        vg = validate_entry(1);
+        LIBRARY.write().unwrap().clear();
+        assert!(vp.contains("VALIDATED") && vp.contains("Pow"), "{vp}");
+        assert!(vg.contains("OVERFIT") && vg.contains("Gcd"), "{vg}");
+    }
+
+    #[test]
     fn mine_extracts_and_expansion_agrees() {
+        let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // Two tasks share the totient shape; mining should abstract it and
         // the compressed term must evaluate identically after expansion.
         let mut corpus = vec![
