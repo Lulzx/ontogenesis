@@ -24,6 +24,7 @@ use parse::TaskError;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 
 fn main() {
     // The evaluator recurses as deep as the fuel limit allows; give it room.
@@ -2601,7 +2602,7 @@ enum MTm {
     V1,
     C,
     S,
-    Ap(Rc<MTm>, Rc<MTm>),
+    Ap(Arc<MTm>, Arc<MTm>),
 }
 
 /// Full binary tree shape with `leaves` leaves (Catalan many).
@@ -2675,8 +2676,8 @@ fn zip_label(shape: &Shape, assign: &[MTm], i: &mut usize) -> MTm {
             t
         }
         Shape::Ap(a, b) => MTm::Ap(
-            Rc::new(zip_label(a, assign, i)),
-            Rc::new(zip_label(b, assign, i)),
+            Arc::new(zip_label(a, assign, i)),
+            Arc::new(zip_label(b, assign, i)),
         ),
     }
 }
@@ -2740,11 +2741,11 @@ fn render(t: &MTm) -> String {
 }
 
 fn iter_shape() -> MTm {
-    MTm::Ap(Rc::new(MTm::Ap(Rc::new(MTm::V0), Rc::new(MTm::Ap(Rc::new(MTm::C), Rc::new(MTm::V1))))), Rc::new(MTm::S))
+    MTm::Ap(Arc::new(MTm::Ap(Arc::new(MTm::V0), Arc::new(MTm::Ap(Arc::new(MTm::C), Arc::new(MTm::V1))))), Arc::new(MTm::S))
 }
 
 fn reduce_shape() -> MTm {
-    MTm::Ap(Rc::new(MTm::Ap(Rc::new(MTm::V1), Rc::new(MTm::C))), Rc::new(MTm::V0))
+    MTm::Ap(Arc::new(MTm::Ap(Arc::new(MTm::V1), Arc::new(MTm::C))), Arc::new(MTm::V0))
 }
 
 fn solves_cand(t: &parse::Task, body: &Rc<term::Term>, opts: &bank::Options) -> bool {
@@ -2761,6 +2762,188 @@ struct Prefiltered {
     t: MTm,
     target: String,
     gain: Gain,
+}
+
+/// Owned construction environment for the C8 string task family. Built fresh
+/// per worker thread so no `Rc<Term>` crosses a `thread::scope` boundary — the
+/// shared template slice is `Arc`-backed (`MTm`), everything else is thread-local.
+struct DiscEnv {
+    base: Vec<Rc<term::Term>>,
+    seeds: Vec<Rc<term::Term>>,
+    opts: bank::Options,
+    rep_task: parse::Task,
+    h_rep: parse::Task,
+    concat_task: parse::Task,
+    h_concat: parse::Task,
+    cnat_task: parse::Task,
+    h_cnat: parse::Task,
+}
+
+impl DiscEnv {
+    fn targets(&self) -> Vec<(&str, &parse::Task, &parse::Task)> {
+        vec![
+            ("replicate", &self.rep_task, &self.h_rep),
+            ("concat", &self.concat_task, &self.h_concat),
+            ("concat_n", &self.cnat_task, &self.h_cnat),
+        ]
+    }
+}
+
+/// Build the C8 string-task construction environment (base `{cons}`, seeds
+/// `{nil}`, replicate/concat/concat_n train+holdout tasks, and `opts`). Pure;
+/// safe to call independently from every worker thread.
+fn build_disc_env(budget: u64, max_size: u32) -> DiscEnv {
+    let num = |n: u32| -> Rc<term::Term> {
+        parse::parse_expr(&bootstrap::church_num_str(n))
+            .and_then(|e| parse::to_term(&e))
+            .expect("church numeral")
+    };
+    let closed = |s: &str| -> Rc<term::Term> {
+        parse::parse_expr(s)
+            .and_then(|e| parse::to_term(&e))
+            .expect("closed term")
+    };
+    let list = |cs: &[u32]| -> Rc<term::Term> {
+        let mut body = String::from("z");
+        for c in cs.iter().rev() {
+            let cstr = bootstrap::church_num_str(*c);
+            body = format!("f({cstr})({body})");
+        }
+        closed(&format!("λf.λz.{body}"))
+    };
+    let task = |arity: usize, tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+        arity,
+        tests: tests
+            .into_iter()
+            .map(|(args, want)| parse::Test { args, want, outer: 0 })
+            .collect(),
+    };
+
+    let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+    let base = vec![cons.clone()];
+    let nil = list(&[]);
+    let seeds = vec![nil.clone()];
+
+    let rep_task = task(
+        2,
+        [(2, 0), (2, 1), (2, 3), (3, 2), (1, 4), (4, 2)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| (vec![num(c), num(n)], list(&vec![c; n as usize])))
+            .collect(),
+    );
+    let h_rep = task(
+        2,
+        [(2, 2), (3, 3), (1, 1), (4, 4), (5, 2), (0, 3)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| (vec![num(c), num(n)], list(&vec![c; n as usize])))
+            .collect(),
+    );
+    let cat = |a: &[u32], b: &[u32]| -> Vec<u32> {
+        a.iter().chain(b.iter()).copied().collect()
+    };
+    let concat_task = task(
+        2,
+        [
+            (vec![1], vec![2]),
+            (vec![2, 3], vec![4]),
+            (vec![], vec![1, 1]),
+            (vec![1, 2], vec![3, 4]),
+        ]
+        .into_iter()
+        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+        .collect(),
+    );
+    let h_concat = task(
+        2,
+        [
+            (vec![2], vec![3, 4]),
+            (vec![1, 1, 1], vec![]),
+            (vec![3, 2], vec![2, 3]),
+        ]
+        .into_iter()
+        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+        .collect(),
+    );
+    let cnat = |xs: &[u32], n: u32| -> Vec<u32> {
+        let mut v = Vec::new();
+        for _ in 0..n {
+            v.extend_from_slice(xs);
+        }
+        v
+    };
+    let cnat_task = task(
+        2,
+        [
+            (vec![2, 3], 2),
+            (vec![1], 3),
+            (vec![2, 2], 2),
+            (vec![3], 0),
+        ]
+        .into_iter()
+        .map(|(xs, n)| (vec![list(&xs), num(n)], list(&cnat(&xs, n))))
+        .collect(),
+    );
+    let h_cnat = task(
+        2,
+        [(vec![2, 3], 3), (vec![1], 4), (vec![4, 5], 2), (vec![2], 0)]
+            .into_iter()
+            .map(|(xs, n)| (vec![list(&xs), num(n)], list(&cnat(&xs, n))))
+            .collect(),
+    );
+
+    let opts = bank_opts(&base, budget, max_size);
+    DiscEnv {
+        base,
+        seeds,
+        opts,
+        rep_task,
+        h_rep,
+        concat_task,
+        h_concat,
+        cnat_task,
+        h_cnat,
+    }
+}
+
+/// Parallel one-step pre-filter over the full enumerated template space. Each
+/// worker rebuilds its own `DiscEnv` (all `Rc` thread-local) and runs the
+/// sequential `prefilter_templates` on its `&[MTm]` chunk; results are
+/// concatenated in chunk order so the output is identical to the sequential run.
+fn prefilter_parallel(templates: &[MTm], budget: u64, max_size: u32) -> Vec<Prefiltered> {
+    if templates.is_empty() {
+        return Vec::new();
+    }
+    let n_workers = std::env::var("DISC_PAR_WORKERS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4)
+        })
+        .min(templates.len())
+        .max(1);
+    let chunk = templates.len().div_ceil(n_workers);
+    let mut out: Vec<Prefiltered> = Vec::new();
+    std::thread::scope(|s| {
+        let mut handles = Vec::new();
+        for slice in templates.chunks(chunk) {
+            // The evaluator recurses as deep as the fuel limit allows (same as
+            // the main worker's 1 GiB stack in `main`); give each parallel
+            // worker the same headroom or the deeper templates overflow.
+            let builder = std::thread::Builder::new().stack_size(1 << 30);
+            let handle = builder
+                .spawn_scoped(s, move || {
+                    let env = build_disc_env(budget, max_size);
+                    let targets = env.targets();
+                    prefilter_templates(slice, &env.base, &env.seeds, &targets, &env.opts)
+                })
+                .expect("spawn prefilter worker");
+            handles.push(handle);
+        }
+        for h in handles {
+            out.extend(h.join().expect("prefilter worker panicked"));
+        }
+    });
+    out
 }
 
 /// One-step pre-filter: keep templates that, instantiated over `base`×`seeds`,
@@ -2879,7 +3062,6 @@ fn rollout_disc(
 /// scoring of the operator pair. Meta-level credit assignment.
 fn disc(args: &[String]) {
     use std::io::Write;
-    use std::rc::Rc;
 
     let mut budget = 3u64;
     let mut max_size = 14u32;
@@ -2906,111 +3088,11 @@ fn disc(args: &[String]) {
         }
     }
 
-    let num = |n: u32| -> Rc<term::Term> {
-        parse::parse_expr(&bootstrap::church_num_str(n))
-            .and_then(|e| parse::to_term(&e))
-            .expect("church numeral")
-    };
-    let closed = |s: &str| -> Rc<term::Term> {
-        parse::parse_expr(s)
-            .and_then(|e| parse::to_term(&e))
-            .expect("closed term")
-    };
-    let list = |cs: &[u32]| -> Rc<term::Term> {
-        let mut body = String::from("z");
-        for c in cs.iter().rev() {
-            let cstr = bootstrap::church_num_str(*c);
-            body = format!("f({cstr})({body})");
-        }
-        closed(&format!("λf.λz.{body}"))
-    };
-    let task = |arity: usize, tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
-        arity,
-        tests: tests
-            .into_iter()
-            .map(|(args, want)| parse::Test { args, want, outer: 0 })
-            .collect(),
-    };
-
-    let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
-    let base = vec![cons.clone()];
-    let nil = list(&[]);
-    let seeds = vec![nil.clone()];
-
-    // ── task family (strings; same as meta) ──
-    let rep_task = task(
-        2,
-        [(2, 0), (2, 1), (2, 3), (3, 2), (1, 4), (4, 2)]
-            .into_iter()
-            .map(|(c, n): (u32, u32)| (vec![num(c), num(n)], list(&vec![c; n as usize])))
-            .collect(),
-    );
-    let h_rep = task(
-        2,
-        [(2, 2), (3, 3), (1, 1), (4, 4), (5, 2), (0, 3)]
-            .into_iter()
-            .map(|(c, n): (u32, u32)| (vec![num(c), num(n)], list(&vec![c; n as usize])))
-            .collect(),
-    );
-    let cat = |a: &[u32], b: &[u32]| -> Vec<u32> {
-        a.iter().chain(b.iter()).copied().collect()
-    };
-    let concat_task = task(
-        2,
-        [
-            (vec![1], vec![2]),
-            (vec![2, 3], vec![4]),
-            (vec![], vec![1, 1]),
-            (vec![1, 2], vec![3, 4]),
-        ]
-        .into_iter()
-        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
-        .collect(),
-    );
-    let h_concat = task(
-        2,
-        [
-            (vec![2], vec![3, 4]),
-            (vec![1, 1, 1], vec![]),
-            (vec![3, 2], vec![2, 3]),
-        ]
-        .into_iter()
-        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
-        .collect(),
-    );
-    let cnat = |xs: &[u32], n: u32| -> Vec<u32> {
-        let mut v = Vec::new();
-        for _ in 0..n {
-            v.extend_from_slice(xs);
-        }
-        v
-    };
-    let cnat_task = task(
-        2,
-        [
-            (vec![2, 3], 2),
-            (vec![1], 3),
-            (vec![2, 2], 2),
-            (vec![3], 0),
-        ]
-        .into_iter()
-        .map(|(xs, n)| (vec![list(&xs), num(n)], list(&cnat(&xs, n))))
-        .collect(),
-    );
-    let h_cnat = task(
-        2,
-        [(vec![2, 3], 3), (vec![1], 4), (vec![4, 5], 2), (vec![2], 0)]
-            .into_iter()
-            .map(|(xs, n)| (vec![list(&xs), num(n)], list(&cnat(&xs, n))))
-            .collect(),
-    );
-
-    let opts = bank_opts(&base, budget, max_size);
-    let targets: Vec<(&str, &parse::Task, &parse::Task)> = vec![
-        ("replicate", &rep_task, &h_rep),
-        ("concat", &concat_task, &h_concat),
-        ("concat_n", &cnat_task, &h_cnat),
-    ];
+    let env = build_disc_env(budget, max_size);
+    let base = &env.base;
+    let seeds = &env.seeds;
+    let opts = &env.opts;
+    let targets = env.targets();
     let names = ["replicate", "concat", "concat_n"];
 
     // ── enumerate templates ──
@@ -3023,7 +3105,7 @@ fn disc(args: &[String]) {
     println!("targets: replicate / concat / concat_n; templates enumerated: {}", templates.len());
 
     // ── one-step pre-filter: keep behaviorally-useful templates ──
-    let retained = prefilter_templates(&templates, &base, &seeds, &targets, &opts);
+    let retained = prefilter_parallel(&templates, budget, max_size);
     println!(
         "one-step pre-filter: retained {} (behaviorally useful), dropped {} (inert)",
         retained.len(),
@@ -3052,7 +3134,7 @@ fn disc(args: &[String]) {
 
     // ── joint rollout with the discovered set reproduces the C7 bootstrap ──
     let schemas: Vec<&MTm> = retained.iter().map(|r| &r.t).collect();
-    let (reached, _states, onto) = rollout_disc(&schemas, &base, &seeds, &targets, &opts, 3);
+    let (reached, _states, onto) = rollout_disc(&schemas, base, seeds, &targets, opts, 3);
     let reached_s: Vec<&str> = (0..3).filter(|k| reached[*k]).map(|k| names[k]).collect();
     println!(
         "\njoint rollout (H=3) with discovered schemas reaches: {}",
@@ -3068,12 +3150,12 @@ fn disc(args: &[String]) {
         .filter(|c| c.name != "concat_n")
         .cloned()
         .collect();
-    let before = concept_cost(&h_cnat, &rep_concat, &opts);
+    let before = concept_cost(&env.h_cnat, &rep_concat, opts);
     let after = match onto.iter().find(|c| c.name == "concat_n") {
         Some(c) => {
             let mut set = rep_concat.clone();
             set.push(c.clone());
-            concept_cost(&h_cnat, &set, &opts)
+            concept_cost(&env.h_cnat, &set, opts)
         }
         None => UNREACHABLE,
     };
@@ -3086,8 +3168,8 @@ fn disc(args: &[String]) {
     // ── horizon control: V(g|H=1) vs V(g|H=2) — meta-level credit assignment ──
     // V(g|H) = Δ_frontier of adding g to the other schemas over H rounds.
     let value = |others: &[&MTm], full: &[&MTm], h: usize| -> ([bool; 3], u64) {
-        let (br, bs, _) = rollout_disc(others, &base, &seeds, &targets, &opts, h);
-        let (cr, cs, _) = rollout_disc(full, &base, &seeds, &targets, &opts, h);
+        let (br, bs, _) = rollout_disc(others, base, seeds, &targets, opts, h);
+        let (cr, cs, _) = rollout_disc(full, base, seeds, &targets, opts, h);
         let mut df = [false; 3];
         for k in 0..3 {
             df[k] = cr[k] && !br[k];
@@ -3117,7 +3199,7 @@ fn disc(args: &[String]) {
     //     (G_2/G_4), so a single-schema ablation over the full set is degenerate —
     //     no schema is individually load-bearing. The horizon-dependence lives at
     //     the level of the operator PAIR, so (B) scores that pair explicitly.
-    let (one, _, _) = rollout_disc(&schemas, &base, &seeds, &targets, &opts, 1);
+    let (one, _, _) = rollout_disc(&schemas, base, seeds, &targets, opts, 1);
     let one_s: Vec<&str> = (0..3).filter(|k| one[*k]).map(|k| names[k]).collect();
     println!(
         "  (A) full retained set at H=1 reaches: {} — one-step concat_n templates mask the pair effect",
@@ -4343,6 +4425,7 @@ mod probe {
     use crate::parse;
     use crate::term;
     use std::rc::Rc;
+    use std::sync::Arc;
 
     fn church(n: u32) -> Rc<term::Term> {
         let src = crate::bootstrap::church_num_str(n);
@@ -5281,8 +5364,8 @@ mod probe {
                 //     then a joint rollout grows the ontology through them.
                 let junk: Vec<crate::MTm> = vec![
                     crate::MTm::V0,
-                    crate::MTm::Ap(Rc::new(crate::MTm::V0), Rc::new(crate::MTm::V1)),
-                    crate::MTm::Ap(Rc::new(crate::MTm::V1), Rc::new(crate::MTm::V0)),
+                    crate::MTm::Ap(Arc::new(crate::MTm::V0), Arc::new(crate::MTm::V1)),
+                    crate::MTm::Ap(Arc::new(crate::MTm::V1), Arc::new(crate::MTm::V0)),
                 ];
                 let mut pool: Vec<crate::MTm> = junk.clone();
                 pool.push(crate::iter_shape());
