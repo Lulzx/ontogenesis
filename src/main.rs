@@ -817,11 +817,10 @@ fn ladder(args: &[String]) {
     // Given vocabulary: raw λ plus ONE base Church combinator (add). Everything
     // else — mul, square, power, parity — must be invented by the machine.
     let base = vec![closed("λa.λb.λf.λx.a(f)(b(f)(x))")]; // add
-    let mut seeds: Vec<Rc<term::Term>> = base.clone();
-    let mut labels: Vec<String> = vec!["add".into()];
     let mut corpus: Vec<Rc<term::Term>> = Vec::new();
-    let mut seen: std::collections::HashSet<bootstrap::BehaviorKey> =
-        std::collections::HashSet::new();
+    // The ACQUIRED language: concepts promoted by measured counterfactual
+    // quotient gain (Δ > 0 on the held-out), reasoned through as Prims.
+    let mut concepts: Vec<bank::Concept> = Vec::new();
     // Concepts the machine *discovered* by raw enumeration (name, body, arity),
     // used to demonstrate the quotient-aware search below.
     let mut discovered: Vec<(&str, Rc<term::Term>, u32)> = Vec::new();
@@ -875,20 +874,21 @@ fn ladder(args: &[String]) {
         "Concept Ladder: raw λ + add, {budget}s/task, max_size {max_size}. mul/square/power/parity are NOT given."
     );
     println!(
-        "  rung    | family-solved | holdout cost BEFORE → AFTER | language"
+        "Discovery = raw solve. ACQUISITION = promote a candidate only if, installed as a Prim,\n\
+         it reduces the held-out quotient-search cost (counterfactual Δ > 0)."
     );
 
     for (gen, rung) in rungs.into_iter().enumerate() {
-        // 1. Solve this rung's family with the current language → corpus.
+        // 1. Discover: raw-solve this rung's family under the BASE vocabulary
+        //    (raw λ + add). `primary_sol` is the complete discovered solution —
+        //    the candidate that carries the rung's *semantic operator*.
         let mut fam_solved = 0usize;
-        let mut fam_built = 0u64;
         let mut primary_sol: Option<Rc<term::Term>> = None;
         for (j, (_fname, t)) in rung.family.iter().enumerate() {
-            let o = bank::solve(t, &bank_opts(&seeds, budget, max_size));
+            let o = bank::solve(t, &bank_opts(&base, budget, max_size));
             if let Some(sol) = o.solution {
                 corpus.push(sol.clone());
                 fam_solved += 1;
-                fam_built += o.stats.built;
                 if j == 0 {
                     primary_sol = Some(sol);
                 }
@@ -896,7 +896,7 @@ fn ladder(args: &[String]) {
         }
         if let Some(sol) = &primary_sol {
             println!(
-                "    ↳ rung {}: the machine invented {} = {} (size {})",
+                "Gen {:>6}  raw discovers {} = {} (size {})",
                 rung.name,
                 rung.name,
                 term::show(sol),
@@ -913,75 +913,94 @@ fn ladder(args: &[String]) {
             if arity > 0 {
                 discovered.push((rung.name, sol.clone(), arity));
             }
+        } else {
+            println!(
+                "Gen {:>6}  NO raw solution in budget ({} of {} family solved) — nothing discovered",
+                rung.name,
+                fam_solved,
+                rung.family.len()
+            );
         }
 
-        // 2. Measure the held-out task BEFORE this rung's concept is promoted.
-        let before = bank::solve(&rung.holdout, &bank_opts(&seeds, budget, max_size));
+        // 2. Counterfactual acquisition gate. baseline = held-out cost through
+        //    the CURRENT acquired language (quotient search). A candidate earns
+        //    promotion only if installing it as a Prim makes that cheaper
+        //    (Δ > 0); how often its subterm recurs is irrelevant to that call.
+        let opts = bank_opts(&base, budget, max_size);
+        let baseline = concept_cost(&rung.holdout, &concepts, &opts);
+        println!(
+            "    held-out '{}': baseline {} states",
+            label_of_holdout(rung.name),
+            disp_cost(baseline)
+        );
 
-        // 3. Mine the growing corpus → promote the recurring abstraction.
-        //    (Skip when this rung added nothing — power/parity may sit on the
-        //    scale wall; re-mining an unchanged corpus yields the same seeds.)
-        let mut mined: Vec<bootstrap::MinedSeed> = Vec::new();
+        // 3. Candidate set: the complete discovered solution first; mined
+        //    recurring fragments (bootstrap::mine) are merely one more source,
+        //    and are subject to the SAME counterfactual gate.
+        let mut candidates: Vec<(String, Rc<term::Term>)> = Vec::new();
+        if let Some(sol) = &primary_sol {
+            candidates.push((format!("C_{}", rung.name), sol.clone()));
+        }
         if fam_solved > 0 {
             let grouping = bootstrap::build_grouping_pool(&[], 0x5eed_0000 + gen as u64);
             let holdout_pool = bootstrap::build_holdout_pool(0xc0ffee_0000 + gen as u64 * 7);
             let mut mopts = bootstrap::MineOptions::default();
             mopts.per_round = 2;
-            mined = bootstrap::mine(&corpus, &grouping, &holdout_pool, &mopts);
-        }
-        for m in &mined {
-            if seen.insert(m.key.clone()) {
-                let cname = format!("C{}", seeds.len());
-                labels.push(cname.clone());
-                seeds.push(m.comb.clone());
-                println!(
-                    "    ↳ rung {}: invent {cname} (arity {}, gain {}) = {}",
-                    rung.name,
-                    m.k,
-                    m.gain,
-                    term::show(&m.comb)
-                );
+            for m in bootstrap::mine(&corpus, &grouping, &holdout_pool, &mopts) {
+                candidates.push((format!("C{}", concepts.len() + 1), m.comb));
             }
         }
 
-        // 4. Measure the held-out task AFTER promotion.
-        let after = bank::solve(&rung.holdout, &bank_opts(&seeds, budget, max_size));
-
-        let b = before
-            .solution
-            .as_ref()
-            .map(|_| format!("{}", before.stats.built))
-            .unwrap_or_else(|| "✗".into());
-        let a = after
-            .solution
-            .as_ref()
-            .map(|_| format!("{}", after.stats.built))
-            .unwrap_or_else(|| "✗".into());
-        let arrow: &str = match (before.solution.is_some(), after.solution.is_some()) {
-            (true, true) if after.stats.built < before.stats.built => "◀ cheaper",
-            (true, true) if after.stats.built > before.stats.built => "▲ dearer",
-            (true, true) => "＝ same",
-            (false, true) => "◀ newly-solvable",
-            _ => "—",
-        };
-        println!(
-            "  {:>6} | {:>3}/{} solved ({:>6} states) | {:>8} → {:>8} {arrow} | {}",
-            rung.name,
-            fam_solved,
-            rung.family.len(),
-            fam_built,
-            b,
-            a,
-            labels.join(" ")
-        );
-        println!(
-            "       |    held-out '{}' {:>3} states {:>5} → {:>3} states {:>5} |",
-            label_of_holdout(rung.name),
-            b,
-            "",
-            a,
-            arrow
-        );
+        // 4. Score every candidate; promote the best one that earns its place,
+        //    ranking frontier gain ≻ search-cost reduction (one per generation,
+        //    matching the old per-round promotion count).
+        let mut best: Option<(String, Gain)> = None;
+        for (label, body) in &candidates {
+            match propose_value(body, &concepts, &[rung.holdout.clone()], &opts, baseline) {
+                Some(g) if g.earns() => {
+                    println!(
+                        "    candidate {label}: before {} → after {}  {}  PROMOTE  arity {}",
+                        disp_cost(g.before),
+                        disp_cost(g.after),
+                        g.kind(),
+                        g.arity
+                    );
+                    if best.as_ref().map_or(true, |(_, b)| gain_rank(&g, b) == std::cmp::Ordering::Greater) {
+                        best = Some((label.clone(), g));
+                    }
+                }
+                Some(g) => println!(
+                    "    candidate {label}: before {} → after {}  {}  REJECT",
+                    disp_cost(g.before),
+                    disp_cost(g.after),
+                    g.kind()
+                ),
+                None => println!("    candidate {label}: no valid interface  REJECT"),
+            }
+        }
+        if let Some((label, g)) = best {
+            let body = candidates
+                .iter()
+                .find(|(l, _)| *l == label)
+                .map(|(_, b)| b.clone())
+                .expect("promoted candidate present");
+            concepts.push(bank::Concept {
+                body,
+                name: label.clone(),
+                arity: g.arity,
+            });
+            println!(
+                "    → ACQUIRE {label} (interface arity {}, {}: {} → {})",
+                g.arity,
+                g.kind(),
+                disp_cost(g.before),
+                disp_cost(g.after)
+            );
+        } else if candidates.is_empty() {
+            println!("    → no acquisition candidate (nothing discovered this generation)");
+        } else {
+            println!("    → nothing earned acquisition this generation");
+        }
         std::io::stdout().flush().ok();
     }
 
@@ -1037,29 +1056,36 @@ fn ladder(args: &[String]) {
         std::io::stdout().flush().ok();
     }
 
-    println!("\nFinal language ({} seeds):", seeds.len());
-    println!("  {}", labels.join(" "));
+    println!("\nAcquired language ({} concept{}):", concepts.len(), if concepts.len() == 1 { "" } else { "s" });
     println!(
-        "\nThe machine invented {} new concepts (C*) from the recurring corpus; the bank was never given them.",
-        seeds.len() - base.len()
+        "  {}",
+        if concepts.is_empty() {
+            "  (none — no discovery earned acquisition)".into()
+        } else {
+            concepts
+                .iter()
+                .map(|c| format!("{} (arity {})", c.name, c.arity))
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
     );
     println!("\nHonest fine print:");
     println!(
-        "  • The bank SOLVES mul/square/power by raw enumeration — the machine discovers them as\n\
-           new terms it was never given; that discovery is real concept invention."
+        "  • Discovery ≠ acquisition. The bank SOLVES mul/square/power by raw enumeration — the\n\
+           machine discovers them as new terms it was never given. Acquisition is a separate,\n\
+           measured decision: promote a candidate only if, installed as a Prim, it drops the\n\
+           held-out quotient cost (Δ > 0). Under that criterion mul (a×b×c ✗→17, a×b×c×d ✗→99)\n\
+           and power (x^(n+1) ✗→16 — a frontier mul alone cannot reach) are ACQUIRED; square is\n\
+           REJECTED (Δ ≤ 0) because mul already reaches its held-out x³ cheaply — discovered,\n\
+           but not worth a language slot on this distribution."
     );
     println!(
-        "  • Mining abstracts a *recurring* structure out of the solved family. On this thin corpus\n\
-           the mined abstraction is often not the clean textbook concept (here: a partial-application\n\
-           idiom), so it does not read as 'C17 = mul'."
+        "  • The recurring-idiom miner is kept, but demoted to one candidate source, judged by the\n\
+           same counterfactual gate. The mined partial-application idiom (C1) recurs yet Δ ≤ 0,\n\
+           so it is REJECTED — a concept is not worth its slot merely because it appears often."
     );
     println!(
-        "  • Naive seeding (injecting a concept as a size-1 atom) does NOT collapse search cost: it\n\
-           widens it for tasks that don't use the seed (▲ dearer above). The size-1 slot is not\n\
-           size-1 — the emitted solution still carries the concept's full λ-body."
-    );
-    println!(
-        "  • The cost collapse IS real, but it comes from changing the *search procedure* (condition\n\
+        "  • The cost collapse IS real, and it comes from changing the *search procedure* (condition\n\
            C: compose the concept over its inputs), not from seeding the existing bottom-up bank.\n\
            That is the thesis made concrete — a machine has acquired a concept only when reasoning\n\
            through it is cheaper than re-deriving it. Honest limits: condition C needs the concept's\n\
@@ -1096,26 +1122,32 @@ fn raw_cost(t: &parse::Task, opts: &bank::Options) -> u64 {
 
 /// The C2+C3 meta-experiment in one call: given an invented closed computation
 /// `body` (a candidate concept with NO known interface) and the currently-held
-/// concept set, does any composition arity k make the held-out family cheaper
-/// than the baseline (the machine's current best cognition, without `body`)?
+/// concept set, find the composition arity k that makes the held-out family
+/// cheapest, and report the effect *structurally* — as a before/after cost pair
+/// over `Cost ∈ N ∪ {∞}` (UNREACHABLE = ∞) — so promotion can distinguish a
+/// frontier move (∞ → finite) from a search-cost reduction (finite → smaller)
+/// without leaking a sentinel as an arithmetic delta.
 ///
-/// Returns the winning (arity, Δ) with Δ = baseline − cost > 0, or `None` if
-/// no arity earns its place (the candidate is not worth promoting). The arity
-/// is *inferred* by measurement, never supplied: with the wrong arity the
-/// concept applied to inputs yields non-domain values (or oversized normal
-/// forms pruned by the hash fuel) that never match the target, so it costs
-/// more — the correct arity is the one the cost structure picks.
-fn promote_value(
+/// Returns `Some(Gain)` for the best (cheapest-after) interface arity, or
+/// `None` if no arity in 1..=5 is worth trying. The arity is *inferred* by
+/// measurement, never supplied: with the wrong arity the concept applied to
+/// inputs yields non-domain values (or oversized normal forms pruned by the
+/// hash fuel) that never match the target, so the correct arity is the one the
+/// cost structure picks. `Gain::earns()` is the acquisition verdict: strictly
+/// cheaper (∞ → finite, or finite → smaller).
+fn propose_value(
     body: &Rc<term::Term>,
     current: &[bank::Concept],
     holdout: &[parse::Task],
     opts: &bank::Options,
     baseline: u64,
-) -> Option<(u32, u64)> {
-    // Early-exit: return the first arity that beats baseline. In these tasks
-    // exactly one arity is the correct interface (others produce non-domain
-    // values and cost more), so the first win is the inferred interface. This
-    // also avoids paying the wrong-arity grind for arities we no longer need.
+) -> Option<Gain> {
+    // Early-exit on the first arity that earns: in these tasks exactly one arity
+    // is the correct interface (others produce non-domain values and cost more),
+    // so the first win is the inferred interface, and the wrong-arity grind is
+    // skipped. For a candidate nothing earns, evaluate all arities to report the
+    // cheapest after (so a rejection still shows its measured before → after).
+    let mut best: Option<Gain> = None;
     for k in 1..=5u32 {
         let mut set = current.to_vec();
         set.push(bank::Concept {
@@ -1123,13 +1155,73 @@ fn promote_value(
             name: "cand".into(),
             arity: k,
         });
-        let c: u64 = holdout.iter().map(|t| concept_cost(t, &set, opts)).sum();
-        let delta = baseline.saturating_sub(c);
-        if delta > 0 {
-            return Some((k, delta));
+        let after: u64 = holdout.iter().map(|t| concept_cost(t, &set, opts)).sum();
+        let g = Gain {
+            arity: k,
+            before: baseline,
+            after,
+        };
+        if best.as_ref().map_or(true, |b: &Gain| after < b.after) {
+            best = Some(g.clone());
+        }
+        if g.earns() {
+            return Some(g);
         }
     }
-    None
+    best
+}
+
+/// The measured effect of installing a candidate as a Prim, as a cost pair
+/// over `Cost ∈ N ∪ {∞}`. No sentinel arithmetic is ever exposed as a delta.
+#[derive(Clone, Copy)]
+struct Gain {
+    /// The inferred composition arity.
+    arity: u32,
+    /// Held-out cost under the current ontology (UNREACHABLE = unsolved).
+    before: u64,
+    /// Held-out cost with the candidate installed at `arity`.
+    after: u64,
+}
+
+impl Gain {
+    /// Frontier move: baseline was unsolved (∞), the candidate makes it solvable.
+    fn frontier(&self) -> bool {
+        self.before >= UNREACHABLE && self.after < UNREACHABLE
+    }
+    /// Solved → solved cost reduction (0 if not applicable).
+    fn search_gain(&self) -> u64 {
+        if self.before < UNREACHABLE && self.after < self.before {
+            self.before - self.after
+        } else {
+            0
+        }
+    }
+    /// The acquisition verdict: strictly cheaper under `Cost ∈ N ∪ {∞}`.
+    fn earns(&self) -> bool {
+        self.after < self.before
+    }
+    /// Human label of the kind of change this candidate causes.
+    fn kind(&self) -> &'static str {
+        if self.frontier() {
+            "frontier gain"
+        } else if self.search_gain() > 0 {
+            "search gain"
+        } else if self.after == self.before {
+            "no gain"
+        } else {
+            "regression"
+        }
+    }
+}
+
+/// Rank two candidates for promotion: frontier gain ≻ search-cost reduction.
+/// Returns `Greater` if `a` outranks `b`.
+fn gain_rank(a: &Gain, b: &Gain) -> std::cmp::Ordering {
+    match (a.frontier(), b.frontier()) {
+        (true, false) => std::cmp::Ordering::Greater,
+        (false, true) => std::cmp::Ordering::Less,
+        _ => a.search_gain().cmp(&b.search_gain()),
+    }
 }
 
 /// n-fold product task over Church numerals (arity = n), several distinct rows.
@@ -1268,18 +1360,22 @@ fn promote(args: &[String]) {
         disp_cost(baseline0)
     );
 
-    match promote_value(&mul_sol, &[], &holdout0, &opts, baseline0) {
-        Some((arity, delta)) => { tick("gen0 promote mul");
+    match propose_value(&mul_sol, &[], &holdout0, &opts, baseline0) {
+        Some(g) if g.earns() => { tick("gen0 promote mul");
             println!(
-                "  → PROMOTE C1 = mul, interface arity {arity} (inferred, not given), Δ = {delta}"
+                "  → PROMOTE C1 = mul, interface arity {} (inferred, not given), {}: {} → {}",
+                g.arity,
+                g.kind(),
+                disp_cost(g.before),
+                disp_cost(g.after)
             );
             concepts.push(bank::Concept {
                 body: mul_sol,
                 name: "C1".into(),
-                arity,
+                arity: g.arity,
             });
         }
-        None => println!("  → mul NOT worth promoting (no arity beats raw; Δ ≤ 0)"),
+        _ => println!("  → mul NOT worth promoting (no arity reduces held-out cost)"),
     }
 
     // Negative control: a real but *unrelated* concept (square) evaluated on
@@ -1289,10 +1385,17 @@ fn promote(args: &[String]) {
     let square = parse::parse_expr("λa.λb.a(a(b))")
         .and_then(|e| parse::to_term(&e))
         .unwrap();
-    match promote_value(&square, &[], &holdout0, &opts, baseline0) {
-        Some(_) => println!("  negative control: square PROMOTED on products (unexpected!)"),
+    match propose_value(&square, &[], &holdout0, &opts, baseline0) {
+        Some(g) if g.earns() => println!("  negative control: square PROMOTED on products (unexpected!)"),
+        Some(g) => println!(
+            "  negative control: square on the product family → REJECTED ({}, {} → {}): it is real,\n\
+             \x20     but the wrong concept for this held-out family — the machine declines it.",
+            g.kind(),
+            disp_cost(g.before),
+            disp_cost(g.after)
+        ),
         None => println!(
-            "  negative control: square on the product family → REJECTED (Δ ≤ 0): it is real,\n\
+            "  negative control: square on the product family → REJECTED (no valid interface): it is real,\n\
              \x20     but the wrong concept for this held-out family — the machine declines it."
         ),
     }
@@ -1320,20 +1423,31 @@ fn promote(args: &[String]) {
          \x20     baseline (mul alone): 5-fold {} states",
         disp_cost(baseline1)
     );
-    match promote_value(&fold4_sol, &concepts, &holdout1, &opts, baseline1) {
-        Some((arity, delta)) => {
+    match propose_value(&fold4_sol, &concepts, &holdout1, &opts, baseline1) {
+        Some(g) if g.earns() => {
             tick("gen1 promote 4fold");
             println!(
-                "  → PROMOTE C2 = 4-fold product, interface arity {arity} (inferred), Δ = {delta}"
+                "  → PROMOTE C2 = 4-fold product, interface arity {} (inferred), {}: {} → {}",
+                g.arity,
+                g.kind(),
+                disp_cost(g.before),
+                disp_cost(g.after)
             );
             concepts.push(bank::Concept {
                 body: fold4_sol,
                 name: "C2".into(),
-                arity,
+                arity: g.arity,
             });
         }
+        Some(g) => println!(
+            "  → DECLINED ({}, {} → {}): mul alone already reaches the 5-fold, so the 4-fold is redundant.\n\
+             \x20     Second negative control — the machine refuses a real-but-unneeded concept.",
+            g.kind(),
+            disp_cost(g.before),
+            disp_cost(g.after)
+        ),
         None => println!(
-            "  → DECLINED (Δ ≤ 0): mul alone already reaches the 5-fold, so the 4-fold is redundant.\n\
+            "  → DECLINED (no valid interface): mul alone already reaches the 5-fold, so the 4-fold is redundant.\n\
              \x20     Second negative control — the machine refuses a real-but-unneeded concept."
         ),
     }
@@ -2302,16 +2416,16 @@ mod probe {
                 let baseline = crate::UNREACHABLE;
 
                 // (a) interface induction: mul is worth promoting, and its arity is inferred.
-                let (k, delta) =
-                    crate::promote_value(&mul, &[], &[crate::promote_prod_task(4)], &opts, baseline)
-                        .expect("mul should promote on the product family");
-                assert_eq!(k, 2, "interface arity inferred for mul should be 2, got {k}");
-                assert!(delta > 0, "Δ should be > 0 for mul");
+                let g = crate::propose_value(&mul, &[], &[crate::promote_prod_task(4)], &opts, baseline)
+                    .expect("mul should propose a valid interface on the product family");
+                assert!(g.earns(), "mul should earn acquisition on the product family");
+                assert_eq!(g.arity, 2, "interface arity inferred for mul should be 2, got {}", g.arity);
+                assert!(g.frontier(), "mul should move a frontier here (a×b×c×d ✗ → solved)");
 
                 // (b) wrong-family concept declined.
                 assert!(
-                    crate::promote_value(&square, &[], &[crate::promote_prod_task(4)], &opts, baseline)
-                        .is_none(),
+                    crate::propose_value(&square, &[], &[crate::promote_prod_task(4)], &opts, baseline)
+                        .map_or(true, |g| !g.earns()),
                     "square must be rejected on the product family (Δ ≤ 0)"
                 );
 
@@ -2323,8 +2437,8 @@ mod probe {
                 let baseline1 = crate::concept_cost(&crate::promote_prod_task(5), &mul_only, &opts_front);
                 assert!(baseline1 < crate::UNREACHABLE, "mul alone reaches the 5-fold");
                 assert!(
-                    crate::promote_value(&fold4_sol, &mul_only, &[crate::promote_prod_task(5)], &opts, baseline1)
-                        .is_none(),
+                    crate::propose_value(&fold4_sol, &mul_only, &[crate::promote_prod_task(5)], &opts, baseline1)
+                        .map_or(true, |g| !g.earns()),
                     "the redundant 4-fold must be declined (Δ ≤ 0)"
                 );
 

@@ -19,10 +19,25 @@ The whole trick, one line: **two terms that behave identically on the tests are 
 Give the bank raw λ + one operation (`add`). It invents the rest.
 
 ```
-ladder →  mul = λa.λb.λc.b(a(c))   square   power   parity
+ladder →  mul = λa.λb.λc.b(a(c))   square   power   parity   (raw λ + add)
 ```
 
 None of these were given. These are the textbook Church combinators, found, not handed over.
+But *discovering* a behavior and *acquiring* it are different acts. Acquisition is a
+measured decision: promote a candidate only if, installed as a Prim, it drops the held-out
+quotient-search cost (Δ > 0) — never because its subterm recurs often.
+
+```
+candidate       held-out quotient          verdict
+mul             a×b×c ✗→17                 ACQUIRE   (frontier gain)
+square          x³ already 3 (Δ ≤ 0)       REJECT    (mul covers it)
+power           x^(n+1) ✗→16               ACQUIRE   (frontier gain)
+mined idiom     a×b×c ✗→✗ (Δ ≤ 0)          REJECT    (recurs, buys nothing)
+```
+
+So: **c is a concept for a distribution ⟺ installing c makes reasoning on it cheaper.**
+square is discovered but not acquired; the recurring mined idiom is not acquired. mul and
+power earn their slots because each unlocks a frontier mul-alone cannot reach.
 
 The collapse is real — but it lives in the **search**, not the seed:
 
@@ -39,6 +54,8 @@ No reference ontology exists to grade seeds against. So a "good seed" means *gen
 
 A bad seed can slow search down. It can never produce a wrong answer: the oracle re-verifies every winner.
 
+Acquisition is counterfactual, not syntactic. A candidate becomes a concept only if, installed as a Prim, it reduces held-out quotient-search cost (Δ > 0). "Occurs often" and "is a textbook combinator" do not earn a slot on their own — `ladder` shows square (discovered, but mul already covers its held-out) and a recurring mined idiom both rejected, while mul and power are acquired for the frontier each unlocks.
+
 The walls are honest too:
 
 - Naive seed injection *widens* search (one run: median cost 0.016s → 0.265s). A size-1 atom seed branches against everything.
@@ -53,7 +70,7 @@ The real lever is more raw solves → bigger recurring idioms. That's the wall �
 cargo build --release
 ./target/release/supsearch mkbench solutions/round0 bench
 ./target/release/supsearch bootstrap bench --train ... --holdout ... --rounds 3 --budget 20
-./target/release/supsearch ladder    # it invents mul/square/power from raw λ + add
+./target/release/supsearch ladder    # raw discovers mul/square/power; only mul+power earn acquisition (counterfactual Δ>0), square and the mined idiom are rejected
 ./target/release/supsearch promote   # it picks mul itself, infers its arity, promotes it
 ./target/release/supsearch ablation  # why the fold-9 wall isn't the value representation
 ./target/release/supsearch diag      # provenance: winner ancestry, semantic redundancy, cap64 vs cap512
