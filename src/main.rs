@@ -76,6 +76,10 @@ fn run() {
         dep(&argv[1..]);
         return;
     }
+    if argv.first().map(String::as_str) == Some("gen") {
+        gen(&argv[1..]);
+        return;
+    }
     if argv.first().map(String::as_str) == Some("mkbench") {
         gen_benchmark(&argv[1..]);
         return;
@@ -1539,6 +1543,300 @@ fn dep(args: &[String]) {
     );
     std::io::stdout().flush().ok();
 }
+
+/// usage: supsearch gen [--budget SECS] [--max-size N]
+///
+/// C6: ontology-conditioned hypothesis generation. `dep` showed conditional
+/// USEFULNESS is real but conditional DISCOVERABILITY does not follow from the
+/// existing searches (bottom-up + flat composition). The fix is a grammar-based
+/// generator G(O) whose ONE production is the bounded self-iteration schema,
+/// applied uniformly to every concept in the ontology (and base ops):
+///
+///     iterate(C, seed)  =  λa.λn. ((n (C a)) seed)
+///
+/// realized in pure λ (the Church numeral n is itself an iterator — no new
+/// runtime primitive), generic (the ontology fills the hole; G names no concept),
+/// and applied ONE schema-application per proposal (single-application-depth:
+/// the acquisition loop, not G nesting, builds depth). The same production walks
+/// the Grzegorczyk tower: iterate(add,zero)=mul, iterate(mul,one)=pow,
+/// iterate(pow,one)=tet.
+///
+/// G is fixed; only O changes. The claim (G-conditional, not raw): pow ∉ G(∅)
+/// but pow ∈ G({mul}); tet ∉ G({mul}) but tet ∈ G({mul,pow}).
+fn gen(args: &[String]) {
+    use std::io::Write;
+    use std::rc::Rc;
+
+    let mut budget = 12u64;
+    let mut max_size = 14u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown gen arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let num = |n: u32| -> Rc<term::Term> {
+        parse::parse_expr(&bootstrap::church_num_str(n))
+            .and_then(|e| parse::to_term(&e))
+            .expect("church numeral")
+    };
+    let closed = |s: &str| -> Rc<term::Term> {
+        parse::parse_expr(s)
+            .and_then(|e| parse::to_term(&e))
+            .expect("closed term")
+    };
+    let task = |arity: usize, tests: Vec<(Vec<u32>, Rc<term::Term>)>| parse::Task {
+        arity,
+        tests: tests
+            .into_iter()
+            .map(|(args, want)| parse::Test {
+                args: args.iter().map(|&n| num(n)).collect(),
+                want,
+                outer: 0,
+            })
+            .collect(),
+    };
+    // Height-n power tower: a↑↑0=1, a↑↑(n+1)=a^(a↑↑n). Values stay < 2048 fuel,
+    // so a∈{1,2} (≤16) and a=3 only to height 2 (3↑↑3 = 3^27 ≫ fuel).
+    let tet_val = |a: u32, n: u32| -> u32 {
+        let mut v = 1u32;
+        for _ in 0..n {
+            v = a.pow(v);
+        }
+        v
+    };
+
+    let base = vec![closed("λa.λb.λf.λx.a(f)(b(f)(x))")]; // add
+
+    // ── family: discovery tasks + usefulness held-outs (values < 2048 fuel) ──
+    let mul_task = task(
+        2,
+        [(2, 3), (3, 4), (1, 5), (0, 7), (4, 4), (5, 2), (6, 2), (2, 6)]
+            .into_iter()
+            .map(|(a, b)| (vec![a, b], num(a * b)))
+            .collect(),
+    );
+    // rich a^n suite (a∈{0..4}, n∈{0..4}, values ≤ 64) — defeats fixed-power overfit.
+    let pow_task = task(
+        2,
+        [
+            (2, 0), (2, 1), (2, 2), (2, 3), (2, 4),
+            (3, 0), (3, 1), (3, 2), (3, 3),
+            (1, 0), (1, 4), (0, 0), (0, 2), (4, 2), (4, 3), (4, 1),
+        ]
+        .into_iter()
+        .map(|(a, n): (u32, u32)| (vec![a, n], num(a.pow(n))))
+        .collect(),
+    );
+    // a↑↑n: a∈{1,2} to height 3 (≤16), a=3 to height 2 (≤27). The a=3 rows are
+    // what distinguish tet (3↑↑2=27) from pow (3²=9) — an overfit pow can't pass.
+    let tet_task = task(
+        2,
+        [
+            (2, 0), (2, 1), (2, 2), (2, 3),
+            (1, 0), (1, 1), (1, 2), (1, 3),
+            (3, 0), (3, 1), (3, 2),
+        ]
+        .into_iter()
+        .map(|(a, n): (u32, u32)| (vec![a, n], num(tet_val(a, n))))
+        .collect(),
+    );
+
+    let h_mul = crate::promote_prod_task(4); // a×b×c×d
+    let h_pow = task(
+        2,
+        [(2, 3), (3, 2), (1, 4), (2, 1), (4, 2), (1, 0)]
+            .into_iter()
+            .map(|(x, n): (u32, u32)| (vec![x, n], num(x.pow(n + 1))))
+            .collect(), // x^(n+1)
+    );
+    let h_tet = task(
+        2,
+        [(2, 0), (2, 1), (2, 2), (1, 0), (1, 2)]
+            .into_iter()
+            .map(|(a, n): (u32, u32)| (vec![a, n], num(tet_val(a, n + 1))))
+            .collect(), // tower of height n+1, ≤3 → ≤16
+    );
+
+    let opts = bank_opts(&base, budget, max_size);
+    let seed_zero = num(0);
+    let seed_one = num(1);
+
+    // ── the fixed generic production: iterate(C,seed) = λa.λn.((n (C a)) seed) ──
+    // C and seed are closed terms → no de Bruijn shifting. body: n=var(0), a=var(1).
+    let iterate = |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::lam(term::app(
+            term::app(term::var(0), term::app(c.clone(), term::var(1))),
+            seed.clone(),
+        )))
+    };
+
+    // Does the candidate λ-term `body` compute `t`? Installed as a concept at the
+    // task's arity, verified by the composition model's oracle check (same
+    // verification the ladder uses for a discovered solution).
+    let solves = |t: &parse::Task, body: &Rc<term::Term>| -> bool {
+        let set = [bank::Concept {
+            body: body.clone(),
+            name: "cand".into(),
+            arity: t.arity as u32,
+        }];
+        bank::concept_solve(t, &set, &opts).solution.is_some()
+    };
+    // G(O): all one-schema-application proposals over the available concept bodies.
+    let gen_cands = |avail: &[Rc<term::Term>]| -> Vec<Rc<term::Term>> {
+        let mut out = Vec::new();
+        for cb in avail {
+            out.push(iterate(cb, &seed_zero));
+            out.push(iterate(cb, &seed_one));
+        }
+        out
+    };
+    let available = |ocs: &[bank::Concept]| -> Vec<Rc<term::Term>> {
+        base.iter()
+            .cloned()
+            .chain(ocs.iter().map(|c| c.body.clone()))
+            .collect()
+    };
+
+    println!("\n── C6: ontology-conditioned hypothesis generation ──");
+    println!("G fixed = {{iterate(C, seed) = λa.λn.((n (C a)) seed)}}; one schema-application per proposal");
+    println!("base = {{add}}; family: add → mul → pow → tet (Grzegorczyk tower, Church numerals)");
+    println!("budget: max_size {max_size}, {budget}s, pool 64, fuel 2048");
+    println!(
+        "{:<4} {:<9} {:<11} {:<15} {:<12} {:<18} {}",
+        "Gen", "candidate", "raw(base)?", "via G(O_{k-1})?", "via G(O_k)?", "useful(H)", "verdict"
+    );
+
+    let mut onto: Vec<bank::Concept> = Vec::new();
+    let mut trajectory: Vec<String> = vec!["∅".into()];
+    let rungs: [(&str, parse::Task, parse::Task); 3] = [
+        ("mul", mul_task, h_mul),
+        ("pow", pow_task, h_pow),
+        ("tet", tet_task, h_tet.clone()),
+    ];
+
+    for (gen_i, (name, t, h)) in rungs.into_iter().enumerate() {
+        let avail_prev: Vec<Rc<term::Term>> = if gen_i == 0 {
+            available(&Vec::new())
+        } else {
+            available(&onto[..onto.len() - 1])
+        };
+        let avail_cur = available(&onto);
+        let raw = raw_cost(&t, &opts) < UNREACHABLE;
+        let via_prev = gen_cands(&avail_prev).iter().any(|b| solves(&t, b));
+        let via_cur = gen_cands(&avail_cur).iter().any(|b| solves(&t, b));
+
+        let mut row = format!(
+            "{:<4} {:<9} {:<11} {:<15} {:<12} ",
+            gen_i,
+            name,
+            if raw { "✓" } else { "✗" },
+            if gen_i == 0 { "—" } else if via_prev { "✓" } else { "✗" },
+            if via_cur { "✓" } else { "✗" },
+        );
+
+        // the candidate that generalizes — feed it to the usefulness gate.
+        let cand = gen_cands(&avail_cur).into_iter().find(|b| solves(&t, b));
+
+        match cand {
+            Some(body) => {
+                let baseline = concept_cost(&h, &onto, &opts);
+                match propose_value(&body, &onto, &[h.clone()], &opts, baseline) {
+                    Some(g) => {
+                        let verdict = if g.earns() { "ACQUIRE" } else { "reject" };
+                        row.push_str(&format!(
+                            "{:<7}→{:<8} {:<9} {}",
+                            disp_cost(g.before),
+                            disp_cost(g.after),
+                            g.kind(),
+                            verdict
+                        ));
+                        if g.earns() {
+                            onto.push(bank::Concept {
+                                body,
+                                name: format!("C{}", gen_i + 1),
+                                arity: g.arity,
+                            });
+                            trajectory.push(format!("C{}={name}", gen_i + 1));
+                        }
+                    }
+                    None => row.push_str(&format!("{:<18} {}", "no interface", "reject")),
+                }
+            }
+            None => row.push_str(&format!("{:<18} {}", "not in G(O_k)", "—")),
+        }
+        println!("{row}");
+    }
+
+    println!(
+        "\nacquired trajectory: {}",
+        trajectory
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                if i == 0 {
+                    format!("O0={s}")
+                } else {
+                    format!("O{i}={s}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("  →  ")
+    );
+
+    // ── tet-usefulness probe: composition-{mul,pow} cannot synthesize the tower ──
+    // recursion (it needs tet as a Prim) — this is what earns tet its slot.
+    let tet_baseline = concept_cost(&h_tet, &onto[..2], &opts); // {mul,pow}: expect ✗
+    let tet_via = concept_cost(&h_tet, &onto, &opts); // {mul,pow,tet}: expect finite
+    println!(
+        "\ntet usefulness probe: composition-{{mul,pow}} on tower-holdout → {}; with tet-prim → {}",
+        disp_cost(tet_baseline),
+        disp_cost(tet_via)
+    );
+
+    println!(
+        "\nHonest fine print:\n\
+         • The claim is G-conditional, not raw. raw(base) finds pow (Church compression:\n\
+           λm.λn.n m is a ~6-node combinator) — the sharp claim is pow ∉ G(∅) but pow ∈\n\
+           G({{mul}}), and tet ∉ G({{mul}}) but tet ∈ G({{mul,pow}}). raw cannot build the\n\
+           chain (tet is raw-✗); G can. Discoverable is unlocked by G.\n\
+         • Usefulness kinds differ by concept and are reported honestly. mul and pow earn\n\
+           FRONTIER gains: composition cannot reach a×b×c×d (✗→65) or x^(n+1) (✗→16). tet\n\
+           earns a SEARCH gain (121→11), not a frontier: composition-{{mul,pow}} already\n\
+           solves the tower-holdout at 121 — for the representable bases (a∈{{1,2}}, values\n\
+           < 2048 fuel) the composition a^(a^n) happens to equal the tower. tet is the true\n\
+           generalizer (its discovery suite has a=3 rows that a^(a^n) fails) and is ~11×\n\
+           cheaper, so it earns its slot on cost. A genuine tet FRONTIER needs tower(2,4)=65536\n\
+           or a=3 height-3 (3^27), both beyond the 2048 fuel — an honest representable-range\n\
+           limit, not a forced result.\n\
+         • iterate is not 'recursion smuggled in to recover tetration': it is a generic\n\
+           bounded self-iteration rule realized in pure λ via the numeral iterator (already\n\
+           in base), names no concept, and walks the whole tower uniformly — the ontology,\n\
+           not the schema, decides which concept is 'next'. G proposes non-targets too\n\
+           (iterate(add,one)=1+na, iterate(mul,zero)=0); they fail the target-task\n\
+           verification (don't generalize) and are not acquired — the gate is selective,\n\
+           not forced.\n\
+         • Single-application-depth: G applies the schema once per proposal; the\n\
+           acquisition loop (O grows) builds depth. Without this rule pow would already be\n\
+           in G(∅) and the chain would collapse.\n\
+         • Value cap: tetration (2↑↑4 = 65536 > 2048 fuel) caps the honest chain at 3\n\
+           generations (O0→O1→O2→O3). Pent is value-unrepresentable; not forced."
+    );
+    std::io::stdout().flush().ok();
+}
+
 
 /// Cost sentinel for "the reasoner cannot solve this task" (unreachable).
 /// Large enough that "makes an unsolvable task solvable" reads as the
@@ -3053,6 +3351,102 @@ mod probe {
                 let b_cost = b.pool.iter().find(|e| e.keys == key).unwrap().cost;
                 let p_cost = p.pool.iter().find(|e| e.keys == key).unwrap().cost;
                 assert!(p_cost < b_cost, "prune rep ({p_cost}) not < baseline rep ({b_cost})");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// C6 regression: the fixed iterate-schema generator exhibits CONDITIONAL
+    /// discoverability. `pow = iterate(mul, one)` is NOT in G(∅) but IS in
+    /// G({mul}); `mul = iterate(add, zero)` IS in G(∅). G stays fixed — only the
+    /// ontology (available concept bodies) changes. (See README's dep note.)
+    #[test]
+    fn gen_conditional_discoverability() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let opts = bank::Options {
+                    max_size: 14,
+                    max_depth: 3,
+                    fuel: 40_000,
+                    time_budget_secs: 12.0,
+                    max_level_entries: 200_000,
+                    max_opaque_entries: 20_000,
+                    seeds: vec![],
+                    concepts: vec![],
+                };
+                // iterate(C, seed) = λa.λn.((n (C a)) seed) — C and seed closed,
+                // so no de Bruijn shifting; body: n=var(0), a=var(1).
+                let iterate =
+                    |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+                        term::lam(term::lam(term::app(
+                            term::app(term::var(0), term::app(c.clone(), term::var(1))),
+                            seed.clone(),
+                        )))
+                    };
+                let zero = church(0);
+                let one = church(1);
+                // G(avail): one schema-application per proposal over base + concepts.
+                let gen_cands = |avail: &[Rc<term::Term>]| -> Vec<Rc<term::Term>> {
+                    let mut out = Vec::new();
+                    for cb in avail {
+                        out.push(iterate(cb, &zero));
+                        out.push(iterate(cb, &one));
+                    }
+                    out
+                };
+                // a^n discovery suite (a∈{0..4}, n∈{0..4}, values ≤ 4^3 = 64).
+                let pow_task = parse::Task {
+                    arity: 2,
+                    tests: [
+                        (2, 0), (2, 1), (2, 2), (2, 3), (2, 4),
+                        (3, 0), (3, 1), (3, 2), (3, 3),
+                        (1, 0), (1, 4), (0, 0), (0, 2),
+                        (4, 2), (4, 3), (4, 1),
+                    ]
+                    .into_iter()
+                    .map(|(a, n)| parse::Test {
+                        args: vec![church(a), church(n)],
+                        want: church(a.pow(n)),
+                        outer: 0,
+                    })
+                    .collect(),
+                };
+                // "Does body generalize on pow?" — installed as a concept, verified
+                // by concept_solve (the reason-through-a-concept model).
+                let solves = |body: &Rc<term::Term>| -> bool {
+                    let set = [bank::Concept {
+                        body: body.clone(),
+                        name: "cand".into(),
+                        arity: 2,
+                    }];
+                    bank::concept_solve(&pow_task, &set, &opts)
+                        .solution
+                        .is_some()
+                };
+                let add = closed("λa.λb.λf.λx.a(f)(b(f)(x))");
+                let mul = iterate(&add, &zero); // = G(∅) proposal #1
+                assert!(
+                    !solves(&mul),
+                    "mul is a·n, not a^n — it must NOT generalize on the pow suite"
+                );
+                let pow = iterate(&mul, &one); // = G({mul}) proposal
+                assert!(
+                    solves(&pow),
+                    "iterate(mul, one) = pow, generalizes on the a^n suite"
+                );
+                // The sharp claim: pow ∉ G(∅), pow ∈ G({mul}).
+                let g_empty = gen_cands(&[add.clone()]);
+                let g_mul = gen_cands(&[add.clone(), mul.clone()]);
+                assert!(
+                    !g_empty.iter().any(|c| solves(c)),
+                    "pow ∉ G(∅): iterate(add,·) yields mul / 1+na, neither is a^n"
+                );
+                assert!(
+                    g_mul.iter().any(|c| solves(c)),
+                    "pow ∈ G({{mul}}): iterate(mul, one) is a G({{mul}}) proposal"
+                );
             })
             .unwrap()
             .join()

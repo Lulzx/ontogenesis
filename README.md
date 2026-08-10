@@ -60,6 +60,18 @@ Concepthood is *relative to the current ontology*, not intrinsic. `ontogen` eval
 
 **Conditional usefulness does not imply conditional discoverability.** `dep` records the negative: in the Grzegorczyk arithmetic tower, no dependency chain `C₁ ⇒ C₂ ⇒ C₃` (each C_{k+1} both *depends* on C_k to be found and *extends* what O_k can express) is constructible with the current searches. pow is base-findable (Church pow = λm.λn.n m, ~6 nodes), so mul→pow is not a discovery dependency; tet is not findable even through {mul,pow} at any depth, and a×b×c×d is raw-✗ and via-{mul}-✗ through bottom-up too (it needs depth 4 > max_depth 3; only pool-composition reaches it, and that is the usefulness mechanism). The structural reason is a closure argument: anything discovered by *composing* O lies in the composition closure of O, so it cannot be the very thing that extends that closure; and bottom-up finds compact combinators (mul, pow) directly but cannot synthesize deeper recursion (tet). Both searches sit on the same side of the wall. Concept-aware *reasoning* exists; concept-aware *generation of closure-extending hypotheses* does not — the search generator itself has to change.
 
+C6 answers the `dep` negative by moving concept-awareness into the **generator** (`gen`). The ontology must change the *grammar* of what can be proposed, not just provide atoms to compose. `G` is a single fixed production — the bounded self-iteration schema `iterate(C, seed) = λa.λn.((n (C a)) seed)`, realized in pure λ via the numeral iterator (no new runtime primitive) — applied once per proposal; the acquisition loop (O grows) builds depth. G stays fixed; only the ontology changes:
+
+```
+Gen  candidate raw(base)?  via G(O_{k-1})? via G(O_k)?  useful(H)          verdict
+0    mul       ✓           —               ✓            a×b×c×d ✗→65      frontier ACQUIRE
+1    pow       ✓           ✗               ✓            x^(n+1)  ✗→16      frontier ACQUIRE
+2    tet       ✗           ✗               ✓            tower    121→11    search  ACQUIRE
+acquired trajectory: O0=∅ → O1={mul} → O2={mul,pow} → O3={mul,pow,tet}
+```
+
+The sharp claim is G-conditional, not raw: raw finds pow (Church compression), but `pow ∉ G(∅)` yet `pow ∈ G({mul})`, and `tet ∉ G({mul})` yet `tet ∈ G({mul,pow})` — a dependency chain `C₁ ⇒ C₂ ⇒ C₃` that composition could never build, exactly the chain `dep` showed is absent from the current searches. tet earns a SEARCH gain (121→11), not a frontier, because composition-{mul,pow} overfits the tower holdout to a^(a^n) for the representable bases; a genuine tet frontier needs tower(2,4)=65536 or 3^27, both beyond the 2048 fuel — an honest range limit, not a forced result. G also proposes non-targets (1+na, constant 0); they fail the target-task verification and are not acquired — the gate is selective.
+
 The walls are honest too:
 
 - Naive seed injection *widens* search (one run: median cost 0.016s → 0.265s). A size-1 atom seed branches against everything.
@@ -77,6 +89,7 @@ cargo build --release
 ./target/release/supsearch ladder    # raw discovers mul/square/power; only mul+power earn acquisition (counterfactual Δ>0), square and the mined idiom are rejected
 ./target/release/supsearch ontogen   # the same candidates under several ontologies — Gain(c|O) is relative: square ACQUIRED under ∅, rejected under {mul}; power the mirror image (needs mul as substrate)
 ./target/release/supsearch dep       # recorded negative: conditional DISCOVERABILITY does not hold in the arithmetic tower (conditional usefulness does) — see fine print
+./target/release/supsearch gen       # C6: fixed iterate-schema generator G(O) — mul∈G(∅), pow∉G(∅)∧pow∈G({mul}), tet∉G({mul})∧tet∈G({mul,pow}); G fixed, only O changes
 ./target/release/supsearch promote   # it picks mul itself, infers its arity, promotes it
 ./target/release/supsearch ablation  # why the fold-9 wall isn't the value representation
 ./target/release/supsearch diag      # provenance: winner ancestry, semantic redundancy, cap64 vs cap512
