@@ -721,6 +721,9 @@ pub struct Meters {
     pub norm_steps: u64,
     /// Candidate evaluations aborted because eval/apply ran out of fuel.
     pub eval_aborts: u64,
+    /// Candidates dropped because a value couldn't be identified within budget
+    /// (structural: the 2048-fuel hash cap; canonical: a canonicalize abort).
+    pub hash_aborts: u64,
     /// Node-walks performed by numeral canonicalization.
     pub canon_nodes: u64,
     /// Canonicalization passes that aborted (value too big to observe).
@@ -733,6 +736,21 @@ pub struct Meters {
     pub max_transient: u64,
     /// Final pool size (how many distinct values the search kept).
     pub pool_entries: usize,
+}
+
+impl Meters {
+    /// Fill the nbe/canon meter fields from the thread-locals. Called before
+    /// BOTH the solution and non-solution returns so a solved size still reports
+    /// real C_value numbers (previously only the non-solution exit filled them).
+    /// `eval_aborts`/`hash_aborts` are counted in the search loop and left alone.
+    fn fill(&mut self, pool_len: usize) {
+        self.pool_entries = pool_len;
+        self.norm_steps = crate::nbe::beta_steps();
+        self.quote_nodes = crate::nbe::quote_nodes();
+        self.canon_nodes = crate::canon::canon_nodes();
+        self.canon_aborts = crate::canon::canon_aborts();
+        self.max_transient = crate::canon::max_transient();
+    }
 }
 
 /// Ablation variant of `concept_solve` (condition C). Identical search,
@@ -870,6 +888,7 @@ pub fn concept_solve_abl(
                     let mut v = match eval(&empty, &concept.body, &mut fuel) {
                         Ok(v) => v,
                         Err(_) => {
+                            m.eval_aborts += 1;
                             vals = None;
                             break;
                         }
@@ -886,6 +905,7 @@ pub fn concept_solve_abl(
                         }
                     }
                     if !ok {
+                        m.eval_aborts += 1;
                         vals = None;
                         break;
                     }
@@ -925,13 +945,14 @@ pub fn concept_solve_abl(
                         }
                     }
                     if !ok_key {
+                        m.hash_aborts += 1;
                         // drop the tuple (too big to identify within budget)
                     } else if keys == target_keys {
                         let mut sol = term.clone();
                         for _ in 0..k {
                             sol = lam(sol);
                         }
-                        m.pool_entries = pool.len();
+                        m.fill(pool.len());
                         return (
                             Outcome {
                                 solution: Some(sol),
@@ -966,13 +987,7 @@ pub fn concept_solve_abl(
         }
     }
 
-    m.pool_entries = pool.len();
-    m.norm_steps = crate::nbe::beta_steps();
-    m.eval_aborts = crate::nbe::eval_aborts();
-    m.quote_nodes = crate::nbe::quote_nodes();
-    m.canon_nodes = crate::canon::canon_nodes();
-    m.canon_aborts = crate::canon::canon_aborts();
-    m.max_transient = crate::canon::max_transient();
+    m.fill(pool.len());
     (Outcome { solution: None, stats: Stats { built, ..Default::default() } }, m)
 }
 

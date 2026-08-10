@@ -142,6 +142,17 @@ fn main() {
                 .join()
                 .unwrap();
         }
+        Some("gridrep") => {
+            // Same large-stack requirement: grid NBE recurses deep on the fold
+            // structure, and the probe hashes 30×30 grids.
+            let a = args[1..].to_vec();
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(move || gridrep(&a))
+                .unwrap()
+                .join()
+                .unwrap();
+        }
         _ => bridge(&args),
     }
 }
@@ -443,6 +454,96 @@ fn gridacq(args: &[String]) {
     std::io::stdout().flush().ok();
 }
 
+/// The value-representation probe: does quotient reasoning stay cheap when the
+/// semantic object is an ARC-sized grid? Mirror is a *given* concept (arity 1),
+/// so composition is one application; the only knob is how a grid's identity is
+/// computed for dedup + target matching. Each size runs `concept_solve_abl`
+/// twice — structural (2048-fuel hash cap, the historical wall) and canonical
+/// (compact Val-level `GridKey`, O(wh) no numeral expansion) — and prints the
+/// C_composition / C_value split per mode.
+fn gridrep(args: &[String]) {
+    use std::io::Write;
+    let mut budget = 8u64;
+    let mut max_size = 14u32;
+    // The candidate is a lazy fold: forcing it during recognition costs more than
+    // the default 20000 fuel, so give the canonical path a generous budget. The
+    // structural path's 2048 cap is hardcoded and unaffected by this.
+    let mut fuel = 1_000_000i64;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--fuel" => {
+                fuel = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown gridrep arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+    let mut opts = bank_opts(budget, max_size);
+    opts.fuel = fuel;
+    let mirror = mirror_concept();
+
+    // Square grids, 3² → 30². 8×8 is the historical structural wall (the expanded
+    // normal form blows the 2048 hash cap); 30×30 is the ARC-sized target.
+    let sizes = [3usize, 5, 8, 12, 16, 24, 30];
+
+    println!("\n── arc1 gridrep: is the wall representation, not ARC semantics? ──");
+    println!("mirror (arity 1) is a given concept; C_composition = built, C_value = canon/quote nodes");
+    println!("structural = 2048-fuel hash cap (historical); canonical = compact GridKey (O(wh))");
+    println!();
+    println!(
+        "{:>5} {:>10} {:>6} {:>8} {:>10} {:>12} {:>11} {:>10} {:>7}",
+        "grid", "mode", "built", "beta", "C_value", "max_trans", "hash_abort", "eval_abort", "solved"
+    );
+
+    for &s in &sizes {
+        let t = task(s, s);
+        for (label, use_canon) in [("structural", false), ("canonical", true)] {
+            nbe::meter_on(true);
+            nbe::meter_reset();
+            supsearch::canon::meter_on(true);
+            supsearch::canon::meter_reset();
+            let (out, m) = bank::concept_solve_abl(&t, &[mirror.clone()], &opts, use_canon);
+            nbe::meter_on(false);
+            supsearch::canon::meter_on(false);
+            // C_value: canonical mode walks the compact grid (canon_nodes);
+            // structural mode quotes the expanded normal form (quote_nodes).
+            let c_value = m.canon_nodes + m.quote_nodes;
+            println!(
+                "{:>3}² {:>10} {:>6} {:>8} {:>10} {:>12} {:>11} {:>10} {:>7}",
+                s,
+                label,
+                out.stats.built,
+                m.norm_steps,
+                c_value,
+                m.max_transient,
+                m.hash_aborts,
+                m.eval_aborts,
+                if out.solution.is_some() { "✓" } else { "✗" }
+            );
+        }
+    }
+
+    println!();
+    println!(
+        "  expected: C_composition (built) stays ≈ O(1) in both modes; C_value grows ~O(wh) with cells;\n\
+         \x20  structural ✗ at ~8×8 (hash_aborts spike on the 2048 cap); canonical ✓ to 30×30 (hash_aborts ≈ 0).\n\
+         \x20  The wall is value representation, not ARC semantics — the compact GridKey lifts it."
+    );
+    std::io::stdout().flush().ok();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -630,6 +731,102 @@ mod tests {
                     ),
                     None => {} // no valid interface is also a clean rejection
                 }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Run the ablation solve for a square grid, returning (outcome, meters).
+    /// The candidate is a lazy fold, so give the canonical path a generous fuel
+    /// budget (the structural 2048 cap is hardcoded and unaffected).
+    fn abl(w: usize, h: usize, use_canon: bool) -> (bank::Outcome, bank::Meters) {
+        let mut o = opts();
+        o.fuel = 1_000_000;
+        let mirror = mirror_concept();
+        nbe::meter_on(true);
+        nbe::meter_reset();
+        supsearch::canon::meter_on(true);
+        supsearch::canon::meter_reset();
+        let r = bank::concept_solve_abl(&task(w, h), &[mirror], &o, use_canon);
+        nbe::meter_on(false);
+        supsearch::canon::meter_on(false);
+        r
+    }
+
+    /// Canonical mode must solve a 30×30 mirror (the ARC-sized target): the
+    /// compact GridKey keeps the transient small enough to identify within
+    /// budget, so no candidate is dropped on the hash cap.
+    #[test]
+    fn gridrep_canonical_solves_30() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let (out, m) = abl(30, 30, true);
+                assert!(
+                    out.solution.is_some(),
+                    "canonical mode must solve a 30×30 mirror"
+                );
+                assert_eq!(
+                    m.hash_aborts, 0,
+                    "canonical mode must not drop candidates on the hash cap (hash_aborts {})",
+                    m.hash_aborts
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// The 2048-fuel structural wall must move: there is a size where structural
+    /// mode fails (or drops candidates) yet canonical mode solves the same grid.
+    #[test]
+    fn gridrep_structural_wall_moves() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let mut found = false;
+                for s in [8usize, 12, 16, 24, 30] {
+                    let (so, sm) = abl(s, s, false);
+                    let (co, _cm) = abl(s, s, true);
+                    if so.solution.is_none() && co.solution.is_some() {
+                        found = true;
+                        break;
+                    }
+                    let _ = sm; // structural meters available if needed
+                }
+                assert!(
+                    found,
+                    "structural mode must fail where canonical solves (the wall must move)"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Composition cost stays flat (one mirror application) while value cost
+    /// (canon_nodes) grows with cells — the C_composition / C_value split.
+    #[test]
+    fn gridrep_composition_flat() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let (o3, m3) = abl(3, 3, true);
+                let (o30, m30) = abl(30, 30, true);
+                assert!(o3.solution.is_some() && o30.solution.is_some());
+                assert!(
+                    o30.stats.built <= o3.stats.built + 2,
+                    "composition cost must stay flat (3² built {}, 30² built {})",
+                    o3.stats.built,
+                    o30.stats.built
+                );
+                assert!(
+                    m30.canon_nodes > m3.canon_nodes,
+                    "value cost must grow with cells (3² canon_nodes {}, 30² {})",
+                    m3.canon_nodes,
+                    m30.canon_nodes
+                );
             })
             .unwrap()
             .join()
