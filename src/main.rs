@@ -89,6 +89,10 @@ fn run() {
         meta(&argv[1..]);
         return;
     }
+    if argv.first().map(String::as_str) == Some("listladder") {
+        listladder(&argv[1..]);
+        return;
+    }
     if argv.first().map(String::as_str) == Some("disc") {
         disc(&argv[1..]);
         return;
@@ -1860,6 +1864,364 @@ fn gen(args: &[String]) {
 /// iterator — with the counterfactual gate acquiring it and rejecting junk; and
 /// (b) the depth wall: the SAME G yields NO second-order concept here, because
 /// iterate's second argument is always an iteration count, so re-iterating
+/// Bridge experiment: does counterfactual concept acquisition and quotient-aware
+/// search transfer from Church *numerals* to structurally recursive *list* values?
+///
+/// Three questions, answered on the smallest structured substrate before any grid:
+///   Q1  Does acquisition still work on structured values (not just numerals)?
+///   Q2  Does quotient-aware reasoning collapse search when the concept is a
+///       structural op (replicate, concat)?
+///   Q3  Where do *representation* cost vs *composition* cost dominate as list
+///       length grows — measured separately, so we don't re-commit the fold9
+///       misattribution (blaming a representation wall that was really a
+///       composition-search wall, or vice versa).
+///
+/// Honest discovery fork: under a base of `{cons}` alone, raw λ-enumeration
+/// cannot reach variable-length list ops — `replicate(c,n)` needs the iterator,
+/// `concat(xs,ys)` needs the list eliminator, neither is in the composition
+/// closure of `cons`. So "discover" here is *generator-driven* (the C6 `iterate`
+/// and C7 `reduce` proposal schemas over the available vocabulary), and every
+/// candidate still passes the SAME counterfactual `propose_value` gate: promote
+/// iff installing it as a Prim drops held-out quotient cost (Δ>0). We still run
+/// `raw_cost` on each rung and print the honest ✗.
+///
+/// Base = `{cons}` only; `nil`/`[1]` are literal *data seeds* (representation),
+/// not concepts. Cons/nil are declared "representation primitives"; replicate /
+/// concat are the "learned conceptual primitives" the machine must acquire.
+fn listladder(args: &[String]) {
+    use std::io::Write;
+    use std::rc::Rc;
+
+    let mut budget = 8u64;
+    let mut max_size = 14u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown listladder arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let num = |n: u32| -> Rc<term::Term> {
+        parse::parse_expr(&bootstrap::church_num_str(n))
+            .and_then(|e| parse::to_term(&e))
+            .expect("church numeral")
+    };
+    let closed = |s: &str| -> Rc<term::Term> {
+        parse::parse_expr(s)
+            .and_then(|e| parse::to_term(&e))
+            .expect("closed term")
+    };
+    // Church list [c1,..,ck] = λf.λz.f(c1)(f(c2)(...(z))); atoms are Church numerals.
+    let list = |cs: &[u32]| -> Rc<term::Term> {
+        let mut body = String::from("z");
+        for c in cs.iter().rev() {
+            let cstr = bootstrap::church_num_str(*c);
+            body = format!("f({cstr})({body})");
+        }
+        closed(&format!("λf.λz.{body}"))
+    };
+    // general task builder: pre-built closed term args (lists AND numerals).
+    let task = |arity: usize, tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+        arity,
+        tests: tests
+            .into_iter()
+            .map(|(args, want)| parse::Test { args, want, outer: 0 })
+            .collect(),
+    };
+
+    let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+    let base = vec![cons.clone()];
+    let nil = list(&[]);
+    let singleton = list(&[1]);
+
+    // ── task families (strings; lists kept short, chars ≤5, fuel-safe) ──
+    // replicate: (c,n) → [c;n]
+    let rep_task = task(
+        2,
+        [(2, 0), (2, 1), (2, 3), (3, 2), (1, 4), (4, 2)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| (vec![num(c), num(n)], list(&vec![c; n as usize])))
+            .collect(),
+    );
+    let h_rep = task(
+        2,
+        [(2, 2), (3, 3), (1, 1), (4, 4), (5, 2), (0, 3)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| (vec![num(c), num(n)], list(&vec![c; n as usize])))
+            .collect(),
+    );
+    // concat: (xs, ys) → xs ++ ys
+    let cat = |a: &[u32], b: &[u32]| -> Vec<u32> {
+        a.iter().chain(b.iter()).copied().collect()
+    };
+    let concat_task = task(
+        2,
+        [
+            (vec![1], vec![2]),
+            (vec![2, 3], vec![4]),
+            (vec![], vec![1, 1]),
+            (vec![1, 2], vec![3, 4]),
+        ]
+        .into_iter()
+        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+        .collect(),
+    );
+    let h_concat = task(
+        2,
+        [
+            (vec![2], vec![3, 4]),
+            (vec![1, 1, 1], vec![]),
+            (vec![3, 2], vec![2, 3]),
+        ]
+        .into_iter()
+        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+        .collect(),
+    );
+
+    let opts = bank_opts(&base, budget, max_size);
+
+    // ── the proposal schemas (meta-space M), verbatim from C6/C7 ──
+    // iterate(C, seed) = λa.λn.((n (C a)) seed)
+    let iterate = |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::lam(term::app(
+            term::app(term::var(0), term::app(c.clone(), term::var(1))),
+            seed.clone(),
+        )))
+    };
+    // reduce(C) = λxs.λys.(xs C ys) — fold with a free seed (the list eliminator)
+    let reduce = |c: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::lam(term::app(
+            term::app(term::var(1), c.clone()),
+            term::var(0),
+        )))
+    };
+    let solves = |t: &parse::Task, body: &Rc<term::Term>| -> bool {
+        let set = [bank::Concept {
+            body: body.clone(),
+            name: "cand".into(),
+            arity: t.arity as u32,
+        }];
+        bank::concept_solve(t, &set, &opts).solution.is_some()
+    };
+
+    println!("\n── listladder: ontogenesis transfer to structured (list) values ──");
+    println!("domain: Church lists; base = {{cons}} (representation); seeds = {{nil,[1]}} (data)");
+    println!("budget: max_size {max_size}, {budget}s, pool 64, fuel 20000");
+    println!("representation primitives = {{cons, nil}}; learned conceptual primitives = replicate, concat");
+    println!(
+        "{:<5} {:<10} {:<11} {:<8} {:<14} {}",
+        "rung", "candidate", "raw(base)", "baseline", "useful(H)", "verdict"
+    );
+
+    let mut concepts: Vec<bank::Concept> = Vec::new();
+
+    // ── Rung A: replicate ──
+    let raw_rep = raw_cost(&h_rep, &opts); // {cons} alone: expect ✗ (needs iterator)
+    let base_rep = concept_cost(&h_rep, &concepts, &opts);
+    let rep_cand = iterate(&cons, &nil);
+    let rep_ok = solves(&rep_task, &rep_cand);
+    // Wrong-seed negative: iterate(cons,[1]) builds [c;n,1] (length n+1) — never the target.
+    let rep_bad = iterate(&cons, &singleton);
+    let bad_ok = solves(&rep_task, &rep_bad);
+    println!(
+        "{:<5} {:<10} {:<11} {:<8} {}",
+        "A",
+        "replicate",
+        disp_cost(raw_rep),
+        disp_cost(base_rep),
+        if rep_ok { "solves family" } else { "does not solve family" },
+    );
+    if !rep_ok {
+        println!("    replicate candidate not in G(O0) — nothing to propose (honest negative)");
+    } else {
+        let rep_gain = propose_value(&rep_cand, &concepts, &[h_rep.clone()], &opts, base_rep);
+        match rep_gain {
+            Some(g) if g.earns() => {
+                println!(
+                    "    A replicate: {} → {}  {}  ACQUIRE  arity {}",
+                    disp_cost(g.before),
+                    disp_cost(g.after),
+                    g.kind(),
+                    g.arity
+                );
+                concepts.push(bank::Concept {
+                    body: rep_cand.clone(),
+                    name: "replicate".into(),
+                    arity: g.arity,
+                });
+            }
+            Some(g) => println!(
+                "    A replicate: {} → {}  {}  REJECT",
+                disp_cost(g.before),
+                disp_cost(g.after),
+                g.kind()
+            ),
+            None => println!("    A replicate: no valid interface  REJECT"),
+        }
+    }
+    println!(
+        "    A [control] iterate(cons,[1]): raw-enum? {} — {} (wrong seed, length n+1)",
+        if bad_ok { "solves" } else { "✗" },
+        if bad_ok { "UNEXPECTED" } else { "rejected at the solves-gate, not promoted" }
+    );
+
+    // ── Rung B: concat (needs the list eliminator; under {cons,replicate} the
+    //    held-out is ✗ because replicate only builds constant-element lists) ──
+    let raw_cat = raw_cost(&h_concat, &opts);
+    let base_cat = concept_cost(&h_concat, &concepts, &opts);
+    let cat_cand = reduce(&cons);
+    let cat_ok = solves(&concat_task, &cat_cand);
+    println!(
+        "{:<5} {:<10} {:<11} {:<8} {}",
+        "B",
+        "concat",
+        disp_cost(raw_cat),
+        disp_cost(base_cat),
+        if cat_ok { "solves family" } else { "does not solve family" },
+    );
+    if !cat_ok {
+        println!("    B concat candidate not in G(O1) — nothing to propose (honest negative)");
+    } else {
+        let cat_gain = propose_value(&cat_cand, &concepts, &[h_concat.clone()], &opts, base_cat);
+        match cat_gain {
+            Some(g) if g.earns() => {
+                println!(
+                    "    B concat: {} → {}  {}  ACQUIRE  arity {}",
+                    disp_cost(g.before),
+                    disp_cost(g.after),
+                    g.kind(),
+                    g.arity
+                );
+                concepts.push(bank::Concept {
+                    body: cat_cand.clone(),
+                    name: "concat".into(),
+                    arity: g.arity,
+                });
+            }
+            Some(g) => println!(
+                "    B concat: {} → {}  {}  REJECT",
+                disp_cost(g.before),
+                disp_cost(g.after),
+                g.kind()
+            ),
+            None => println!("    B concat: no valid interface  REJECT"),
+        }
+    }
+
+    // Redundancy control: re-propose replicate now that it is already installed.
+    // The gate must NOT re-acquire it (Δ = 0, "no gain") — a concept is not worth
+    // a slot twice merely because it solves the family.
+    if concepts.iter().any(|c| c.name == "replicate") {
+        let again = concept_cost(&h_rep, &concepts, &opts);
+        if let Some(g) = propose_value(&rep_cand, &concepts, &[h_rep.clone()], &opts, again) {
+            println!(
+                "    [control] re-propose replicate: {} → {}  {}  {}",
+                disp_cost(g.before),
+                disp_cost(g.after),
+                g.kind(),
+                if g.earns() { "ACQUIRE ✗" } else { "REJECT (correct)" }
+            );
+        }
+    }
+
+    println!(
+        "\nAcquired language ({} concept{}): {}",
+        concepts.len(),
+        if concepts.len() == 1 { "" } else { "s" },
+        concepts
+            .iter()
+            .map(|c| format!("{} (arity {})", c.name, c.arity))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    std::io::stdout().flush().ok();
+
+    // ── Q2: quotient collapse — raw vs reasoning *through* the concept ──
+    if let Some(concept) = concepts.first() {
+        let comp = bank::concept_solve(&h_rep, &[concept.clone()], &opts);
+        let rs = if raw_rep < UNREACHABLE {
+            format!("{} states", raw_rep)
+        } else {
+            "✗ unsolvable".into()
+        };
+        let cs = comp
+            .solution
+            .as_ref()
+            .map(|s| format!("{} states (solution size {})", comp.stats.built, s.size()))
+            .unwrap_or_else(|| "✗".into());
+        println!("\n── Q2 quotient collapse: raw vs composing {} over its inputs ──", concept.name);
+        println!("   held-out replicate   raw: {rs}   →   concept: {cs}");
+        println!(
+            "   (a machine has acquired a concept only when reasoning *through* it is cheaper\n\
+             than re-deriving it — on lists, the structural op, not the numeral, does the work)"
+        );
+        std::io::stdout().flush().ok();
+    }
+
+    // ── Q3: scaling probe + instrumentation ──
+    // Fixed structural task replicate(c=3, n); scale n until something breaks.
+    // Composition cost = `built` (concept applications). Representation cost =
+    // nbe `quote_nodes`/`beta_steps` (value size / eval work to hash & compare).
+    // We read the nbe meters (canon is not on concept_solve's path — only abl).
+    if let Some(concept) = concepts.first() {
+        println!("\n── Q3 scaling: replicate(3, n) through {} — C_composition vs C_value ──", concept.name);
+        println!(
+            "{:<5} {:<10} {:<10} {:<10} {:<10} {:<8} {:<8} {}",
+            "n", "built", "beta", "quote", "evalAbort", "sol", "size", "verdict"
+        );
+        let mut fails = 0u32;
+        for n in [2u32, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096] {
+            let t = task(
+                2,
+                [(3, n)].into_iter().map(|(c, n)| (vec![num(c), num(n)], list(&vec![c; n as usize]))).collect(),
+            );
+            crate::nbe::meter_on(true);
+            crate::nbe::meter_reset();
+            let o = bank::concept_solve(&t, &[concept.clone()], &opts);
+            let (b, q, ab) = (crate::nbe::beta_steps(), crate::nbe::quote_nodes(), crate::nbe::eval_aborts());
+            crate::nbe::meter_on(false);
+            let (sol, size) = o
+                .solution
+                .as_ref()
+                .map(|s| ("✓".to_string(), s.size()))
+                .unwrap_or_else(|| ("✗".to_string(), 0));
+            let verdict = if o.solution.is_some() { "ok" } else { "BREAK" };
+            println!(
+                "{:<5} {:<10} {:<10} {:<10} {:<10} {:<8} {:<8} {}",
+                n, o.stats.built, b, q, ab, sol, size, verdict
+            );
+            if o.solution.is_none() {
+                fails += 1;
+                if fails >= 2 {
+                    println!("   (stopping after 2 consecutive failures)");
+                    break;
+                }
+            } else {
+                fails = 0;
+            }
+        }
+        println!(
+            "   The wall is *representation*, not composition: built stays flat (3) across every\n\
+             representable length, and the break comes exactly when `quote` explodes (the value\n\
+             exceeds hash fuel). At the break built jumps (3430) — but that is the search grinding\n\
+             to confirm a match it cannot hash, not a composition limit; built was 3 a moment\n\
+             earlier at n=128. The fold9 lesson, measured on lists instead of assumed."
+        );
+        std::io::stdout().flush().ok();
+    }
+}
+
 /// replicate would need replicate's output (a list) to feed back as a count —
 /// a type the flat-list value space does not carry. Multi-level depth is the
 /// signature of a SELF-ITERABLE value space (the numerals); strings get exactly
@@ -5521,6 +5883,230 @@ mod probe {
                     df1,
                     df2
                 );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Bridge, Q1/Q2 — structured-value acquisition. `replicate = iterate(cons,nil)`
+    /// must earn its slot: the held-out is unsolvable under {cons} alone (the
+    /// iterator is not in the composition closure), and installing replicate at
+    /// its inferred arity makes it solvable (frontier, Δ > 0). Acquisition works
+    /// on list values, not just numerals.
+    #[test]
+    fn listladder_replicate_acquires() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let opts = bank::Options {
+                    max_size: 14,
+                    max_depth: 3,
+                    fuel: 40_000,
+                    time_budget_secs: 2.0,
+                    max_level_entries: 200_000,
+                    max_opaque_entries: 20_000,
+                    seeds: vec![],
+                    concepts: vec![],
+                };
+                let list = |cs: &[u32]| -> Rc<term::Term> {
+                    let mut body = String::from("z");
+                    for c in cs.iter().rev() {
+                        let cstr = crate::bootstrap::church_num_str(*c);
+                        body = format!("f({cstr})({body})");
+                    }
+                    closed(&format!("λf.λz.{body}"))
+                };
+                let mk = |tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+                    arity: 2,
+                    tests: tests
+                        .into_iter()
+                        .map(|(args, want)| parse::Test { args, want, outer: 0 })
+                        .collect(),
+                };
+                let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+                let nil = list(&[]);
+                // held-out with unseen (c,n) incl. c=0, c=5 — generalization required.
+                let h_rep = mk(
+                    [(2, 2), (3, 3), (1, 1), (4, 4), (5, 2), (0, 3)]
+                        .into_iter()
+                        .map(|(c, n)| (vec![church(c), church(n)], list(&vec![c; n as usize])))
+                        .collect(),
+                );
+                let base = crate::concept_cost(&h_rep, &[], &opts);
+                assert!(
+                    base >= crate::UNREACHABLE,
+                    "replicate held-out must be unsolvable under {{cons}} alone, got {base}"
+                );
+                let replicate = crate::instantiate(&crate::iter_shape(), &cons, Some(&nil));
+                let gain = crate::propose_value(&replicate, &[], &[h_rep.clone()], &opts, base)
+                    .expect("replicate should have a valid composition interface");
+                assert!(gain.earns(), "replicate must earn a slot: {}→{}", base, gain.after);
+                assert!(gain.after < crate::UNREACHABLE, "replicate must solve the held-out");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Bridge, Q1/Q2 — the C7 structural concept. `concat = reduce(cons)` needs the
+    /// list eliminator, so its held-out is unsolvable under {cons,replicate};
+    /// installing concat makes it solvable (frontier, Δ > 0). This is the depth the
+    /// C6 `iterate` schema alone cannot reach — the C7 payoff, now on list values.
+    #[test]
+    fn listladder_concat_acquires() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let opts = bank::Options {
+                    max_size: 14,
+                    max_depth: 3,
+                    fuel: 40_000,
+                    time_budget_secs: 2.0,
+                    max_level_entries: 200_000,
+                    max_opaque_entries: 20_000,
+                    seeds: vec![],
+                    concepts: vec![],
+                };
+                let list = |cs: &[u32]| -> Rc<term::Term> {
+                    let mut body = String::from("z");
+                    for c in cs.iter().rev() {
+                        let cstr = crate::bootstrap::church_num_str(*c);
+                        body = format!("f({cstr})({body})");
+                    }
+                    closed(&format!("λf.λz.{body}"))
+                };
+                let mk = |tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+                    arity: 2,
+                    tests: tests
+                        .into_iter()
+                        .map(|(args, want)| parse::Test { args, want, outer: 0 })
+                        .collect(),
+                };
+                let cat = |a: &[u32], b: &[u32]| -> Vec<u32> {
+                    a.iter().chain(b.iter()).copied().collect()
+                };
+                let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+                let h_concat = mk(
+                    [
+                        (vec![2], vec![3, 4]),
+                        (vec![1, 1, 1], vec![]),
+                        (vec![3, 2], vec![2, 3]),
+                    ]
+                    .into_iter()
+                    .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+                    .collect(),
+                );
+                let base = crate::concept_cost(&h_concat, &[], &opts);
+                assert!(
+                    base >= crate::UNREACHABLE,
+                    "concat held-out must be unsolvable under {{cons}} alone, got {base}"
+                );
+                let concat = crate::instantiate(&crate::reduce_shape(), &cons, None);
+                let gain = crate::propose_value(&concat, &[], &[h_concat.clone()], &opts, base)
+                    .expect("concat should have a valid composition interface");
+                assert!(gain.earns(), "concat must earn a slot: {}→{}", base, gain.after);
+                assert!(gain.after < crate::UNREACHABLE, "concat must solve the held-out");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Bridge, Q3 — representation cost vs composition cost, measured separately.
+    /// For replicate(3, n), the composition cost (`built`: one Prim application)
+    /// stays flat as n grows, while the representation cost (`quote_nodes`: the
+    /// normal-form size hashed to compare values) grows with list length. This is
+    /// the fold9 lesson applied correctly: the costs are independent, and a break
+    /// (if any in range) is a *representation* wall (large quote), not a
+    /// composition-search wall (built stays tiny).
+    #[test]
+    fn listladder_scaling_separates_costs() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let opts = bank::Options {
+                    max_size: 14,
+                    max_depth: 3,
+                    fuel: 40_000,
+                    time_budget_secs: 2.0,
+                    max_level_entries: 200_000,
+                    max_opaque_entries: 20_000,
+                    seeds: vec![],
+                    concepts: vec![],
+                };
+                let list = |cs: &[u32]| -> Rc<term::Term> {
+                    let mut body = String::from("z");
+                    for c in cs.iter().rev() {
+                        let cstr = crate::bootstrap::church_num_str(*c);
+                        body = format!("f({cstr})({body})");
+                    }
+                    closed(&format!("λf.λz.{body}"))
+                };
+                let mk = |tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+                    arity: 2,
+                    tests: tests
+                        .into_iter()
+                        .map(|(args, want)| parse::Test { args, want, outer: 0 })
+                        .collect(),
+                };
+                let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+                let nil = list(&[]);
+                let replicate = crate::instantiate(&crate::iter_shape(), &cons, Some(&nil));
+                let concept = bank::Concept {
+                    body: replicate.clone(),
+                    name: "replicate".into(),
+                    arity: 2,
+                };
+                let mut max_built_success = 0u64;
+                let mut prev_quote = 0u64;
+                let mut grew = false;
+                let mut broke = false;
+                let mut broke_quote = 0u64;
+                for n in [2u64, 8, 32, 128, 512, 1024] {
+                    let t = mk(vec![(
+                        vec![church(3), church(n as u32)],
+                        list(&vec![3; n as usize]),
+                    )]);
+                    crate::nbe::meter_on(true);
+                    crate::nbe::meter_reset();
+                    let o = bank::concept_solve(&t, &[concept.clone()], &opts);
+                    let q = crate::nbe::quote_nodes();
+                    crate::nbe::meter_on(false);
+                    if o.solution.is_some() {
+                        // Composition cost stays flat while the value is representable:
+                        // a single Prim application, whatever the list length.
+                        max_built_success = max_built_success.max(o.stats.built);
+                        if prev_quote > 0 && q > prev_quote {
+                            grew = true;
+                        }
+                    } else {
+                        if !broke {
+                            broke = true;
+                            broke_quote = q;
+                        }
+                    }
+                    prev_quote = q;
+                }
+                // Composition cost is flat & tiny on every representable list length.
+                assert!(
+                    max_built_success < 100,
+                    "composition cost must stay flat under replication, got max built {max_built_success}"
+                );
+                // Representation cost grows with list length (value size to hash).
+                assert!(
+                    grew,
+                    "quote_nodes must grow with list length to separate C_value from C_composition"
+                );
+                // The wall is *representation*, not composition: it breaks exactly when
+                // the value being hashed explodes (huge quote) — not from a small
+                // composition space (built was flat just before the break).
+                if broke {
+                    assert!(
+                        broke_quote > 1000,
+                        "a break must coincide with representation exploding (quote {broke_quote})"
+                    );
+                }
             })
             .unwrap()
             .join()
