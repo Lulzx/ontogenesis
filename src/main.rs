@@ -68,6 +68,10 @@ fn run() {
         prune(&argv[1..]);
         return;
     }
+    if argv.first().map(String::as_str) == Some("ontogen") {
+        ontogen(&argv[1..]);
+        return;
+    }
     if argv.first().map(String::as_str) == Some("mkbench") {
         gen_benchmark(&argv[1..]);
         return;
@@ -1092,6 +1096,193 @@ fn ladder(args: &[String]) {
            composition arity (2 for mul, not its λ-arity 3), and it composes given concepts over\n\
            inputs — it does not itself invent new concepts or discover new structure."
     );
+}
+
+/// usage: supsearch ontogen [--budget SECS] [--max-size N]
+///
+/// Ontology dependence: the same raw-discovered candidates (mul/square/power)
+/// are each evaluated against SEVERAL existing ontologies. A candidate's
+/// marginal value `Gain(c | D, O)` depends on what the machine already knows —
+/// a concept is not intrinsically valuable. This is the experimental content
+/// behind "c is a concept for D ⟺ installing c makes reasoning on D cheaper":
+/// square is valuable under the empty ontology (it makes x² solvable) but
+/// worthless once mul exists (mul(x,x) already reaches x²). Concept utility is
+/// relative to the ontology, exactly as `ladder`'s counterfactual gate implies.
+fn ontogen(args: &[String]) {
+    use std::io::Write;
+    use std::rc::Rc;
+
+    let mut budget = 12u64;
+    let mut max_size = 14u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown ontogen arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let num = |n: u32| -> Rc<term::Term> {
+        parse::parse_expr(&bootstrap::church_num_str(n))
+            .and_then(|e| parse::to_term(&e))
+            .expect("church numeral")
+    };
+    let closed = |s: &str| -> Rc<term::Term> {
+        parse::parse_expr(s)
+            .and_then(|e| parse::to_term(&e))
+            .expect("closed term")
+    };
+    let task = |arity: usize, tests: Vec<(Vec<u32>, Rc<term::Term>)>| parse::Task {
+        arity,
+        tests: tests
+            .into_iter()
+            .map(|(args, want)| parse::Test {
+                args: args.iter().map(|&n| num(n)).collect(),
+                want,
+                outer: 0,
+            })
+            .collect(),
+    };
+
+    let base = vec![closed("λa.λb.λf.λx.a(f)(b(f)(x))")]; // add
+    let opts = bank_opts(&base, budget, max_size);
+
+    println!(
+        "\n── Ontology dependence: a concept's value is relative to what the machine already knows ──"
+    );
+    println!(
+        "Cost ∈ N ∪ {{∞}}. For each raw-discovered candidate c, Gain(c | D, O) = does installing c\n\
+         make the held-out D cheaper under ontology O?"
+    );
+
+    // The machine rediscovers each candidate by raw enumeration (base vocabulary).
+    let mul_t = task(
+        2,
+        [(2, 3), (3, 4), (1, 5), (0, 7), (4, 4), (5, 2)]
+            .into_iter()
+            .map(|(a, b)| (vec![a, b], num(a * b)))
+            .collect(),
+    );
+    let square_t = task(
+        1,
+        [2u32, 3, 1, 0, 5, 4]
+            .into_iter()
+            .map(|x| (vec![x], num(x * x)))
+            .collect(),
+    );
+    let power_t = task(
+        2,
+        [(2, 3), (3, 2), (2, 0), (1, 5), (3, 1), (2, 4)]
+            .into_iter()
+            .map(|(x, n): (u32, u32)| (vec![x, n], num(x.pow(n))))
+            .collect(),
+    );
+    println!("\ndiscovering candidates by raw enumeration...");
+    let mul = bank::solve(&mul_t, &opts).solution.expect("raw discovers a×b");
+    let square = bank::solve(&square_t, &opts).solution.expect("raw discovers x×x");
+    let power = bank::solve(&power_t, &opts).solution.expect("raw discovers x^n");
+    println!("  mul    = {} (size {})", term::show(&mul), mul.size());
+    println!("  square = {} (size {})", term::show(&square), square.size());
+    println!("  power  = {} (size {})", term::show(&power), power.size());
+
+    // Held-outs that isolate each candidate's own contribution: mul → 4-fold,
+    // square → x², power → x^(n+1) (nothing but the candidate makes these
+    // solvable, so a frontier here is unambiguous).
+    let h_mul = task(
+        4,
+        [(2u32, 3, 2, 2), (1, 4, 3, 2), (3, 2, 2, 1), (2, 2, 3, 1), (1, 1, 5, 2)]
+            .into_iter()
+            .map(|(a, b, c, d)| (vec![a, b, c, d], num(a * b * c * d)))
+            .collect(),
+    );
+    let h_square = task(
+        1,
+        [2u32, 3, 1, 0, 5, 4]
+            .into_iter()
+            .map(|x| (vec![x], num(x * x)))
+            .collect(),
+    );
+    let h_power = task(
+        2,
+        [(2, 3), (3, 2), (1, 4), (2, 1), (4, 2), (1, 0)]
+            .into_iter()
+            .map(|(x, n): (u32, u32)| (vec![x, n], num(x.pow(n + 1))))
+            .collect(),
+    );
+
+    let mk = |body: Rc<term::Term>, name: &str, arity: u32| bank::Concept {
+        body,
+        name: name.into(),
+        arity,
+    };
+    let c_mul = mk(mul.clone(), "mul", 2);
+    let c_square = mk(square.clone(), "square", 1);
+    let c_power = mk(power.clone(), "power", 2);
+    let ontologies: [(&str, Vec<bank::Concept>); 5] = [
+        ("∅           ", vec![]),
+        ("{mul}       ", vec![c_mul.clone()]),
+        ("{square}    ", vec![c_square.clone()]),
+        ("{power}     ", vec![c_power.clone()]),
+        ("{mul, power}", vec![c_mul.clone(), c_power.clone()]),
+    ];
+
+    let cand: [(&str, Rc<term::Term>, parse::Task); 3] = [
+        ("mul", mul, h_mul),
+        ("square", square, h_square),
+        ("power", power, h_power),
+    ];
+
+    for (cname, body, hout) in &cand {
+        let hout_desc = match *cname {
+            "mul" => "a×b×c×d",
+            "square" => "x×x",
+            _ => "x^(n+1)",
+        };
+        println!(
+            "\ncandidate {cname}: {}   (held-out: '{hout_desc}')",
+            term::show(body)
+        );
+        for (oname, o) in &ontologies {
+            let baseline = concept_cost(hout, o, &opts);
+            match propose_value(body, o, &[hout.clone()], &opts, baseline) {
+                Some(g) => {
+                    let verdict = if g.earns() { "ACQUIRE" } else { "reject" };
+                    println!(
+                        "    Gain({cname:>6} | {oname}) = before {:<9} after {:<9}  {:<13} {verdict}",
+                        disp_cost(g.before),
+                        disp_cost(g.after),
+                        g.kind()
+                    );
+                }
+                None => println!("    Gain({cname:>6} | {oname}) = no valid interface"),
+            }
+        }
+    }
+
+    println!(
+        "\nRead it as contextuality — a concept's value is not intrinsic, it is a property of\n\
+         the candidate × ontology pair:\n\
+         • square is ACQUIRED under ∅ (it makes x² solvable) but rejected under {{mul}} —\n\
+           mul(x,x) already reaches x², so once the machine knows mul, square is redundant.\n\
+         • power is the mirror image: worthless under ∅ (✗→✗) and only valuable under {{mul}},\n\
+           because x^(n+1) = mul(x, power(x,n)) needs mul as a substrate to pay off.\n\
+         • mul is valuable everywhere it is absent, and re-installing a concept already held\n\
+           (or installing one the current ontology makes redundant) widens the composition\n\
+           space and shows up as a regression.\n\
+         square and power are complementary: each is valuable exactly where the other is not,\n\
+         which is only observable because Gain(c | D, O) is measured against the ontology."
+    );
+    std::io::stdout().flush().ok();
 }
 
 /// Cost sentinel for "the reasoner cannot solve this task" (unreachable).

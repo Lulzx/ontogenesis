@@ -56,6 +56,8 @@ A bad seed can slow search down. It can never produce a wrong answer: the oracle
 
 Acquisition is counterfactual, not syntactic. A candidate becomes a concept only if, installed as a Prim, it reduces held-out quotient-search cost (Δ > 0). "Occurs often" and "is a textbook combinator" do not earn a slot on their own — `ladder` shows square (discovered, but mul already covers its held-out) and a recurring mined idiom both rejected, while mul and power are acquired for the frontier each unlocks.
 
+Concepthood is *relative to the current ontology*, not intrinsic. `ontogen` evaluates the same raw-discovered candidates (mul/square/power) under several ontologies and measures `Gain(c | D, O)`. square is ACQUIRED under ∅ (it makes x² solvable) but rejected under {mul} — `mul(x,x)` already reaches x². power is the mirror image: worthless under ∅ (`x^(n+1)` stays ✗) and valuable only under {mul}, because `x^(n+1) = mul(x, power(x,n))` needs mul as a substrate. Each is valuable exactly where the other is not — a property of the candidate × ontology pair, not of the candidate alone.
+
 The walls are honest too:
 
 - Naive seed injection *widens* search (one run: median cost 0.016s → 0.265s). A size-1 atom seed branches against everything.
@@ -71,6 +73,7 @@ cargo build --release
 ./target/release/supsearch mkbench solutions/round0 bench
 ./target/release/supsearch bootstrap bench --train ... --holdout ... --rounds 3 --budget 20
 ./target/release/supsearch ladder    # raw discovers mul/square/power; only mul+power earn acquisition (counterfactual Δ>0), square and the mined idiom are rejected
+./target/release/supsearch ontogen   # the same candidates under several ontologies — Gain(c|O) is relative: square ACQUIRED under ∅, rejected under {mul}; power the mirror image (needs mul as substrate)
 ./target/release/supsearch promote   # it picks mul itself, infers its arity, promotes it
 ./target/release/supsearch ablation  # why the fold-9 wall isn't the value representation
 ./target/release/supsearch diag      # provenance: winner ancestry, semantic redundancy, cap64 vs cap512
