@@ -1,4 +1,5 @@
 mod bank;
+mod bootstrap;
 mod compile;
 mod decode;
 mod dsl;
@@ -10,6 +11,7 @@ mod term;
 use parse::TaskError;
 use std::fs;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 fn main() {
     // The evaluator recurses as deep as the fuel limit allows; give it room.
@@ -28,6 +30,14 @@ fn run() {
     }
     if argv.first().map(String::as_str) == Some("grow") {
         grow(&argv[1..]);
+        return;
+    }
+    if argv.first().map(String::as_str) == Some("bootstrap") {
+        bootstrap(&argv[1..]);
+        return;
+    }
+    if argv.first().map(String::as_str) == Some("mkbench") {
+        gen_benchmark(&argv[1..]);
         return;
     }
     if argv.first().map(String::as_str) == Some("validate") {
@@ -437,6 +447,328 @@ fn grow(args: &[String]) {
         dsl::lib_len(),
         lib_path.display()
     );
+}
+
+/// Ontology-bootstrap grow driver (the raw-λ track; reaches no sem/decode/dsl
+/// code paths). Repeats: raw-λ solve on a training split → mine behavioral
+/// abstractions from the solved raw terms → generality-validate → inject as
+/// seeds → re-search. The held-out split is never mined and is measured for
+/// the cost curve C(L_t) = (solve_rate, median_cost, censored).
+fn bootstrap(args: &[String]) {
+    use std::rc::Rc;
+    let mut tsk_dir: Option<PathBuf> = None;
+    let mut lib_path = PathBuf::from("lib/bootstrap.lib");
+    let mut rounds = 3usize;
+    let mut budget = 10u64;
+    let mut per_round = 4usize;
+    let mut max_size = 14u32;
+    let mut train: Vec<String> = Vec::new();
+    let mut holdout: Vec<String> = Vec::new();
+    let mut seed_y = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--lib" => {
+                lib_path = PathBuf::from(&args[i + 1]);
+                i += 2;
+            }
+            "--rounds" => {
+                rounds = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--per-round" => {
+                per_round = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--seed-y" => {
+                seed_y = true;
+                i += 1;
+            }
+            "--train" => {
+                train = args[i + 1].split(',').map(str::to_string).collect();
+                i += 2;
+            }
+            "--holdout" => {
+                holdout = args[i + 1].split(',').map(str::to_string).collect();
+                i += 2;
+            }
+            other => {
+                if tsk_dir.is_none() {
+                    tsk_dir = Some(PathBuf::from(other));
+                    i += 1;
+                } else {
+                    eprintln!("unknown bootstrap arg: {other}");
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+    let tsk_dir = tsk_dir.unwrap_or_else(|| {
+        eprintln!("usage: supsearch bootstrap <tsk_dir> --train a,b --holdout c,d [--rounds N] [--budget SECS] [--per-round N] [--max-size N] [--seed-y] [--lib FILE]");
+        std::process::exit(1);
+    });
+    if train.is_empty() || holdout.is_empty() {
+        eprintln!("bootstrap requires both --train and --holdout task id lists");
+        std::process::exit(1);
+    }
+    if let Some(parent) = lib_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let load = |id: &str| -> Option<parse::Task> {
+        let text = fs::read_to_string(tsk_dir.join(format!("{id}.tsk"))).ok()?;
+        parse::parse_task(id, &text).ok()
+    };
+    let train_tasks: Vec<(String, parse::Task)> = train
+        .iter()
+        .filter_map(|id| load(id).map(|t| (id.clone(), t)))
+        .collect();
+    let holdout_tasks: Vec<(String, parse::Task)> = holdout
+        .iter()
+        .filter_map(|id| load(id).map(|t| (id.clone(), t)))
+        .collect();
+    println!(
+        "bootstrap: {} train tasks (mined), {} holdout tasks (measured), raw-λ bank, no semantic vocabulary",
+        train_tasks.len(),
+        holdout_tasks.len()
+    );
+    if train_tasks.len() != train.len() || holdout_tasks.len() != holdout.len() {
+        eprintln!("warning: some task ids did not load (missing .tsk?); proceeding with loaded subset");
+    }
+
+    let mut seeds: Vec<Rc<term::Term>> = Vec::new();
+    if seed_y {
+        seeds.push(bank::y_combinator());
+    }
+    let mut corpus: Vec<Rc<term::Term>> = Vec::new();
+    let mut train_solved: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_keys: std::collections::HashSet<bootstrap::BehaviorKey> =
+        std::collections::HashSet::new();
+    let mut results: Vec<(usize, f64, Option<f64>, usize, usize)> = Vec::new(); // (gen, rate, median_cost, censored, n_seeds)
+    let mut mopts = bootstrap::MineOptions::default();
+    mopts.per_round = per_round;
+
+    for gen in 0..rounds {
+        let mut new_solves = 0usize;
+        // 1. Solve train (current seeds) → corpus.
+        for (id, task) in &train_tasks {
+            if train_solved.contains(id) {
+                continue;
+            }
+            let outcome = bank::solve(task, &bank_opts(&seeds, budget, max_size));
+            if let Some(sol) = outcome.solution {
+                corpus.push(sol.clone());
+                train_solved.insert(id.clone());
+                new_solves += 1;
+                println!("  train ✓ {id} (gen {gen}, size {}): {}", sol.size(), term::show(&sol));
+            } else {
+                println!("  train ✗ {id} (gen {gen})");
+            }
+        }
+
+        // 2. Measure held-out cost curve with current seeds.
+        let mut costs: Vec<f64> = Vec::new();
+        let mut censored = 0usize;
+        for (_id, task) in &holdout_tasks {
+            let outcome = bank::solve(task, &bank_opts(&seeds, budget, max_size));
+            match outcome.solution {
+                Some(_) => costs.push(outcome.stats.elapsed_secs),
+                None => censored += 1,
+            }
+        }
+        let rate = costs.len() as f64 / holdout_tasks.len() as f64;
+        let median = median(&costs);
+
+        // 3. Mine abstractions from the raw-λ corpus.
+        let train_args: Vec<Rc<term::Term>> = train_tasks
+            .iter()
+            .flat_map(|(_, t)| t.tests.iter())
+            .flat_map(|te| te.args.iter().cloned())
+            .collect();
+        let grouping = bootstrap::build_grouping_pool(&train_args, 0x5eed_0000 + gen as u64);
+        let holdout_probes = bootstrap::build_holdout_pool(0xc0ffee_0000 + gen as u64 * 7);
+        let mined = bootstrap::mine(&corpus, &grouping, &holdout_probes, &mopts);
+        let mut added = 0usize;
+        for m in &mined {
+            if !seen_keys.insert(m.key.clone()) {
+                continue; // already promoted in an earlier generation
+            }
+            seeds.push(m.comb.clone());
+            added += 1;
+            println!(
+                "  + seed arity {} gain {} x{} : {}  [{}]",
+                m.k,
+                m.gain,
+                m.count,
+                term::show(&m.comb),
+                m.note
+            );
+        }
+
+        // 4. Persist the library (one closed term per line; notes as comments).
+        let mut lib = String::new();
+        for (j, s) in seeds.iter().enumerate() {
+            if let Some(note) = mined.iter().find(|m| Rc::ptr_eq(&m.comb, s)) {
+                lib.push_str(&format!("// seed {j}: {}\n", note.note));
+            }
+            lib.push_str(&format!("{}\n", term::show(s)));
+        }
+        fs::write(&lib_path, lib).expect("write bootstrap lib");
+
+        results.push((gen, rate, median, censored, seeds.len()));
+        println!(
+            "gen {gen}: holdout rate {:.0}% ({}/{}), median cost {:.3}s, censored {censored}, seeds {}, mined +{added}, corpus {}",
+            rate * 100.0,
+            costs.len(),
+            holdout_tasks.len(),
+            median.unwrap_or(0.0),
+            seeds.len(),
+            corpus.len()
+        );
+        if new_solves == 0 && mined.is_empty() {
+            println!("fixed point reached");
+            break;
+        }
+    }
+
+    // Cost-curve table.
+    println!("\nC(L_t) on held-out (no vocabulary, raw-λ bank):");
+    println!("  gen | solve_rate | median_cost | censored | seeds");
+    for (gen, rate, median, censored, n_seeds) in &results {
+        let mc = median.map(|m| format!("{m:.3}s")).unwrap_or("–".into());
+        println!("   {gen}  |   {:.0}%     |   {mc}   |  {censored}    |  {n_seeds}", rate * 100.0);
+    }
+    if results.len() < 2 || results.iter().all(|(_, r, _, _, _)| *r >= 1.0) {
+        println!(
+            "note: solve_rate may be capped at 100% if held-out tasks are already raw-solvable; \
+             the informative signal is median_cost (does seeding cheapen already-possible solves?) \
+             and censored count on tasks just past the wall."
+        );
+    }
+    println!(
+        "\nbootstrap finished: {}/{} train solved, {} seeds -> {}",
+        train_solved.len(),
+        train_tasks.len(),
+        seeds.len(),
+        lib_path.display()
+    );
+}
+
+/// Synthesize a `.tsk` corpus from verified `@main = …` solution files.
+///
+/// This is the self-contained fix for the missing `lambench/` benchmark: the
+/// repo vendors the *solutions* (solutions/round0/*.lam) but not the task
+/// input files. Since every `.tsk` test has the shape `λA1…λAk. @main(A1,…,Ak)`
+/// — apply the program to k fresh binders — a valid task is reconstructed from
+/// the verified solution alone: the test is the solution's binder-head applied
+/// to its own binders, and the expected output is the solution itself.
+///
+/// IMPORTANT (honesty, not a bug): these are SYNTHESIZED single-probe tasks
+/// (one test, symbolic binders), NOT the real lambench tasks with their rich
+/// concrete input suites. They exercise the full bootstrap driver loop and are
+/// faithful to the Milestone-0 task *set*, but the C(L_t) curve is only
+/// meaningful relative to them, not as a claim about lambench. Each file's
+/// section-1 comment says so.
+///
+/// usage: supsearch mkbench <solutions_dir> <out_dir>
+fn gen_benchmark(args: &[String]) {
+    let (solutions_dir, out_dir) = match args {
+        [s, o] => (s.clone(), o.clone()),
+        _ => {
+            eprintln!("usage: supsearch mkbench <solutions_dir> <out_dir>");
+            std::process::exit(1);
+        }
+    };
+    let out_dir = PathBuf::from(out_dir);
+    fs::create_dir_all(&out_dir).expect("create out_dir");
+
+    let mut files: Vec<PathBuf> = fs::read_dir(&solutions_dir)
+        .expect("read solutions dir")
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|e| e == "lam"))
+        .collect();
+    files.sort();
+
+    let mut written = 0usize;
+    for path in &files {
+        let text = fs::read_to_string(path).expect("read solution");
+        for line in text.lines() {
+            let line = line.trim();
+            let Some(rhs) = line.strip_prefix("@main = ") else {
+                continue;
+            };
+            let rhs = rhs.trim();
+            // Leading binder names, to align the test with the solution term.
+            let mut names: Vec<String> = Vec::new();
+            let mut cur = rhs;
+            while let Some(rest) = cur.strip_prefix('λ') {
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if name.is_empty() {
+                    break;
+                }
+                names.push(name.clone());
+                cur = rest.strip_prefix(&name).and_then(|s| s.strip_prefix('.')).unwrap_or("");
+            }
+            if names.is_empty() {
+                eprintln!("  skip {path:?}: no leading lambdas");
+                continue;
+            }
+            let id = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "task".into());
+            let test = format!(
+                "λ{}. @main({})",
+                names.join(".λ"),
+                names.join(", ")
+            );
+            let tsk = format!(
+                "{id} — SYNTHESIZED from verified round-0 solution (single symbolic-binder probe); \\
+                 NOT the real lambench task. Generated by `supsearch mkbench`.\n\
+                 ---\n\
+                 {test}\n\
+                 = {rhs}\n"
+            );
+            let out = out_dir.join(format!("{id}.tsk"));
+            fs::write(&out, tsk).expect("write .tsk");
+            written += 1;
+            println!("  wrote {} (arity {})", out.display(), names.len());
+        }
+    }
+    println!("mkbench: {written} tasks written to {}", out_dir.display());
+}
+
+fn bank_opts(seeds: &[Rc<term::Term>], budget: u64, max_size: u32) -> bank::Options {
+    let mut o = bank::Options::default();
+    o.max_size = max_size;
+    o.time_budget_secs = budget as f64;
+    o.seeds = seeds.to_vec();
+    o
+}
+
+fn median(v: &[f64]) -> Option<f64> {
+    if v.is_empty() {
+        return None;
+    }
+    let mut s = v.to_vec();
+    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let n = s.len();
+    Some(if n % 2 == 1 {
+        s[n / 2]
+    } else {
+        (s[n / 2 - 1] + s[n / 2]) / 2.0
+    })
 }
 
 /// Library mining: extract closed subterms recurring across solved programs
