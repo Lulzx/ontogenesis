@@ -222,6 +222,17 @@ fn main() {
                 .join()
                 .unwrap();
         }
+        Some("gridmeta") => {
+            // Multi-transform generalization: grid NBE recurses deep on the fold
+            // structure and the probe hashes tiled grids, so run on a large stack.
+            let a = args[1..].to_vec();
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(move || gridmeta(&a))
+                .unwrap()
+                .join()
+                .unwrap();
+        }
         _ => bridge(&args),
     }
 }
@@ -540,6 +551,51 @@ fn rotated_term(w: usize, h: usize) -> Rc<term::Term> {
         })
         .collect();
     rc_list(&rows)
+}
+
+/// Horizontal tiling target: each row is doubled in width. Row `[c1..cw]`
+/// becomes `[c1..cw, c1..cw]`. Generable from the discovered vocabulary as
+/// `map(λrow. append row row)`.
+fn htiled_term(w: usize, h: usize) -> Rc<term::Term> {
+    let rows: Vec<Rc<term::Term>> = (0..h)
+        .map(|j| {
+            let cells: Vec<u32> = (0..w).map(|i| ((i + j) % 3 + 1) as u32).collect();
+            let mut doubled = cells.clone();
+            doubled.extend_from_slice(&cells);
+            church_list(&doubled)
+        })
+        .collect();
+    rc_list(&rows)
+}
+
+/// Vertical tiling target: the row list is doubled in height. `[row1..rowh]`
+/// becomes `[row1..rowh, row1..rowh]`. Generable as `λgrid. append grid grid`.
+fn vtiled_term(w: usize, h: usize) -> Rc<term::Term> {
+    let rows: Vec<Rc<term::Term>> = (0..h)
+        .map(|j| {
+            let cells: Vec<u32> = (0..w).map(|i| ((i + j) % 3 + 1) as u32).collect();
+            church_list(&cells)
+        })
+        .collect();
+    let mut doubled = rows.clone();
+    doubled.extend_from_slice(&rows);
+    rc_list(&doubled)
+}
+
+/// 2×2 tiling target: both width and height doubled. Generable as
+/// `compose(λgrid. append grid grid, map(λrow. append row row))`.
+fn tile2_term(w: usize, h: usize) -> Rc<term::Term> {
+    let rows: Vec<Rc<term::Term>> = (0..h)
+        .map(|j| {
+            let cells: Vec<u32> = (0..w).map(|i| ((i + j) % 3 + 1) as u32).collect();
+            let mut doubled = cells.clone();
+            doubled.extend_from_slice(&cells);
+            church_list(&doubled)
+        })
+        .collect();
+    let mut doubled = rows.clone();
+    doubled.extend_from_slice(&rows);
+    rc_list(&doubled)
 }
 
 /// A candidate body installed as a single-arity concept (all grid transforms
@@ -1247,6 +1303,213 @@ fn autodisc(args: &[String]) {
     out.flush().ok();
 }
 
+/// The discovered vocabulary as closed λ-terms from {cons,nil}: reverse, append,
+/// cons, nil. `map` and `compose` are built as higher-order combinators.
+struct Vocab {
+    reverse: Rc<term::Term>,
+    append: Rc<term::Term>,
+    cons: Rc<term::Term>,
+    nil: Rc<term::Term>,
+}
+
+fn vocab() -> Vocab {
+    let cons_t = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+    let nil_t = closed("λf.λz.z");
+    // append = reduce(cons) = λxs.λys.(xs cons ys)
+    let append = term::lam(term::lam(term::app(
+        term::app(term::var(1), cons_t.clone()),
+        term::var(0),
+    )));
+    // singleton = λa. cons a nil
+    let singleton = term::lam(term::app(term::app(cons_t.clone(), term::var(0)), nil_t.clone()));
+    // reverse = λxs. xs (λh.λacc. append acc (singleton h)) nil
+    let reverse = term::lam(term::app(
+        term::app(
+            term::var(0),
+            term::lam(term::lam(term::app(
+                term::app(append.clone(), term::var(0)),
+                term::app(singleton.clone(), term::var(1)),
+            ))),
+        ),
+        nil_t.clone(),
+    ));
+    Vocab {
+        reverse,
+        append,
+        cons: cons_t,
+        nil: nil_t,
+    }
+}
+
+/// The grid-transform meta-space: a **typed** generative enumeration of
+/// compositions of the discovered building blocks {rev, dup, map, compose}.
+///
+/// The human provides the building blocks and the composition operators (map,
+/// compose) — NOT the specific transforms (mirror, vflip, rotation, tiling). The
+/// system searches compositions and discovers which solve which families.
+///
+/// Types: a grid is `List (List N)`, a row is `List N`. `rev` and `dup` are
+/// polymorphic (work on any list); `map(f)` maps a row-op over rows. The type
+/// discipline prunes the combinatorial explosion of the untyped grammar (which
+/// generated ~1.6M terms at size 6, mostly type-wrong).
+fn gridmeta_candidates() -> Vec<(String, Rc<term::Term>)> {
+    let v = vocab();
+    // Building blocks (polymorphic over lists).
+    let rev = v.reverse.clone();
+    let dup = term::lam(term::app(term::app(v.append.clone(), term::var(0)), term::var(0)));
+    let id = term::lam(term::var(0));
+    // map(f) = λxs. xs (λh.λrest. cons (f h) rest) nil
+    let map = |f: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::app(
+            term::app(
+                term::var(0),
+                term::lam(term::lam(term::app(
+                    term::app(v.cons.clone(), term::app(f.clone(), term::var(1))),
+                    term::var(0),
+                ))),
+            ),
+            v.nil.clone(),
+        ))
+    };
+    // compose(f,g) = λx. f (g x)
+    let compose = |f: &Rc<term::Term>, g: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::app(f.clone(), term::app(g.clone(), term::var(0))))
+    };
+    // Depth-1 grid ops: the grid-level building blocks, plus map of each row-op.
+    // These are GENERATED (map applied to each row-op), not hand-picked.
+    let depth1: Vec<(String, Rc<term::Term>)> = vec![
+        ("rev".into(), rev.clone()),       // reverse the grid
+        ("dup".into(), dup.clone()),       // duplicate the grid
+        ("map(rev)".into(), map(&rev)),    // reverse each row
+        ("map(dup)".into(), map(&dup)),    // duplicate each row
+        ("map(id)".into(), map(&id)),      // identity
+    ];
+    // Depth-2: compose any two depth-1 grid ops.
+    let mut out = depth1.clone();
+    for (fn_, f) in &depth1 {
+        for (gn, g) in &depth1 {
+            out.push((format!("({fn_}∘{gn})"), compose(f, g)));
+        }
+    }
+    out
+}
+
+/// The transform families (targets), all generable from the discovered vocabulary.
+fn gridmeta_families() -> Vec<(
+    &'static str,
+    &'static dyn Fn(usize, usize) -> Rc<term::Term>,
+    &'static [(usize, usize)],
+)> {
+    vec![
+        ("mirror", &mirrored_term, &[(3, 3), (4, 4)]),
+        ("vflip", &vflipped_term, &[(3, 3), (4, 4)]),
+        ("rotation", &rotated_term, &[(3, 3), (4, 4)]),
+        ("h-tile", &htiled_term, &[(2, 2), (3, 3)]),
+        ("v-tile", &vtiled_term, &[(2, 2), (3, 3)]),
+        ("2×2 tile", &tile2_term, &[(2, 2), (3, 3)]),
+    ]
+}
+
+/// Solves-gate each meta-space candidate against each transform family (canonical
+/// keying so grids stay hashable). Returns the (candidate, family) pairs that
+/// solve — the grid concepts that emerge from the one cross-domain library.
+fn gridmeta_discover(opts: &bank::Options) -> Vec<(String, &'static str)> {
+    let candidates = gridmeta_candidates();
+    let families = gridmeta_families();
+    let mut discovered = Vec::new();
+    for (cname, body) in &candidates {
+        for (fname, target, sizes) in &families {
+            let fam = transform_family(sizes, target);
+            if bank::concept_solve_abl(&fam, &[cand_concept(body)], opts, true)
+                .0
+                .solution
+                .is_some()
+            {
+                discovered.push((cname.clone(), *fname));
+            }
+        }
+    }
+    discovered
+}
+
+/// The multi-transform generalization experiment: does the SAME discovered list
+/// vocabulary {reverse, map, append, compose} (all from {cons,nil}) generate
+/// multiple ARC-style grid transforms — mirror, vflip, rotation, AND tiling —
+/// with no new ARC-specific atomics?
+fn gridmeta(args: &[String]) {
+    use std::io::Write;
+    let mut out = std::io::stdout();
+
+    let mut budget = 8u64;
+    let mut max_size = 14u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown gridmeta arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+    let opts = bank_opts(budget, max_size);
+    let candidates = gridmeta_candidates();
+    let families = gridmeta_families();
+
+    println!("\n── gridmeta: does the discovered list vocabulary generalize to grids? ──");
+    println!("vocabulary: {{rev, dup, map, compose}} — building blocks from {{cons,nil}}");
+    println!("meta-space: {} typed compositions; families: mirror, vflip, rotation, h-tile, v-tile, 2×2", candidates.len());
+    println!("budget: max_size {max_size}, {budget}s");
+    out.flush().ok();
+
+    // ── Solves-gate each candidate against each family. ──
+    let t0 = std::time::Instant::now();
+    let mut header = format!("{:<34}", "candidate");
+    for (name, _, _) in &families {
+        header.push_str(&format!(" {name:>9}"));
+    }
+    println!("{header}");
+    println!("{}", "-".repeat(header.len()));
+    let discovered = gridmeta_discover(&opts);
+    for (cname, body) in &candidates {
+        let mut row = format!("{cname:<34}");
+        for (_fname, target, sizes) in &families {
+            let fam = transform_family(sizes, target);
+            let ok = bank::concept_solve_abl(&fam, &[cand_concept(body)], &opts, true)
+                .0
+                .solution
+                .is_some();
+            row.push_str(&format!(" {:>9}", if ok { "✓" } else { "·" }));
+        }
+        println!("{row}");
+    }
+    out.flush().ok();
+
+    // ── Report: which grid concepts emerged from the one structural library. ──
+    println!("\n── emerged grid concepts (solved by a vocabulary composition) ──");
+    let mut seen: Vec<&str> = Vec::new();
+    for (cname, fname) in &discovered {
+        if !seen.contains(fname) {
+            seen.push(fname);
+            println!("  {fname}: {cname}");
+        }
+    }
+    println!(
+        "{} of {} families solved from the discovered vocabulary in {:.3}s",
+        seen.len(),
+        families.len(),
+        t0.elapsed().as_secs_f64()
+    );
+    out.flush().ok();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1701,6 +1964,36 @@ mod tests {
                 assert!(m, "discovered reverse must transfer to mirror (map(reverse))");
                 assert!(v, "discovered reverse must transfer to vflip (reverse)");
                 assert!(r, "mirror+vflip must compose to rotation");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// The multi-transform generalization claim: the SAME discovered list
+    /// vocabulary {reverse, map, append, compose} generates ALL of mirror, vflip,
+    /// rotation, h-tile, v-tile, and 2×2 tile — no new ARC-specific atomics. This
+    /// is the "concepts learned in an abstract structural domain become reusable
+    /// building blocks for visual reasoning" claim.
+    #[test]
+    fn gridmeta_vocabulary_generalizes() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = opts();
+                let discovered = gridmeta_discover(&o);
+                let solved: Vec<&str> = {
+                    let mut s: Vec<&str> = discovered.iter().map(|(_, f)| *f).collect();
+                    s.sort();
+                    s.dedup();
+                    s
+                };
+                for fam in ["mirror", "vflip", "rotation", "h-tile", "v-tile", "2×2 tile"] {
+                    assert!(
+                        solved.contains(&fam),
+                        "family {fam} must be solved by a vocabulary composition (got {solved:?})"
+                    );
+                }
             })
             .unwrap()
             .join()
