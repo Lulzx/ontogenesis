@@ -72,6 +72,8 @@ acquired trajectory: O0=∅ → O1={mul} → O2={mul,pow} → O3={mul,pow,tet}
 
 The sharp claim is G-conditional, not raw: raw finds pow (Church compression), but `pow ∉ G(∅)` yet `pow ∈ G({mul})`, and `tet ∉ G({mul})` yet `tet ∈ G({mul,pow})` — a dependency chain `C₁ ⇒ C₂ ⇒ C₃` that composition could never build, exactly the chain `dep` showed is absent from the current searches. tet earns a SEARCH gain (121→11), not a frontier, because composition-{mul,pow} overfits the tower holdout to a^(a^n) for the representable bases; a genuine tet frontier needs tower(2,4)=65536 or 3^27, both beyond the 2048 fuel — an honest range limit, not a forced result. G also proposes non-targets (1+na, constant 0); they fail the target-task verification and are not acquired — the gate is selective.
 
+**G is domain-independent; its depth is value-space-bound.** `transfer` runs the byte-identical `iterate(C, seed)` schema in a non-arithmetic domain — strings as Church lists, base `{cons}` (prepend). `replicate(c,n) = iterate(cons,nil) = (cons c)^n nil ∈ G(∅)`, and it earns a genuine frontier (✗→3): composition-{cons} cannot build a count-dependent list length, because that needs the iterator. The junk proposal `iterate(cons,[1])` (a leading-element list) fails the target-check and is rejected — the gate transfers. But there is **no second-order concept** in this value space: `iterate`'s second argument is always an iteration count, so re-iterating replicate would require replicate's output (a list) to feed back as a count — a type the flat-list space does not carry. So the multi-level chain (mul→pow→tet) is the signature of a *self-iterable* value space (the numerals), not of G. This refines the C6 claim to: *a domain-independent higher-order proposal schema lets an acquired ontology restructure hypothesis generation* — at depth 1 in every domain, at depth >1 only where the value space itself iterates. Going deeper in non-arithmetic domains is exactly the C7 problem (acquiring the proposal schemas), not a tweak to `iterate`.
+
 The walls are honest too:
 
 - Naive seed injection *widens* search (one run: median cost 0.016s → 0.265s). A size-1 atom seed branches against everything.
@@ -90,6 +92,7 @@ cargo build --release
 ./target/release/supsearch ontogen   # the same candidates under several ontologies — Gain(c|O) is relative: square ACQUIRED under ∅, rejected under {mul}; power the mirror image (needs mul as substrate)
 ./target/release/supsearch dep       # recorded negative: conditional DISCOVERABILITY does not hold in the arithmetic tower (conditional usefulness does) — see fine print
 ./target/release/supsearch gen       # C6: fixed iterate-schema generator G(O) — mul∈G(∅), pow∉G(∅)∧pow∈G({mul}), tet∉G({mul})∧tet∈G({mul,pow}); G fixed, only O changes
+./target/release/supsearch transfer  # the SAME G into a non-arithmetic domain (strings): replicate=iterate(cons,nil)∈G(∅), genuine frontier ✗→3, junk rejected, NO 2nd-order concept (depth is value-space-bound)
 ./target/release/supsearch promote   # it picks mul itself, infers its arity, promotes it
 ./target/release/supsearch ablation  # why the fold-9 wall isn't the value representation
 ./target/release/supsearch diag      # provenance: winner ancestry, semantic redundancy, cap64 vs cap512

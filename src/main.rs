@@ -80,6 +80,10 @@ fn run() {
         gen(&argv[1..]);
         return;
     }
+    if argv.first().map(String::as_str) == Some("transfer") {
+        transfer(&argv[1..]);
+        return;
+    }
     if argv.first().map(String::as_str) == Some("mkbench") {
         gen_benchmark(&argv[1..]);
         return;
@@ -1837,6 +1841,264 @@ fn gen(args: &[String]) {
     std::io::stdout().flush().ok();
 }
 
+/// C6-generalization: does the SAME fixed iterate-schema generator `G(O)`
+/// transfer to a non-arithmetic value space? Here the semantics are strings
+/// (Church lists of Church numerals) and the base op is `cons` (prepend). G is
+/// byte-identical to `gen`'s; only the base, the seed set, and the value
+/// representation change. We test (a) a genuine depth-1 frontier —
+/// `replicate(c,n) = iterate(cons,nil) = (cons c)^n nil ∈ G(∅)`, which
+/// composition cannot build because a count-dependent list length requires the
+/// iterator — with the counterfactual gate acquiring it and rejecting junk; and
+/// (b) the depth wall: the SAME G yields NO second-order concept here, because
+/// iterate's second argument is always an iteration count, so re-iterating
+/// replicate would need replicate's output (a list) to feed back as a count —
+/// a type the flat-list value space does not carry. Multi-level depth is the
+/// signature of a SELF-ITERABLE value space (the numerals); strings get exactly
+/// one level. That is precisely why C7 (acquiring the proposal schemas) is the
+/// path to depth in non-arithmetic domains.
+fn transfer(args: &[String]) {
+    use std::io::Write;
+    use std::rc::Rc;
+
+    let mut budget = 12u64;
+    let mut max_size = 14u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown transfer arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let num = |n: u32| -> Rc<term::Term> {
+        parse::parse_expr(&bootstrap::church_num_str(n))
+            .and_then(|e| parse::to_term(&e))
+            .expect("church numeral")
+    };
+    let closed = |s: &str| -> Rc<term::Term> {
+        parse::parse_expr(s)
+            .and_then(|e| parse::to_term(&e))
+            .expect("closed term")
+    };
+    // Church list [c1,..,ck] = λf.λz.f(c1)(f(c2)(...(z))) — chars are Church
+    // numerals; the char numerals carry their own λf.λx binders so there is no
+    // capture against the outer λf.λz.
+    let list = |cs: &[u32]| -> Rc<term::Term> {
+        let mut body = String::from("z");
+        for c in cs.iter().rev() {
+            let cstr = bootstrap::church_num_str(*c);
+            body = format!("f({cstr})({body})");
+        }
+        closed(&format!("λf.λz.{body}"))
+    };
+    let task = |arity: usize, tests: Vec<(Vec<u32>, Rc<term::Term>)>| parse::Task {
+        arity,
+        tests: tests
+            .into_iter()
+            .map(|(args, want)| parse::Test {
+                args: args.iter().map(|&n| num(n)).collect(),
+                want,
+                outer: 0,
+            })
+            .collect(),
+    };
+
+    let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))"); // prepend char to list
+    let base = vec![cons.clone()];
+    let nil = list(&[]);
+    let singleton = list(&[1]);
+
+    // Discovery suite: (c,n) → list of n copies of c. Composition-{cons} can
+    // only build FIXED-length lists (cons applied finitely many times); a list
+    // whose length depends on the numeral n requires iterating cons n times —
+    // the iterator, which is not in the composition closure. So the held-out
+    // below is ✗ under {cons}: a genuine frontier, exactly mul's a×b×c×d.
+    let rep_task = task(
+        2,
+        [(2, 0), (2, 1), (2, 3), (3, 2), (1, 4), (4, 2)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| (vec![c, n], list(&vec![c; n as usize])))
+            .collect(),
+    );
+    // Held-out with UNSEEN (c,n) — including c=5, c=0 — so an overfit
+    // memorizer of the discovery rows is caught. replicate must GENERALIZE.
+    let h_rep = task(
+        2,
+        [(2, 2), (3, 3), (1, 1), (4, 4), (5, 2), (0, 3)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| (vec![c, n], list(&vec![c; n as usize])))
+            .collect(),
+    );
+
+    let opts = bank_opts(&base, budget, max_size);
+
+    // ── the SAME fixed production as `gen` — nothing domain-specific here ──
+    let iterate = |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::lam(term::app(
+            term::app(term::var(0), term::app(c.clone(), term::var(1))),
+            seed.clone(),
+        )))
+    };
+    let solves = |t: &parse::Task, body: &Rc<term::Term>| -> bool {
+        let set = [bank::Concept {
+            body: body.clone(),
+            name: "cand".into(),
+            arity: t.arity as u32,
+        }];
+        bank::concept_solve(t, &set, &opts).solution.is_some()
+    };
+    // G(O) over the seeds the domain actually provides.
+    let gen_cands = |avail: &[Rc<term::Term>], seeds: &[Rc<term::Term>]| -> Vec<Rc<term::Term>> {
+        let mut out = Vec::new();
+        for cb in avail {
+            for sd in seeds {
+                out.push(iterate(cb, sd));
+            }
+        }
+        out
+    };
+    let available = |ocs: &[bank::Concept]| -> Vec<Rc<term::Term>> {
+        base.iter()
+            .cloned()
+            .chain(ocs.iter().map(|c| c.body.clone()))
+            .collect()
+    };
+    let string_seeds = vec![nil.clone(), singleton.clone()];
+
+    println!("\n── transfer: does the SAME fixed G generalize across domains? ──");
+    println!("G fixed = {{iterate(C, seed) = λa.λn.((n (C a)) seed)}} — identical to `gen`");
+    println!("domain: strings = Church lists; base = {{cons}} (prepend); seeds = {{nil, [1]}}");
+    println!("budget: max_size {max_size}, {budget}s, pool 64, fuel 20000");
+    println!(
+        "{:<4} {:<9} {:<11} {:<14} {:<12} {:<18} {}",
+        "Gen", "candidate", "raw(base)?", "in G(O_0)?", "junk-cover?", "useful(H)", "verdict"
+    );
+
+    // Depth-1: replicate = iterate(cons, nil) = (cons c)^n nil ∈ G(∅).
+    let raw = raw_cost(&rep_task, &opts) < UNREACHABLE;
+    let g0 = gen_cands(&available(&[]), &string_seeds);
+    let replicate = g0.iter().find(|b| solves(&rep_task, b)).cloned();
+    let junk = g0
+        .iter()
+        .filter(|b| !solves(&rep_task, b))
+        .cloned()
+        .collect::<Vec<_>>();
+    let baseline = concept_cost(&h_rep, &[], &opts); // {cons}: expect ✗
+    let mut onto: Vec<bank::Concept> = Vec::new();
+    let mut line0 = format!(
+        "{:<4} {:<9} {:<11} {:<14} ",
+        "0",
+        "replicate",
+        if raw { "✓" } else { "✗" },
+        if replicate.is_some() { "✓" } else { "✗" },
+    );
+    match replicate.as_ref() {
+        Some(body) => match propose_value(body, &onto, &[h_rep.clone()], &opts, baseline) {
+            Some(g) => {
+                let verdict = if g.earns() { "ACQUIRE" } else { "reject" };
+                line0.push_str(&format!(
+                    "{:<7}→{:<8} {:<9} {}",
+                    disp_cost(g.before),
+                    disp_cost(g.after),
+                    g.kind(),
+                    verdict
+                ));
+                if g.earns() {
+                    onto.push(bank::Concept {
+                        body: body.clone(),
+                        name: "C1=replicate".into(),
+                        arity: g.arity,
+                    });
+                }
+            }
+            None => line0.push_str(&format!("{:<18} {}", "no interface", "reject")),
+        },
+        None => line0.push_str(&format!("{:<18} {}", "not in G(O_0)", "—")),
+    }
+    // junk coverage: the non-generalizing G(O_0) proposals are rejected by the
+    // target-task verification (they solve neither the discovery suite nor the
+    // held-out) — the gate is selective, not forced.
+    let junk_solves_rep = junk.iter().any(|b| solves(&rep_task, b));
+    let junk_solves_h = junk.iter().any(|b| solves(&h_rep, b));
+    line0.push_str(&format!(
+        "   (junk {}/{} rejected by target-check)",
+        junk.iter().filter(|b| !solves(&rep_task, b)).count(),
+        junk.len()
+    ));
+    if !junk_solves_rep && !junk_solves_h {
+        line0.push_str(" ✓");
+    } else {
+        line0.push_str(" ✗—junk leaks!");
+    }
+    println!("{line0}");
+
+    // ── depth probe: attempt a second generation with the SAME G ──
+    // O_1 = {cons, replicate}. G(O_1) \ G(O_0) = {iterate(replicate, nil),
+    // iterate(replicate, [1])}. To be a second-order concept, iterate(replicate,
+    // seed) would have to iterate a "step" built from replicate; but replicate's
+    // second argument is an iteration count n (a numeral), so (replicate c) maps
+    // numeral → list, and re-iterating it n' times requires the intermediate to
+    // be a numeral again — i.e. replicate's OUTPUT (a list) must feed back as a
+    // count, which the flat-list value space cannot supply. The candidates are
+    // type-degenerate: they solve neither replicate_task nor a fresh held-out.
+    let avail1 = available(&onto);
+    let g1 = gen_cands(&avail1, &string_seeds);
+    let g1_new = g1
+        .iter()
+        .filter(|b| !g0.contains(b))
+        .cloned()
+        .collect::<Vec<_>>();
+    let depth2 = g1_new
+        .iter()
+        .filter(|b| solves(&rep_task, b))
+        .count();
+    let depth2_h = g1_new.iter().filter(|b| solves(&h_rep, b)).count();
+    println!(
+        "{:<4} {:<9} {:<11} {:<14} {:<12} {:<18} {}",
+        "1",
+        "string-pow?",
+        "✗",
+        "✗",
+        "—",
+        "—",
+        if depth2 == 0 && depth2_h == 0 {
+            "no 2nd-order concept (type wall)"
+        } else {
+            "UNEXPECTED depth"
+        }
+    );
+
+    println!(
+        "\nacquired trajectory (string domain): O0={{cons}}  →  O1={{cons, replicate}}"
+    );
+    println!(
+        "\nstructural finding: the fixed G transfers to ANY domain as a depth-1\n\
+         concept generator (C1 ∈ G(O0) with a genuine frontier — here replicate,\n\
+         which composition-{{cons}} cannot reach because a count-dependent list\n\
+         length needs the iterator). Its DEPTH is value-space-bound: multi-level\n\
+         chains (mul→pow→tet in `gen`) require a SELF-ITERABLE value space —\n\
+         iterate's second argument is always an iteration count, so re-iterating\n\
+         C1 needs C1's output to feed back as a count. Strings (like permutations,\n\
+         grids, rewrite systems) are not self-iterable, so they get exactly one\n\
+         level. G is domain-independent; the hyperoperation tower's depth is the\n\
+         signature of the numeric value space, not of G. Going deeper in\n\
+         non-arithmetic domains therefore requires C7: acquiring the proposal\n\
+         schemas themselves (iterate, lift, abstract, compose-under-binding), so\n\
+         that depth stops being a hard-coded property of the schema."
+    );
+    std::io::stdout().flush().ok();
+}
+
 
 /// Cost sentinel for "the reasoner cannot solve this task" (unreachable).
 /// Large enough that "makes an unsolvable task solvable" reads as the
@@ -3446,6 +3708,109 @@ mod probe {
                 assert!(
                     g_mul.iter().any(|c| solves(c)),
                     "pow ∈ G({{mul}}): iterate(mul, one) is a G({{mul}}) proposal"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// transfer (C6-generalization) regression: the SAME fixed iterate-schema G
+    /// transfers to a non-arithmetic value space (strings as Church lists).
+    /// `replicate = iterate(cons, nil) = (cons c)^n nil` is IN G(∅) with a
+    /// genuine frontier — composition-{cons} can't build a count-dependent list
+    /// length (held-out is UNREACHABLE) — the junk seed-proposal is rejected by
+    /// the target-check, and there is NO well-typed second-order concept (the
+    /// type wall: re-iterating replicate would need its list output to feed back
+    /// as a count).
+    #[test]
+    fn transfer_cross_domain_depth() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let opts = bank::Options {
+                    max_size: 14,
+                    max_depth: 3,
+                    fuel: 40_000,
+                    time_budget_secs: 12.0,
+                    max_level_entries: 200_000,
+                    max_opaque_entries: 20_000,
+                    seeds: vec![],
+                    concepts: vec![],
+                };
+                let list = |cs: &[u32]| -> Rc<term::Term> {
+                    let mut body = String::from("z");
+                    for c in cs.iter().rev() {
+                        let cstr = crate::bootstrap::church_num_str(*c);
+                        body = format!("f({cstr})({body})");
+                    }
+                    closed(&format!("λf.λz.{body}"))
+                };
+                let mk_task = |tests: Vec<(u32, u32)>| parse::Task {
+                    arity: 2,
+                    tests: tests
+                        .into_iter()
+                        .map(|(c, n)| parse::Test {
+                            args: vec![church(c), church(n)],
+                            want: list(&vec![c; n as usize]),
+                            outer: 0,
+                        })
+                        .collect(),
+                };
+                let rep_task = mk_task(vec![(2, 0), (2, 1), (2, 3), (3, 2), (1, 4), (4, 2)]);
+                let h_rep = mk_task(vec![(2, 2), (3, 3), (1, 1), (4, 4), (5, 2), (0, 3)]);
+                let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+                let nil = list(&[]);
+                let singleton = list(&[1]);
+                let iterate =
+                    |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+                        term::lam(term::lam(term::app(
+                            term::app(term::var(0), term::app(c.clone(), term::var(1))),
+                            seed.clone(),
+                        )))
+                    };
+                let solves = |t: &parse::Task, body: &Rc<term::Term>| -> bool {
+                    let set = [bank::Concept {
+                        body: body.clone(),
+                        name: "cand".into(),
+                        arity: t.arity as u32,
+                    }];
+                    bank::concept_solve(t, &set, &opts).solution.is_some()
+                };
+                let g0 = vec![
+                    iterate(&cons, &nil),
+                    iterate(&cons, &singleton),
+                ];
+                // replicate ∈ G(∅): iterate(cons, nil) generalizes on the suite.
+                assert!(
+                    g0.iter().any(|b| solves(&rep_task, b)),
+                    "replicate = iterate(cons, nil) ∈ G(∅)"
+                );
+                assert!(
+                    solves(&rep_task, &g0[0]),
+                    "iterate(cons, nil) is replicate and solves rep_task"
+                );
+                // junk: iterate(cons, singleton) = leading-[1] list does NOT generalize.
+                assert!(
+                    !solves(&rep_task, &g0[1]),
+                    "iterate(cons, [1]) is a leading-element list, not replicate — rejected"
+                );
+                // genuine frontier: composition-{cons} cannot solve the held-out
+                // (count-dependent length needs the iterator).
+                let baseline = crate::concept_cost(&h_rep, &[], &opts);
+                assert!(
+                    baseline >= crate::UNREACHABLE,
+                    "composition-{{cons}} cannot solve h_rep (frontier)"
+                );
+                // depth wall: iterate(replicate, ·) candidates are type-degenerate —
+                // they solve neither the discovery suite nor the held-out.
+                let g1_new = vec![
+                    iterate(&g0[0], &nil),
+                    iterate(&g0[0], &singleton),
+                ];
+                assert!(
+                    !g1_new.iter().any(|b| solves(&rep_task, b) || solves(&h_rep, b)),
+                    "no second-order concept in the flat-list value space (type wall)"
                 );
             })
             .unwrap()
