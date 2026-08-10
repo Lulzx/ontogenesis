@@ -76,6 +76,8 @@ The sharp claim is G-conditional, not raw: raw finds pow (Church compression), b
 
 **C7 (first cut) — acquire the proposal schemas themselves.** `meta` makes the meta-operators candidates: the machine is given a fixed meta-space M = {`iterate`, `reduce` (= fold with a free seed, `λxs.λys. xs C ys`), `junk`} and keeps the generators whose proposals measurably earn acquisition (`Gain(G_i|O,D)`), dropping the rest — so `(O_t, G_t)` evolves jointly. In the string domain: `iterate` → replicate and `reduce` → concat both earn frontier gains (✗→3); junk is dropped (solves no target). The payoff is the transfer-negative made concrete — `iterate` alone stalls after replicate, but the acquired `reduce` supplies `concat = reduce(cons) = λxs.λys. xs cons ys`, which is **not** in `Closure_compose({cons})`; and with concat as substrate `iterate(concat, nil) = concat_n = (concat xs)^n nil` (`xs` concatenated n times) is the depth-2 list concept that iterate-from-{cons,replicate} alone cannot reach (✗→11). **C7 shows that acquiring an additional proposal schema restores structural leverage where the previously retained schema alone stalls:** `reduce` generates `concat`, which lies outside `Closure_compose({cons})`; that new concept becomes a substrate on which the already-retained `iterate` schema can generate the depth-2 concept `concat_n`. `meta --ablate` pins this as **measured cross-schema synergy** (identical budgets): `Reach({iterate})` = replicate only, `Reach({reduce})` = concat only, `Reach({iterate, reduce})` = all three, and junk is inert — so `concat_n ∈ Reach({iterate, reduce})` while `∉ Reach({iterate}) ∪ Reach({reduce})`. One cognitive operator (reduce) produces the substrate that makes another (iterate) productive again. This is the Level-2→Level-3 transition: program search → concept acquisition → **acquisition of the ways of generating concepts**. The remaining human-given object is the meta-space M itself — C8's target.
 
+**C8 — discover the proposal schemas from a lower-level meta-language.** `disc` makes M itself a search space: λ-templates over two binders with a concept hole `C` (≤1 seed hole `S`), no inner abstraction. The machine enumerates the ≤4-leaf skeleton space — 455 deduplicated templates; `iterate` and `reduce` are just two programs in it — instantiates each over the ontology, and retains only the behaviorally-useful ones by the same counterfactual gate (6 of 455; 449 inert). The retained set reproduces C7's bootstrap: the joint rollout reaches replicate, concat, and concat_n, growing concat_n itself as a concept (`composition-{replicate, concat} ✗ → 11`). The new content is **meta-level credit assignment**: an operator's measured value is horizon-dependent. In the operator-pair control, at H=1 `iterate` unlocks replicate and `reduce` unlocks concat (tied, one frontier each); at H=2 both are credited with concat_n — a depth-2 concept produced jointly through BOTH operators across two generations, invisible to H=1 scoring. Honest control: the enumerated space also contains direct one-step concat_n templates, so the full retained set reaches concat_n at H=1 and no single schema is load-bearing there — the horizon-dependence is a property of the operator pair, not of every retained template.
+
 The walls are honest too:
 
 - Naive seed injection *widens* search (one run: median cost 0.016s → 0.265s). A size-1 atom seed branches against everything.
@@ -97,13 +99,14 @@ cargo build --release
 ./target/release/supsearch transfer  # the SAME G into a non-arithmetic domain (strings): replicate=iterate(cons,nil)∈G(∅), genuine frontier ✗→3, junk rejected, NO 2nd-order concept (depth is value-space-bound)
 ./target/release/supsearch meta      # C7: acquire PROPOSAL SCHEMAS — iterate+reduce retained (frontier ✗→3 each), junk dropped; reduce's concat restores iterate's leverage to reach concat_n (depth-2, ✗→11), the step iterate-from-{cons,replicate} alone can't
 ./target/release/supsearch meta --ablate   # ablation matrix Reach(subset): {iterate}→{✓,✗,✗}, {reduce}→{✗,✓,✗}, {iterate,reduce}→{✓,✓,✓} — concat_n ∉ Reach({iterate})∪Reach({reduce}): measured cross-schema synergy
+./target/release/supsearch disc      # C8: schemas are DISCOVERED from ≤4-leaf λ-templates (455 enumerated, 6 retained by the gain gate) — joint rollout reaches replicate/concat/concat_n; operator-pair H=1 vs H=2 control shows concat_n deferred (meta-level credit assignment); full-set H=1 is one-step (direct templates mask the pair effect)
 ./target/release/supsearch promote   # it picks mul itself, infers its arity, promotes it
 ./target/release/supsearch ablation  # why the fold-9 wall isn't the value representation
 ./target/release/supsearch diag      # provenance: winner ancestry, semantic redundancy, cap64 vs cap512
 ./target/release/supsearch prune     # decisive: semantic pruning @ cap64 — Outcome B (no-op on this family)
 ```
 
-`cargo test`: 24 pass.
+`cargo test`: 29 pass.
 
 ## Layout
 

@@ -88,6 +88,10 @@ fn run() {
         meta(&argv[1..]);
         return;
     }
+    if argv.first().map(String::as_str) == Some("disc") {
+        disc(&argv[1..]);
+        return;
+    }
     if argv.first().map(String::as_str) == Some("mkbench") {
         gen_benchmark(&argv[1..]);
         return;
@@ -2573,6 +2577,595 @@ fn meta(args: &[String]) {
 }
 
 
+/// ── C8: discover proposal schemas from a lower-level meta-language ─────────
+///
+/// A schema is just a λ-template with a concept hole `C` (and optionally a seed
+/// hole `S`). `iterate` and `reduce` are programs in this meta-language, so they
+/// need not be given by name. `disc` enumerates tiny templates, instantiates
+/// them over the ontology, gates by the counterfactual `Gain`, and retains the
+/// useful ones — then shows the H=1 vs H=2 control: an operator's measured value
+/// grows when scored two reasoning generations ahead (the depth-2 concept
+/// `concat_n` is invisible to one-step scoring of the operator pair). Meta-level
+/// credit assignment. Honest control: the enumerated space also contains direct
+/// one-step `concat_n` templates, so the full retained set reaches `concat_n` at
+/// H=1 and the horizon-dependence is a property of the operator pair, not of
+/// every retained template.
+
+/// A λ-template body over two leading binders (`y`=outer=var1, `x`=inner=var0)
+/// and two holes: `C` (concept) and `S` (seed). No inner abstraction in this
+/// first cut, so every body is already β-normal — distinct skeletons are
+/// distinct normal forms.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+enum MTm {
+    V0,
+    V1,
+    C,
+    S,
+    Ap(Rc<MTm>, Rc<MTm>),
+}
+
+/// Full binary tree shape with `leaves` leaves (Catalan many).
+#[derive(Clone)]
+enum Shape {
+    Lf,
+    Ap(Rc<Shape>, Rc<Shape>),
+}
+
+fn shapes(leaves: usize) -> Vec<Shape> {
+    if leaves == 1 {
+        return vec![Shape::Lf];
+    }
+    let mut out = Vec::new();
+    for l in 1..leaves {
+        for a in shapes(l) {
+            for b in shapes(leaves - l) {
+                out.push(Shape::Ap(Rc::new(a.clone()), Rc::new(b.clone())));
+            }
+        }
+    }
+    out
+}
+
+/// All length-`len` leaf-label sequences over {x, y, C, S} with exactly one C
+/// and zero or one S.
+fn assignments(len: usize) -> Vec<Vec<MTm>> {
+    fn rec(
+        len: usize,
+        pos: usize,
+        has_c: bool,
+        has_s: bool,
+        cur: &mut Vec<MTm>,
+        out: &mut Vec<Vec<MTm>>,
+    ) {
+        if pos == len {
+            if has_c {
+                out.push(cur.clone());
+            }
+            return;
+        }
+        cur.push(MTm::V0);
+        rec(len, pos + 1, has_c, has_s, cur, out);
+        cur.pop();
+        cur.push(MTm::V1);
+        rec(len, pos + 1, has_c, has_s, cur, out);
+        cur.pop();
+        if !has_c {
+            cur.push(MTm::C);
+            rec(len, pos + 1, true, has_s, cur, out);
+            cur.pop();
+        }
+        if !has_s {
+            cur.push(MTm::S);
+            rec(len, pos + 1, has_c, true, cur, out);
+            cur.pop();
+        }
+    }
+    let mut out = Vec::new();
+    let mut cur = Vec::new();
+    rec(len, 0, false, false, &mut cur, &mut out);
+    out
+}
+
+/// Zip a leaf-assignment (in-order) onto a tree shape.
+fn zip_label(shape: &Shape, assign: &[MTm], i: &mut usize) -> MTm {
+    match shape {
+        Shape::Lf => {
+            let t = assign[*i].clone();
+            *i += 1;
+            t
+        }
+        Shape::Ap(a, b) => MTm::Ap(
+            Rc::new(zip_label(a, assign, i)),
+            Rc::new(zip_label(b, assign, i)),
+        ),
+    }
+}
+
+/// Enumerate all templates with up to `max_leaves` leaves (L ∈ 1..=max_leaves),
+/// deduped by skeleton.
+fn enumerate_templates(max_leaves: u32) -> Vec<MTm> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for leaves in 1..=max_leaves as usize {
+        for sh in shapes(leaves) {
+            for asgn in assignments(leaves) {
+                let mut i = 0;
+                let t = zip_label(&sh, &asgn, &mut i);
+                if seen.insert(t.clone()) {
+                    out.push(t);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn has_s(t: &MTm) -> bool {
+    match t {
+        MTm::S => true,
+        MTm::Ap(a, b) => has_s(a) || has_s(b),
+        _ => false,
+    }
+}
+
+fn inst_body(t: &MTm, c: &Rc<term::Term>, s: Option<&Rc<term::Term>>) -> Rc<term::Term> {
+    match t {
+        MTm::V0 => term::var(0),
+        MTm::V1 => term::var(1),
+        MTm::C => c.clone(),
+        MTm::S => s.expect("instantiate: template uses S but no seed").clone(),
+        MTm::Ap(a, b) => term::app(inst_body(a, c, s), inst_body(b, c, s)),
+    }
+}
+
+/// Instantiate a template with a concrete concept `c` (and seed `s` if present),
+/// closing it under the two leading λ. c/s are closed, so no de Bruijn shifting.
+fn instantiate(t: &MTm, c: &Rc<term::Term>, s: Option<&Rc<term::Term>>) -> Rc<term::Term> {
+    term::lam(term::lam(inst_body(t, c, s)))
+}
+
+fn render_body(t: &MTm) -> String {
+    match t {
+        MTm::V0 => "x".into(),
+        MTm::V1 => "y".into(),
+        MTm::C => "C".into(),
+        MTm::S => "S".into(),
+        MTm::Ap(a, b) => format!("({} {})", render_body(a), render_body(b)),
+    }
+}
+
+/// Human-readable skeleton: `λy.λx.body` (y=outer, x=inner).
+fn render(t: &MTm) -> String {
+    format!("λy.λx.{}", render_body(t))
+}
+
+fn iter_shape() -> MTm {
+    MTm::Ap(Rc::new(MTm::Ap(Rc::new(MTm::V0), Rc::new(MTm::Ap(Rc::new(MTm::C), Rc::new(MTm::V1))))), Rc::new(MTm::S))
+}
+
+fn reduce_shape() -> MTm {
+    MTm::Ap(Rc::new(MTm::Ap(Rc::new(MTm::V1), Rc::new(MTm::C))), Rc::new(MTm::V0))
+}
+
+fn solves_cand(t: &parse::Task, body: &Rc<term::Term>, opts: &bank::Options) -> bool {
+    let set = [bank::Concept {
+        body: body.clone(),
+        name: "cand".into(),
+        arity: t.arity as u32,
+    }];
+    bank::concept_solve(t, &set, opts).solution.is_some()
+}
+
+/// One retained template after the pre-filter.
+struct Prefiltered {
+    t: MTm,
+    target: String,
+    gain: Gain,
+}
+
+/// One-step pre-filter: keep templates that, instantiated over `base`×`seeds`,
+/// solve a target AND earn a counterfactual `Gain`. Inert templates are dropped.
+fn prefilter_templates(
+    templates: &[MTm],
+    base: &[Rc<term::Term>],
+    seeds: &[Rc<term::Term>],
+    targets: &[(&str, &parse::Task, &parse::Task)],
+    opts: &bank::Options,
+) -> Vec<Prefiltered> {
+    let mut out = Vec::new();
+    for t in templates {
+        let hs = has_s(t);
+        let mut best: Option<(String, Gain)> = None;
+        'outer: for cb in base {
+            let cands: Vec<Rc<term::Term>> = if hs {
+                seeds.iter().map(|s| instantiate(t, cb, Some(s))).collect()
+            } else {
+                vec![instantiate(t, cb, None)]
+            };
+            for cand in &cands {
+                for (name, ttask, h) in targets {
+                    if !solves_cand(ttask, cand, opts) {
+                        continue;
+                    }
+                    let baseline = concept_cost(h, &[], opts);
+                    if let Some(g) = propose_value(cand, &[], &[(*h).clone()], opts, baseline) {
+                        if g.earns() {
+                            best = Some((name.to_string(), g));
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+        }
+        if let Some((target, gain)) = best {
+            out.push(Prefiltered {
+                t: t.clone(),
+                target,
+                gain,
+            });
+        }
+    }
+    out
+}
+
+/// H-round acquisition rollout with schema set `schemas` over `base`: each round
+/// instantiate every schema over `base∪O`, acquire any candidate that solves a
+/// target AND earns (growing O). Returns (reached-target bitmask, total search
+/// states, final ontology). This is the generalization of `meta --ablate`'s
+/// `reach` to a discovered schema set, also surfacing search cost.
+fn rollout_disc(
+    schemas: &[&MTm],
+    base: &[Rc<term::Term>],
+    seeds: &[Rc<term::Term>],
+    targets: &[(&str, &parse::Task, &parse::Task)],
+    opts: &bank::Options,
+    h_rounds: usize,
+) -> ([bool; 3], u64, Vec<bank::Concept>) {
+    let mut concepts: Vec<bank::Concept> = Vec::new();
+    let mut got = [false, false, false];
+    let mut states = 0u64;
+    for _ in 0..h_rounds {
+        let avail: Vec<Rc<term::Term>> = base
+            .iter()
+            .cloned()
+            .chain(concepts.iter().map(|c| c.body.clone()))
+            .collect();
+        let mut progressed = false;
+        for t in schemas {
+            let hs = has_s(t);
+            for cb in &avail {
+                let cands: Vec<Rc<term::Term>> = if hs {
+                    seeds.iter().map(|s| instantiate(t, cb, Some(s))).collect()
+                } else {
+                    vec![instantiate(t, cb, None)]
+                };
+                for cand in &cands {
+                    for (k, (name, ttask, h)) in targets.iter().enumerate() {
+                        if got[k] || !solves_cand(ttask, cand, opts) {
+                            continue;
+                        }
+                        let baseline = concept_cost(h, &concepts, opts);
+                        if let Some(g) = propose_value(cand, &concepts, &[(*h).clone()], opts, baseline) {
+                            if g.earns() {
+                                concepts.push(bank::Concept {
+                                    body: cand.clone(),
+                                    name: name.to_string(),
+                                    arity: g.arity,
+                                });
+                                states += g.after;
+                                got[k] = true;
+                                progressed = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if !progressed {
+            break;
+        }
+    }
+    (got, states, concepts)
+}
+
+/// usage: supsearch disc [--budget SECS] [--max-size N] [--leaves N]
+///
+/// C8: replace the given meta-space M with a lower-level meta-language
+/// (λ-templates with a concept hole C and ≤1 seed hole S). The machine
+/// enumerates tiny templates, keeps the behaviorally-useful ones by the
+/// counterfactual gate, and reproduces C7's cross-schema bootstrap
+/// (replicate → concat → concat_n) — then the H=1 vs H=2 pair control shows
+/// an operator's value is horizon-dependent: concat_n is invisible to one-step
+/// scoring of the operator pair. Meta-level credit assignment.
+fn disc(args: &[String]) {
+    use std::io::Write;
+    use std::rc::Rc;
+
+    let mut budget = 3u64;
+    let mut max_size = 14u32;
+    let mut max_leaves = 4u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--leaves" => {
+                max_leaves = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown disc arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let num = |n: u32| -> Rc<term::Term> {
+        parse::parse_expr(&bootstrap::church_num_str(n))
+            .and_then(|e| parse::to_term(&e))
+            .expect("church numeral")
+    };
+    let closed = |s: &str| -> Rc<term::Term> {
+        parse::parse_expr(s)
+            .and_then(|e| parse::to_term(&e))
+            .expect("closed term")
+    };
+    let list = |cs: &[u32]| -> Rc<term::Term> {
+        let mut body = String::from("z");
+        for c in cs.iter().rev() {
+            let cstr = bootstrap::church_num_str(*c);
+            body = format!("f({cstr})({body})");
+        }
+        closed(&format!("λf.λz.{body}"))
+    };
+    let task = |arity: usize, tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+        arity,
+        tests: tests
+            .into_iter()
+            .map(|(args, want)| parse::Test { args, want, outer: 0 })
+            .collect(),
+    };
+
+    let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+    let base = vec![cons.clone()];
+    let nil = list(&[]);
+    let seeds = vec![nil.clone()];
+
+    // ── task family (strings; same as meta) ──
+    let rep_task = task(
+        2,
+        [(2, 0), (2, 1), (2, 3), (3, 2), (1, 4), (4, 2)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| (vec![num(c), num(n)], list(&vec![c; n as usize])))
+            .collect(),
+    );
+    let h_rep = task(
+        2,
+        [(2, 2), (3, 3), (1, 1), (4, 4), (5, 2), (0, 3)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| (vec![num(c), num(n)], list(&vec![c; n as usize])))
+            .collect(),
+    );
+    let cat = |a: &[u32], b: &[u32]| -> Vec<u32> {
+        a.iter().chain(b.iter()).copied().collect()
+    };
+    let concat_task = task(
+        2,
+        [
+            (vec![1], vec![2]),
+            (vec![2, 3], vec![4]),
+            (vec![], vec![1, 1]),
+            (vec![1, 2], vec![3, 4]),
+        ]
+        .into_iter()
+        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+        .collect(),
+    );
+    let h_concat = task(
+        2,
+        [
+            (vec![2], vec![3, 4]),
+            (vec![1, 1, 1], vec![]),
+            (vec![3, 2], vec![2, 3]),
+        ]
+        .into_iter()
+        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+        .collect(),
+    );
+    let cnat = |xs: &[u32], n: u32| -> Vec<u32> {
+        let mut v = Vec::new();
+        for _ in 0..n {
+            v.extend_from_slice(xs);
+        }
+        v
+    };
+    let cnat_task = task(
+        2,
+        [
+            (vec![2, 3], 2),
+            (vec![1], 3),
+            (vec![2, 2], 2),
+            (vec![3], 0),
+        ]
+        .into_iter()
+        .map(|(xs, n)| (vec![list(&xs), num(n)], list(&cnat(&xs, n))))
+        .collect(),
+    );
+    let h_cnat = task(
+        2,
+        [(vec![2, 3], 3), (vec![1], 4), (vec![4, 5], 2), (vec![2], 0)]
+            .into_iter()
+            .map(|(xs, n)| (vec![list(&xs), num(n)], list(&cnat(&xs, n))))
+            .collect(),
+    );
+
+    let opts = bank_opts(&base, budget, max_size);
+    let targets: Vec<(&str, &parse::Task, &parse::Task)> = vec![
+        ("replicate", &rep_task, &h_rep),
+        ("concat", &concat_task, &h_concat),
+        ("concat_n", &cnat_task, &h_cnat),
+    ];
+    let names = ["replicate", "concat", "concat_n"];
+
+    // ── enumerate templates ──
+    let templates = enumerate_templates(max_leaves);
+    println!("\n── C8: discovering PROPOSAL SCHEMAS from a lower-level meta-language ──");
+    println!(
+        "meta-language: λ-templates with one concept hole C, ≤1 seed hole S;\n\
+         arity 2, ≤{max_leaves} leaves, no inner λ. base {{cons}}, seeds {{nil}}."
+    );
+    println!("targets: replicate / concat / concat_n; templates enumerated: {}", templates.len());
+
+    // ── one-step pre-filter: keep behaviorally-useful templates ──
+    let retained = prefilter_templates(&templates, &base, &seeds, &targets, &opts);
+    println!(
+        "one-step pre-filter: retained {} (behaviorally useful), dropped {} (inert)",
+        retained.len(),
+        templates.len() - retained.len()
+    );
+
+    let iter_sh = iter_shape();
+    let red_sh = reduce_shape();
+    println!("\nretained templates (after-the-fact identification):");
+    for (gi, r) in retained.iter().enumerate() {
+        let lbl = if r.t == iter_sh {
+            "≈ iterate"
+        } else if r.t == red_sh {
+            "≈ reduce"
+        } else {
+            "novel"
+        };
+        println!(
+            "  G_{}: {:<24} → {:<10} [{}]",
+            gi,
+            render(&r.t),
+            r.target,
+            lbl
+        );
+    }
+
+    // ── joint rollout with the discovered set reproduces the C7 bootstrap ──
+    let schemas: Vec<&MTm> = retained.iter().map(|r| &r.t).collect();
+    let (reached, _states, onto) = rollout_disc(&schemas, &base, &seeds, &targets, &opts, 3);
+    let reached_s: Vec<&str> = (0..3).filter(|k| reached[*k]).map(|k| names[k]).collect();
+    println!(
+        "\njoint rollout (H=3) with discovered schemas reaches: {}",
+        if reached_s.is_empty() {
+            "∅".into()
+        } else {
+            reached_s.join(", ")
+        }
+    );
+    // concat_n is the depth-2 payoff: composition-{replicate, concat} cannot reach it.
+    let rep_concat: Vec<bank::Concept> = onto
+        .iter()
+        .filter(|c| c.name != "concat_n")
+        .cloned()
+        .collect();
+    let before = concept_cost(&h_cnat, &rep_concat, &opts);
+    let after = match onto.iter().find(|c| c.name == "concat_n") {
+        Some(c) => {
+            let mut set = rep_concat.clone();
+            set.push(c.clone());
+            concept_cost(&h_cnat, &set, &opts)
+        }
+        None => UNREACHABLE,
+    };
+    println!(
+        "concat_n held-out: composition-{{replicate, concat}} {} → with depth-2 concept {}",
+        disp_cost(before),
+        disp_cost(after)
+    );
+
+    // ── horizon control: V(g|H=1) vs V(g|H=2) — meta-level credit assignment ──
+    // V(g|H) = Δ_frontier of adding g to the other schemas over H rounds.
+    let value = |others: &[&MTm], full: &[&MTm], h: usize| -> ([bool; 3], u64) {
+        let (br, bs, _) = rollout_disc(others, &base, &seeds, &targets, &opts, h);
+        let (cr, cs, _) = rollout_disc(full, &base, &seeds, &targets, &opts, h);
+        let mut df = [false; 3];
+        for k in 0..3 {
+            df[k] = cr[k] && !br[k];
+        }
+        (df, bs.saturating_sub(cs))
+    };
+    let fmt = |df: &[bool; 3]| -> String {
+        let v: Vec<&str> = (0..3).filter(|k| df[*k]).map(|k| names[k]).collect();
+        if v.is_empty() {
+            "∅".into()
+        } else {
+            v.join(",")
+        }
+    };
+    let lbl_of = |t: &MTm| -> &'static str {
+        if *t == iter_sh {
+            "iterate-like"
+        } else if *t == red_sh {
+            "reduce-like"
+        } else {
+            "novel"
+        }
+    };
+    println!("\n── horizon control: V(g|H=1) vs V(g|H=2) ──");
+    // (A) The full retained set, one round: does it already reach everything?
+    //     The enumerated space also contains direct one-step concat_n templates
+    //     (G_2/G_4), so a single-schema ablation over the full set is degenerate —
+    //     no schema is individually load-bearing. The horizon-dependence lives at
+    //     the level of the operator PAIR, so (B) scores that pair explicitly.
+    let (one, _, _) = rollout_disc(&schemas, &base, &seeds, &targets, &opts, 1);
+    let one_s: Vec<&str> = (0..3).filter(|k| one[*k]).map(|k| names[k]).collect();
+    println!(
+        "  (A) full retained set at H=1 reaches: {} — one-step concat_n templates mask the pair effect",
+        if one_s.is_empty() {
+            "∅".into()
+        } else {
+            one_s.join(", ")
+        }
+    );
+    // (B) Operator-pair control: the C7 operators as discovered by enumeration.
+    let i_iter = retained.iter().position(|r| r.t == iter_sh);
+    let i_red = retained.iter().position(|r| r.t == red_sh);
+    if let (Some(ii), Some(ir)) = (i_iter, i_red) {
+        let pair: Vec<&MTm> = vec![&retained[ii].t, &retained[ir].t];
+        println!("  (B) operator-pair control (iterate-like × reduce-like):");
+        for (gi, gname) in [(ii, "iterate-like"), (ir, "reduce-like")] {
+            let other = if gi == ii { ir } else { ii };
+            let others = vec![&retained[other].t];
+            let (df1, _) = value(&others, &pair, 1);
+            let (df2, _) = value(&others, &pair, 2);
+            let deferred: Vec<&str> = (0..3).filter(|k| df2[*k] && !df1[*k]).map(|k| names[k]).collect();
+            println!(
+                "    {:>11}:  H=1 → {:<22}  H=2 → {:<22}  deferred: {}",
+                gname,
+                fmt(&df1),
+                fmt(&df2),
+                if deferred.is_empty() {
+                    "—".into()
+                } else {
+                    deferred.join(",")
+                }
+            );
+        }
+    }
+    println!(
+        "\nclaim: the operator-pair control shows each operator unlocking exactly one frontier at\n\
+         H=1 (tied: iterate → replicate, reduce → concat); at H=2 both are credited with concat_n —\n\
+         a depth-2 concept produced jointly through BOTH schemas across two reasoning generations —\n\
+         which appears in the H=2 column only. An operator's value is horizon-dependent: H=1 scoring\n\
+         cannot see concat_n; H=2 scoring attributes it. That is meta-level credit assignment: a\n\
+         cognitive operator can be valuable because of a concept it enables several generations later.\n\
+         Honest control (A): over the full retained set the effect is masked — the enumerated space\n\
+         also contains direct one-step concat_n templates, so the full set reaches concat_n at H=1 and\n\
+         no single schema is load-bearing. The horizon-dependence is a property of the operator pair."
+    );
+    std::io::stdout().flush().ok();
+}
+
 /// Cost sentinel for "the reasoner cannot solve this task" (unreachable).
 /// Large enough that "makes an unsolvable task solvable" reads as the
 /// strongest possible promotion signal, but below u64::MAX to avoid overflow
@@ -4566,6 +5159,180 @@ mod probe {
                 assert!(
                     solves(&cnat_task, &iterate(&concat, &nil)),
                     "iterate(reduce(cons), nil) = concat_n — cross-schema boot"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// C8: proposal schemas are DISCOVERED, not given by name. The meta-space is
+    /// λ-templates with one concept hole C (≤1 seed hole S) over two binders.
+    /// (a) the ≤4-leaf space enumerates/dedupes to 455 skeletons and contains
+    ///     both the iterate and reduce skeletons;
+    /// (b) instantiating those skeletons over base {cons}×seed {nil} yields the
+    ///     C7 targets — replicate = iterate(cons,nil), concat = reduce(cons),
+    ///     concat_n = iterate(concat,nil) (the depth-2 cross-schema boot);
+    /// (c) the counterfactual pre-filter retains the behaviorally-useful
+    ///     templates (iterate-like, reduce-like) and drops junk; a joint
+    ///     rollout with the retained set reproduces the C7 bootstrap, growing
+    ///     concat_n itself;
+    /// (d) meta-level credit assignment: concat_n is DEFERRED — invisible to
+    ///     H=1 scoring, attributed to the reduce-like schema only at H=2.
+    #[test]
+    fn disc_discovers_meta_schemas() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let opts = bank::Options {
+                    max_size: 14,
+                    max_depth: 3,
+                    fuel: 40_000,
+                    time_budget_secs: 0.5,
+                    max_level_entries: 200_000,
+                    max_opaque_entries: 20_000,
+                    seeds: vec![],
+                    concepts: vec![],
+                };
+                let list = |cs: &[u32]| -> Rc<term::Term> {
+                    let mut body = String::from("z");
+                    for c in cs.iter().rev() {
+                        let cstr = crate::bootstrap::church_num_str(*c);
+                        body = format!("f({cstr})({body})");
+                    }
+                    closed(&format!("λf.λz.{body}"))
+                };
+                let mk = |tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+                    arity: 2,
+                    tests: tests
+                        .into_iter()
+                        .map(|(args, want)| parse::Test { args, want, outer: 0 })
+                        .collect(),
+                };
+                let cat = |a: &[u32], b: &[u32]| -> Vec<u32> {
+                    a.iter().chain(b.iter()).copied().collect()
+                };
+                let cnat = |xs: &[u32], n: u32| -> Vec<u32> {
+                    let mut v = Vec::new();
+                    for _ in 0..n {
+                        v.extend_from_slice(xs);
+                    }
+                    v
+                };
+                let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+                let nil = list(&[]);
+                let base = vec![cons.clone()];
+                let seeds = vec![nil.clone()];
+
+                let rep_task = mk(
+                    [(2, 1), (2, 3), (3, 2), (1, 4)]
+                        .into_iter()
+                        .map(|(c, n)| (vec![church(c), church(n)], list(&vec![c; n as usize])))
+                        .collect(),
+                );
+                let concat_task = mk(
+                    [(vec![1], vec![2]), (vec![2, 3], vec![4])]
+                        .into_iter()
+                        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+                        .collect(),
+                );
+                let cnat_task = mk(
+                    [(vec![2, 3], 2), (vec![1], 3)]
+                        .into_iter()
+                        .map(|(xs, n)| (vec![list(&xs), church(n)], list(&cnat(&xs, n))))
+                        .collect(),
+                );
+                let targets: Vec<(&str, &parse::Task, &parse::Task)> = vec![
+                    ("replicate", &rep_task, &rep_task),
+                    ("concat", &concat_task, &concat_task),
+                    ("concat_n", &cnat_task, &cnat_task),
+                ];
+                let names = ["replicate", "concat", "concat_n"];
+
+                // (a) complete, deduped enumeration; both known skeletons present.
+                let t4 = crate::enumerate_templates(4);
+                assert_eq!(t4.len(), 455, "≤4-leaf template space should have 455 skeletons, got {}", t4.len());
+                assert!(t4.contains(&crate::iter_shape()), "iterate skeleton missing from the meta-space");
+                assert!(t4.contains(&crate::reduce_shape()), "reduce skeleton missing from the meta-space");
+
+                // (b) the two skeletons instantiate to the C7 targets.
+                let iterate = crate::instantiate(&crate::iter_shape(), &cons, Some(&nil));
+                let reduce = crate::instantiate(&crate::reduce_shape(), &cons, None);
+                let solves = |t: &parse::Task, body: &Rc<term::Term>| -> bool {
+                    let set = [bank::Concept {
+                        body: body.clone(),
+                        name: "cand".into(),
+                        arity: 2,
+                    }];
+                    bank::concept_solve(t, &set, &opts).solution.is_some()
+                };
+                assert!(solves(&rep_task, &iterate), "iterate(cons,nil) should solve replicate");
+                assert!(solves(&concat_task, &reduce), "reduce(cons) should solve concat");
+                assert!(
+                    solves(
+                        &cnat_task,
+                        &crate::instantiate(&crate::iter_shape(), &reduce, Some(&nil))
+                    ),
+                    "iterate(reduce(cons), nil) = concat_n — cross-schema boot"
+                );
+                assert!(!solves(&cnat_task, &iterate), "iterate(cons,nil) alone ↛ concat_n");
+
+                // (c) discovery pre-filter: retain useful templates among junk,
+                //     then a joint rollout grows the ontology through them.
+                let junk: Vec<crate::MTm> = vec![
+                    crate::MTm::V0,
+                    crate::MTm::Ap(Rc::new(crate::MTm::V0), Rc::new(crate::MTm::V1)),
+                    crate::MTm::Ap(Rc::new(crate::MTm::V1), Rc::new(crate::MTm::V0)),
+                ];
+                let mut pool: Vec<crate::MTm> = junk.clone();
+                pool.push(crate::iter_shape());
+                pool.push(crate::reduce_shape());
+                let retained = crate::prefilter_templates(&pool, &base, &seeds, &targets, &opts);
+                let has = |t: &crate::MTm| retained.iter().any(|r| r.t == *t);
+                assert!(has(&crate::iter_shape()), "pre-filter dropped the iterate-like template");
+                assert!(has(&crate::reduce_shape()), "pre-filter dropped the reduce-like template");
+                for j in &junk {
+                    assert!(!has(j), "pre-filter retained a junk template (inert)");
+                }
+                let schemas: Vec<&crate::MTm> = retained.iter().map(|r| &r.t).collect();
+                let (reached, _, onto) =
+                    crate::rollout_disc(&schemas, &base, &seeds, &targets, &opts, 3);
+                for k in 0..3 {
+                    assert!(reached[k], "joint rollout should reach {}", names[k]);
+                }
+                assert!(
+                    onto.iter().any(|c| c.name == "concat_n"),
+                    "rollout must grow concat_n as a discovered concept"
+                );
+
+                // (d) horizon control: concat_n is invisible at H=1, credited at H=2.
+                let red_idx = retained
+                    .iter()
+                    .position(|r| r.t == crate::reduce_shape())
+                    .unwrap();
+                let others: Vec<&crate::MTm> = retained
+                    .iter()
+                    .enumerate()
+                    .filter(|(j, _)| *j != red_idx)
+                    .map(|(_, r)| &r.t)
+                    .collect();
+                let mut full: Vec<&crate::MTm> = others.clone();
+                full.push(&retained[red_idx].t);
+                let val = |others: &[&crate::MTm], full: &[&crate::MTm], h: usize| -> [bool; 3] {
+                    let (br, _, _) = crate::rollout_disc(others, &base, &seeds, &targets, &opts, h);
+                    let (cr, _, _) = crate::rollout_disc(full, &base, &seeds, &targets, &opts, h);
+                    let mut df = [false; 3];
+                    for k in 0..3 {
+                        df[k] = cr[k] && !br[k];
+                    }
+                    df
+                };
+                let (df1, df2) = (val(&others, &full, 1), val(&others, &full, 2));
+                assert!(
+                    df1[2] == false && df2[2] == true,
+                    "concat_n must be deferred: H=1 Δ {:?}, H=2 Δ {:?}",
+                    df1,
+                    df2
                 );
             })
             .unwrap()
