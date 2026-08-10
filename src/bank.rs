@@ -613,7 +613,7 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
             let mut tuple: Vec<usize> = vec![0; a];
             loop {
                 built += 1;
-                if built % 4096 == 0 && start.elapsed().as_secs_f64() > opts.time_budget_secs {
+                if built % 512 == 0 && start.elapsed().as_secs_f64() > opts.time_budget_secs {
                     return Outcome {
                         solution: None,
                         stats: Stats { built, ..Default::default() },
