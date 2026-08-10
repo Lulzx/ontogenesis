@@ -86,6 +86,47 @@ thread_local! {
     static STACK_BASE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+// Ablation metering: coarse counters for where the "materializing semantic
+// values" wall physically sits. Off by default (near-zero overhead when off);
+// enabled only by the `--ablation` probe so the hot search paths stay untouched.
+thread_local! {
+    static METER_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static BETA_STEPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static QUOTE_NODES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static EVAL_ABORTS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+pub fn meter_on(on: bool) {
+    METER_ON.with(|m| m.set(on));
+}
+pub fn meter_reset() {
+    BETA_STEPS.with(|m| m.set(0));
+    QUOTE_NODES.with(|m| m.set(0));
+    EVAL_ABORTS.with(|m| m.set(0));
+}
+pub fn beta_steps() -> u64 {
+    BETA_STEPS.with(|m| m.get())
+}
+pub fn quote_nodes() -> u64 {
+    QUOTE_NODES.with(|m| m.get())
+}
+pub fn eval_aborts() -> u64 {
+    EVAL_ABORTS.with(|m| m.get())
+}
+
+#[inline]
+fn meter_beta() {
+    if METER_ON.with(|m| m.get()) {
+        BETA_STEPS.with(|m| m.set(m.get() + 1));
+    }
+}
+#[inline]
+fn meter_quote() {
+    if METER_ON.with(|m| m.get()) {
+        QUOTE_NODES.with(|m| m.set(m.get() + 1));
+    }
+}
+
 /// Abort before the recursion blows the worker's 1GB stack: measure stack
 /// growth from the first eval on this thread and bail past ~700MB.
 #[inline]
@@ -129,6 +170,7 @@ pub fn apply(fv: Rc<Val>, arg: Thunk, fuel: &mut Fuel) -> Result<Rc<Val>, Abort>
     match fv.as_ref() {
         Val::Lam(cenv, body) => {
             fuel.spend()?;
+            meter_beta();
             let mut env2 = (**cenv).clone();
             env2.push(arg);
             eval(&Rc::new(env2), body, fuel)
@@ -147,6 +189,7 @@ pub fn quote(v: &Val, depth: u32, fuel: &mut Fuel) -> Result<Rc<Term>, Abort> {
     // Charge fuel per node read back, so normal-form *size* is bounded even
     // when it was cheap to compute (e.g. shared numeral exponentiation).
     fuel.spend()?;
+    meter_quote();
     match v {
         Val::Lam(env, body) => {
             let fresh = thunk_of_val(Val::Neu(Head::Bound(depth), Vec::new()));
@@ -183,6 +226,7 @@ pub fn quote_hash<H: std::hash::Hasher>(
     h: &mut H,
 ) -> Result<(), Abort> {
     fuel.spend()?;
+    meter_quote();
     match v {
         Val::Lam(env, body) => {
             h.write_u8(0);

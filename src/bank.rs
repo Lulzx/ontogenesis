@@ -505,6 +505,9 @@ pub struct Concept {
 struct PoolEntry {
     term: Rc<Term>,
     vals: Vec<Rc<Val>>,
+    /// Identity keys per test value (structural hashes in `concept_solve`; in
+    /// `concept_solve_abl` the chosen identity — structural or canonical).
+    keys: Vec<u64>,
 }
 
 fn val_hash(v: &Val, fuel: &mut Fuel) -> Option<u64> {
@@ -576,7 +579,7 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
             };
             vals.push(v);
         }
-        pool.push(PoolEntry { term: var(i as u32), vals });
+        pool.push(PoolEntry { term: var(i as u32), vals, keys: Vec::new() });
     }
 
     let mut seen: HashSet<Vec<u64>> = HashSet::new();
@@ -678,8 +681,8 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
                         st.built = built;
                         st.elapsed_secs = start.elapsed().as_secs_f64();
                         return Outcome { solution: Some(sol), stats: st };
-                    } else if seen.insert(hashes) && additions.len() < pool_cap {
-                        additions.push(PoolEntry { term, vals: vs });
+                    } else if seen.insert(hashes.clone()) && additions.len() < pool_cap {
+                        additions.push(PoolEntry { term, vals: vs, keys: hashes });
                     }
                 }
                 // Advance the tuple counter (odometer over the pool).
@@ -710,4 +713,269 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
         solution: None,
         stats: Stats { built, ..Default::default() },
     }
+}
+
+/// Meters for the value-representation ablation: where does the "materializing
+/// semantic values" wall sit? Read from the thread-local nbe/canon meters after
+/// a `concept_solve_abl` call on the same thread.
+#[derive(Default, Clone, Debug)]
+pub struct Meters {
+    /// β-reduction steps during candidate evaluation (normalization work).
+    pub norm_steps: u64,
+    /// Candidate evaluations aborted because eval/apply ran out of fuel.
+    pub eval_aborts: u64,
+    /// Node-walks performed by numeral canonicalization.
+    pub canon_nodes: u64,
+    /// Canonicalization passes that aborted (value too big to observe).
+    pub canon_aborts: u64,
+    /// Node-reads performed by structural (fallback) hashing.
+    pub quote_nodes: u64,
+    /// Largest single numeral the canonicalizer walked in one pass (~ the
+    /// materialized transient's size) — the peak transient the pool would
+    /// otherwise have had to keep.
+    pub max_transient: u64,
+    /// Final pool size (how many distinct values the search kept).
+    pub pool_entries: usize,
+}
+
+/// Ablation variant of `concept_solve` (condition C). Identical search,
+/// ontology, pool cap, and evaluation fuel — the ONLY knob is how a value's
+/// identity is computed for dedup + target matching:
+///
+/// - `Structural`: the existing engine — `val_hash` with the 2048-fuel cap
+///   (exactly as `concept_solve`). Baseline.
+/// - `Canonical`: canonical-key observation (`canon::canonicalize`) with the
+///   full evaluation fuel budget. A Church numeral `λf.λx.f^n(x)` collapses to
+///   `ChurchNumeral(n)`, O(1) to store/hash/compare, even though the value was
+///   produced by ordinary Church β-reduction. No arithmetic; β-reduction and the
+///   searchable language are untouched.
+///
+/// The experiment: run folds 4–10 under both, see where the wall moves.
+///
+/// Measured result (see `supsearch ablation`): the two columns are IDENTICAL on
+/// this family — every fold solves/fails the same way at the same pool size. The
+/// canonical path keeps large numerals (max_trans up to 6561 nodes observed) but
+/// never changes reachability, because this family's target values are small and
+/// no large value is on the critical path. The fold≥9 wall is the composition
+/// search space (pool_cap=64), not the value representation: raising the cap to
+/// 512 unlocks fold9 in both modes. This is a falsifying negative for the
+/// representation-only hypothesis.
+pub fn concept_solve_abl(
+    task: &Task,
+    concepts: &[Concept],
+    opts: &Options,
+    use_canon: bool,
+) -> (Outcome, Meters) {
+    let start = Instant::now();
+    let k = task.arity as u32;
+    let n_tests = task.tests.len();
+    let empty: Env = Rc::new(Vec::new());
+    let mut m = Meters::default();
+
+    // Target normal forms.
+    let mut target: Vec<Rc<Term>> = Vec::with_capacity(n_tests);
+    for t in &task.tests {
+        let mut fuel = Fuel(opts.fuel);
+        let stripped = crate::nbe::normalize(&empty, &t.want, &mut fuel)
+            .ok()
+            .and_then(|nf| crate::parse::strip_outer(&nf, t.outer));
+        match stripped {
+            Some(nf) => target.push(nf),
+            None => {
+                return (Outcome { solution: None, stats: Stats::default() }, m);
+            }
+        }
+    }
+    // Target identity: canonical keys if `use_canon`, else structural hashes.
+    let mut target_keys: Vec<u64> = Vec::with_capacity(n_tests);
+    for nf in &target {
+        let mut fuel = Fuel(opts.fuel);
+        let v = match eval(&empty, nf, &mut fuel) {
+            Ok(v) => v,
+            Err(_) => return (Outcome { solution: None, stats: Stats::default() }, m),
+        };
+        let key = if use_canon {
+            let mut h = DefaultHasher::new();
+            match crate::canon::canonicalize(&v, &mut fuel, &mut h) {
+                Ok(cv) => Some(cv.key()),
+                Err(_) => return (Outcome { solution: None, stats: Stats::default() }, m),
+            }
+        } else {
+            val_hash(&v, &mut Fuel(i64::MAX / 2))
+        };
+        match key {
+            Some(k) => target_keys.push(k),
+            None => return (Outcome { solution: None, stats: Stats::default() }, m),
+        }
+    }
+
+    // Pool seeded with the task arguments.
+    let mut pool: Vec<PoolEntry> = Vec::new();
+    for i in 0..k as usize {
+        let mut vals = Vec::with_capacity(n_tests);
+        for j in 0..n_tests {
+            let mut fuel = Fuel(opts.fuel);
+            let v = match eval(&empty, &task.tests[j].args[i], &mut fuel) {
+                Ok(v) => v,
+                Err(_) => return (Outcome { solution: None, stats: Stats::default() }, m),
+            };
+            vals.push(v);
+        }
+        pool.push(PoolEntry {
+            term: var(i as u32),
+            vals,
+            keys: Vec::new(),
+        });
+    }
+
+    let mut seen: HashSet<Vec<u64>> = HashSet::new();
+    for e in &pool {
+        let hashes: Vec<u64> = (0..n_tests)
+            .map(|j| val_hash(&e.vals[j], &mut Fuel(opts.fuel)).unwrap_or(0))
+            .collect();
+        if hashes == target_keys {
+            let mut sol = e.term.clone();
+            for _ in 0..k {
+                sol = lam(sol);
+            }
+            return (
+                Outcome {
+                    solution: Some(sol),
+                    stats: Stats { built: 1, ..Default::default() },
+                },
+                m,
+            );
+        }
+        seen.insert(hashes);
+    }
+
+    let mut built: u64 = 0;
+    let pool_cap = 64usize;
+    loop {
+        let before = pool.len();
+        let mut additions: Vec<PoolEntry> = Vec::new();
+        for concept in concepts {
+            let a = concept.arity as usize;
+            if a == 0 {
+                continue;
+            }
+            let mut tuple: Vec<usize> = vec![0; a];
+            loop {
+                built += 1;
+                if built % 512 == 0 && start.elapsed().as_secs_f64() > opts.time_budget_secs {
+                    return (
+                        Outcome { solution: None, stats: Stats { built, ..Default::default() } },
+                        m,
+                    );
+                }
+                let mut vals: Option<Vec<Rc<Val>>> = Some(Vec::with_capacity(n_tests));
+                for j in 0..n_tests {
+                    let mut fuel = Fuel(opts.fuel);
+                    let mut v = match eval(&empty, &concept.body, &mut fuel) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            vals = None;
+                            break;
+                        }
+                    };
+                    let mut ok = true;
+                    for &ti in &tuple {
+                        let arg = thunk_of_val_rc(pool[ti].vals[j].clone());
+                        match crate::nbe::apply(v.clone(), arg, &mut fuel) {
+                            Ok(nv) => v = nv,
+                            Err(_) => {
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    if !ok {
+                        vals = None;
+                        break;
+                    }
+                    if let Some(vs) = vals.as_mut() {
+                        vs.push(v);
+                    }
+                }
+                if let Some(vs) = vals {
+                    let mut term = Rc::new(Term::Prim(concept.body.clone()));
+                    for &ti in &tuple {
+                        term = app(term, pool[ti].term.clone());
+                    }
+                    // Identity of the tuple's values: canonical keys (full eval
+                    // budget, O(1) for numerals) OR structural hash (2048 cap).
+                    let mut keys = Vec::with_capacity(n_tests);
+                    let mut ok_key = true;
+                    for j in 0..n_tests {
+                        let key = if use_canon {
+                            let mut fuel = Fuel(opts.fuel);
+                            let mut h = DefaultHasher::new();
+                            match crate::canon::canonicalize(&vs[j], &mut fuel, &mut h) {
+                                Ok(cv) => Some(cv.key()),
+                                Err(_) => {
+                                    m.canon_aborts += 1;
+                                    None
+                                }
+                            }
+                        } else {
+                            val_hash(&vs[j], &mut Fuel(2048))
+                        };
+                        match key {
+                            Some(k) => keys.push(k),
+                            None => {
+                                ok_key = false;
+                                break;
+                            }
+                        }
+                    }
+                    if !ok_key {
+                        // drop the tuple (too big to identify within budget)
+                    } else if keys == target_keys {
+                        let mut sol = term.clone();
+                        for _ in 0..k {
+                            sol = lam(sol);
+                        }
+                        m.pool_entries = pool.len();
+                        return (
+                            Outcome {
+                                solution: Some(sol),
+                                stats: Stats { built, ..Default::default() },
+                            },
+                            m,
+                        );
+                    } else if seen.insert(keys.clone()) && additions.len() < pool_cap {
+                        additions.push(PoolEntry { term, vals: vs, keys });
+                    }
+                }
+                let mut done = true;
+                for d in tuple.iter_mut() {
+                    if *d + 1 < pool.len() {
+                        *d += 1;
+                        done = false;
+                        break;
+                    }
+                    *d = 0;
+                }
+                if done {
+                    break;
+                }
+            }
+        }
+        if additions.is_empty() {
+            break;
+        }
+        pool.extend(additions);
+        if pool.len() >= pool_cap || pool.len() == before {
+            break;
+        }
+    }
+
+    m.pool_entries = pool.len();
+    m.norm_steps = crate::nbe::beta_steps();
+    m.eval_aborts = crate::nbe::eval_aborts();
+    m.quote_nodes = crate::nbe::quote_nodes();
+    m.canon_nodes = crate::canon::canon_nodes();
+    m.canon_aborts = crate::canon::canon_aborts();
+    m.max_transient = crate::canon::max_transient();
+    (Outcome { solution: None, stats: Stats { built, ..Default::default() } }, m)
 }

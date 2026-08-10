@@ -37,8 +37,9 @@ cargo build --release
   --train    clst_fol,clst_hed,clst_map,cnat_mul \
   --holdout  cnat_add,cnat_exp,ctre_rev,ntup_hed,slst_hed \
   --rounds 3 --budget 20
-./target/release/supsearch ladder   # Concept Ladder demo (see below)
-./target/release/supsearch promote  # autonomous concept promotion (see below)
+./target/release/supsearch ladder    # Concept Ladder demo (see below)
+./target/release/supsearch promote   # autonomous concept promotion (see below)
+./target/release/supsearch ablation  # value-representation probe (see below)
 ```
 
 `mkbench` rebuilds the benchmark from the verified round-0 solutions, because
@@ -103,11 +104,62 @@ What's real and measured:
 - **Two negative controls pass:** the wrong-family `square` and the redundant
   4-fold (Δ = 0, since `mul` alone already reaches the 5-fold) are both declined.
   The machine promotes exactly one concept, and it is the right one.
-- **The recursion is honestly bounded by the representation:** product values grow
-  exponentially as Church numerals and near the hash fuel, so the 9-fold is a hard
-  wall no product sub-concept breaks (a chunked 8-fold Prim at its correct arity 8
-  still fails). Genuine multi-generation recursion needs a family whose *values*
-  stay small while the *computation* grows — that is the open frontier.
+- **The recursion is honestly bounded by the search:** the 9-fold is a wall no
+  product sub-concept breaks (a chunked 8-fold Prim at its correct arity 8 still
+  fails). The `ablation` below isolates *why* — it is the composition-search space,
+  not the value representation. Genuine multi-generation recursion needs a family
+  whose *computation* grows while the *composition* stays cheap — the open frontier.
+
+## Value-representation ablation (`ablation`)
+
+The cleanest probe of one hypothesis from `promote`: is the fold≥9 wall caused by
+*value representation* — the pool dropping large Church-numeral results at the
+2048-fuel structural-hash cap? To test it in isolation, I added a separate
+canonical observation layer with the representation constraint taken literally:
+
+- **`Val` (how computation executes) is untouched.** `apply`, β-reduction, and the
+  searchable λ-language are byte-for-byte the same. No `mul(a,b)=>a*b` shortcut, no
+  arithmetic primitive, no `Val::Num` in the evaluator.
+- **`CanonicalValue` (how results are identified) is a new, separate key.** A value
+  is quoted to its normal form, and if it is exactly `λf.λx.f^n(x)` it collapses to
+  `ChurchNumeral(n)` — a compact O(1) key — with the *full* evaluation budget, not
+  the 2048 hash cap. Otherwise it falls back to a structural hash. `mul(3)(4)`
+  canonicalizes to the *same* key as the closed numeral 12 (unit-tested).
+
+The result (`supsearch ablation --budget 20`):
+
+```
+fold       struct   canon    ...   pool_s pool_c
+ 2-fold         2       2                 2     2
+ 8-fold      1272    1272                39    39
+ 9-fold         ✗       ✗               104   104
+10-fold         ✗       ✗               105   105
+11-fold         ✗       ✗               106   106
+```
+
+**The two columns are identical.** Every fold structural solves, canonical solves
+to the same count; every fold that fails does so at the same pool size. The
+canonical path demonstrably keeps large numerals (the meter shows a 6561-node
+expansion observed where the 2048 cap would have dropped it), yet reachability is
+unchanged. **This is a falsifying negative for the representation-only
+hypothesis:** compact semantic storage, at full eval budget, with the evaluator
+untouched, does not move the wall on this family.
+
+Why: the family's *answers* are small. The n-fold tests cycle arguments over 1,2,3,
+so the largest target value is bounded (8-fold and 9-fold both peak at 216) — no
+large value is ever on the critical path, so whether the pool keeps it is
+irrelevant. The fold≥9 failure is the **composition search**: with the pool cap
+frozen at 64, the binary-mul tree that assembles a 9-ary product from 9 leaf args
+is never reached in budget. Raising the cap to 512 unlocks fold9 in **both** modes
+(2040 vs 2056 built — structural even slightly cheaper). The earlier "2048 hash
+cap drops the value" reading was real but misattributed: the dropped values are
+not the ones that gate fold9.
+
+The value-representation separation itself is real and verified (`mul(3)(4)` ≡
+`numeral(12)` under the canonical key, no arithmetic involved) — it is just not the
+limiting factor for this product family. The honest next lever is composition
+search (pool capacity / how concepts assemble), or a family whose computation grows
+faster than its composition cost.
 
 ## Layout
 
