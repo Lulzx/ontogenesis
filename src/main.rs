@@ -2122,6 +2122,7 @@ fn meta(args: &[String]) {
 
     let mut budget = 12u64;
     let mut max_size = 14u32;
+    let mut ablate = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -2132,6 +2133,10 @@ fn meta(args: &[String]) {
             "--max-size" => {
                 max_size = args[i + 1].parse().unwrap();
                 i += 2;
+            }
+            "--ablate" => {
+                ablate = true;
+                i += 1;
             }
             other => {
                 eprintln!("unknown meta arg: {other}");
@@ -2472,6 +2477,98 @@ fn meta(args: &[String]) {
             String::from("that iterate-from-{cons,replicate} alone cannot reach")
         }
     );
+
+    // ── ablation matrix: Reach(subset) under identical budgets ──
+    // For each schema-subset, run a bounded acquisition loop and record which of
+    // replicate / concat / concat_n are reachable. The claim this verifies:
+    // concat_n ∈ Reach({iterate,reduce}) but ∉ Reach({iterate}) ∪ Reach({reduce})
+    // — cross-schema bootstrapping (reduce's concat is the substrate iterate needs).
+    if ablate {
+        let targets: Vec<(&str, &parse::Task, &parse::Task)> = vec![
+            ("replicate", &rep_task, &h_rep),
+            ("concat", &concat_task, &h_concat),
+            ("concat_n", &cnat_task, &h_cnat),
+        ];
+        let subsets: [(&str, bool, bool, bool); 6] = [
+            ("{iterate}", true, false, false),
+            ("{reduce}", false, true, false),
+            ("{junk}", false, false, true),
+            ("{iterate, reduce}", true, true, false),
+            ("{iterate, junk}", true, false, true),
+            ("{reduce, junk}", false, true, true),
+        ];
+        // reach(subset): bounded acquisition loop over base {cons}, recording which
+        // of the three targets' concepts become reachable.
+        let reach = |use_iter: bool, use_red: bool, use_jnk: bool| -> [bool; 3] {
+            let mut concepts: Vec<bank::Concept> = Vec::new();
+            let mut got = [false, false, false];
+            for _round in 0..3 {
+                let avail = available(&concepts);
+                // collect this round's candidates from the enabled schemas.
+                let mut cands: Vec<Rc<term::Term>> = Vec::new();
+                for cb in &avail {
+                    if use_iter {
+                        for sd in &seeds {
+                            cands.push(iterate(cb, sd));
+                        }
+                    }
+                    if use_red {
+                        cands.push(reduce(cb));
+                    }
+                    if use_jnk {
+                        for sd in &seeds {
+                            cands.push(junk(cb, sd));
+                        }
+                    }
+                }
+                let mut progressed = false;
+                for cand in &cands {
+                    for (k, (name, t, h)) in targets.iter().enumerate() {
+                        if got[k] || !solves(t, cand) {
+                            continue;
+                        }
+                        let baseline = concept_cost(h, &concepts, &opts);
+                        if let Some(g) = propose_value(cand, &concepts, &[(*h).clone()], &opts, baseline)
+                        {
+                            if g.earns() {
+                                concepts.push(bank::Concept {
+                                    body: cand.clone(),
+                                    name: name.to_string(),
+                                    arity: g.arity,
+                                });
+                                got[k] = true;
+                                progressed = true;
+                            }
+                        }
+                    }
+                }
+                if !progressed {
+                    break;
+                }
+            }
+            got
+        };
+        println!("\n── ablation matrix: Reach(subset), identical budgets ──");
+        println!(
+            "{:<18} {:>9} {:>9} {:>9}",
+            "schemas", "replicate", "concat", "concat_n"
+        );
+        for (name, ui, ur, uj) in subsets {
+            let got = reach(ui, ur, uj);
+            println!(
+                "{:<18} {:>9} {:>9} {:>9}",
+                name,
+                if got[0] { "✓" } else { "✗" },
+                if got[1] { "✓" } else { "✗" },
+                if got[2] { "✓" } else { "✗" }
+            );
+        }
+        println!(
+            "\ncross-schema claim: concat_n ∈ Reach({{iterate, reduce}}) while ∉ Reach({{iterate}}) ∪\n\
+             Reach({{reduce}}): the acquired reduce's concat is the substrate iterate needs —\n\
+             measured synergy between proposal schemas, not just schema selection."
+        );
+    }
     std::io::stdout().flush().ok();
 }
 
@@ -4324,6 +4421,151 @@ mod probe {
                         .any(|cb| solves(&cnat_task, &iterate(cb, &nil))
                             || solves(&cnat_task, &iterate(cb, &singleton))),
                     "iterate-from-{{cons,replicate}} alone cannot reach concat_n — reduce was the unlock"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// C7 ablation matrix: Reach(subset) pins the cross-schema synergy.
+    /// {iterate}→{replicate}, {reduce}→{concat}, but concat_n is reachable only
+    /// from {iterate, reduce} — concat_n ∉ Reach({iterate}) ∪ Reach({reduce}).
+    /// junk is inert (contributes no concept to any cell).
+    #[test]
+    fn meta_ablation_matrix() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let opts = bank::Options {
+                    max_size: 14,
+                    max_depth: 3,
+                    fuel: 40_000,
+                    time_budget_secs: 12.0,
+                    max_level_entries: 200_000,
+                    max_opaque_entries: 20_000,
+                    seeds: vec![],
+                    concepts: vec![],
+                };
+                let list = |cs: &[u32]| -> Rc<term::Term> {
+                    let mut body = String::from("z");
+                    for c in cs.iter().rev() {
+                        let cstr = crate::bootstrap::church_num_str(*c);
+                        body = format!("f({cstr})({body})");
+                    }
+                    closed(&format!("λf.λz.{body}"))
+                };
+                let mk = |tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+                    arity: 2,
+                    tests: tests
+                        .into_iter()
+                        .map(|(args, want)| parse::Test { args, want, outer: 0 })
+                        .collect(),
+                };
+                let cat = |a: &[u32], b: &[u32]| -> Vec<u32> {
+                    a.iter().chain(b.iter()).copied().collect()
+                };
+                let cnat = |xs: &[u32], n: u32| -> Vec<u32> {
+                    let mut v = Vec::new();
+                    for _ in 0..n {
+                        v.extend_from_slice(xs);
+                    }
+                    v
+                };
+                let rep_task = mk(
+                    [(2, 1), (2, 3), (3, 2), (1, 4)]
+                        .into_iter()
+                        .map(|(c, n)| {
+                            (vec![church(c), church(n)], list(&vec![c; n as usize]))
+                        })
+                        .collect(),
+                );
+                let concat_task = mk(
+                    [(vec![1], vec![2]), (vec![2, 3], vec![4])]
+                        .into_iter()
+                        .map(|(xs, ys)| {
+                            (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys)))
+                        })
+                        .collect(),
+                );
+                let cnat_task = mk(
+                    [(vec![2, 3], 2), (vec![1], 3)]
+                        .into_iter()
+                        .map(|(xs, n)| {
+                            (vec![list(&xs), church(n)], list(&cnat(&xs, n)))
+                        })
+                        .collect(),
+                );
+                let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+                let nil = list(&[]);
+                let singleton = list(&[1]);
+                let seeds = vec![nil.clone(), singleton.clone()];
+                let iterate =
+                    |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+                        term::lam(term::lam(term::app(
+                            term::app(term::var(0), term::app(c.clone(), term::var(1))),
+                            seed.clone(),
+                        )))
+                    };
+                let reduce = |c: &Rc<term::Term>| -> Rc<term::Term> {
+                    term::lam(term::lam(term::app(
+                        term::app(term::var(1), c.clone()),
+                        term::var(0),
+                    )))
+                };
+                let junk = |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+                    term::lam(term::lam(term::app(
+                        term::app(c.clone(), seed.clone()),
+                        term::app(term::app(c.clone(), term::var(1)), term::var(0)),
+                    )))
+                };
+                let solves = |t: &parse::Task, body: &Rc<term::Term>| -> bool {
+                    let set = [bank::Concept {
+                        body: body.clone(),
+                        name: "cand".into(),
+                        arity: t.arity as u32,
+                    }];
+                    bank::concept_solve(t, &set, &opts).solution.is_some()
+                };
+                let any_solves = |bodies: &[Rc<term::Term>], t: &parse::Task| -> bool {
+                    bodies.iter().any(|b| solves(t, b))
+                };
+                // candidate sets per schema-subset over base {cons}.
+                let iterate_cands: Vec<Rc<term::Term>> =
+                    seeds.iter().map(|s| iterate(&cons, s)).collect();
+                let reduce_cands = vec![reduce(&cons)];
+                let junk_cands: Vec<Rc<term::Term>> =
+                    seeds.iter().map(|s| junk(&cons, s)).collect();
+                let both: Vec<Rc<term::Term>> = iterate_cands
+                    .iter()
+                    .chain(reduce_cands.iter())
+                    .cloned()
+                    .collect();
+                // {iterate}: replicate only.
+                assert!(any_solves(&iterate_cands, &rep_task), "{{iterate}} → replicate");
+                assert!(!any_solves(&iterate_cands, &concat_task), "{{iterate}} ↛ concat");
+                assert!(!any_solves(&iterate_cands, &cnat_task), "{{iterate}} ↛ concat_n");
+                // {reduce}: concat only.
+                assert!(any_solves(&reduce_cands, &concat_task), "{{reduce}} → concat");
+                assert!(!any_solves(&reduce_cands, &rep_task), "{{reduce}} ↛ replicate");
+                assert!(!any_solves(&reduce_cands, &cnat_task), "{{reduce}} ↛ concat_n");
+                // junk is inert.
+                assert!(!any_solves(&junk_cands, &rep_task), "junk ↛ replicate");
+                assert!(!any_solves(&junk_cands, &concat_task), "junk ↛ concat");
+                assert!(!any_solves(&junk_cands, &cnat_task), "junk ↛ concat_n");
+                // {iterate, reduce}: all three — concat_n is the cross-schema boot.
+                assert!(any_solves(&both, &rep_task), "{{iterate,reduce}} → replicate");
+                assert!(any_solves(&both, &concat_task), "{{iterate,reduce}} → concat");
+                // concat_n needs iterate(concat,·): iterate alone can't, but with
+                // reduce's concat as a concept body it can.
+                assert!(
+                    !any_solves(&iterate_cands, &cnat_task),
+                    "iterate alone ↛ concat_n"
+                );
+                let concat = reduce(&cons);
+                assert!(
+                    solves(&cnat_task, &iterate(&concat, &nil)),
+                    "iterate(reduce(cons), nil) = concat_n — cross-schema boot"
                 );
             })
             .unwrap()
