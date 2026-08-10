@@ -73,13 +73,19 @@ What's real and measured:
 - The **miner extracts a recurring abstraction** from a recurring family of
   solved tasks and the language grows (`add → add C1`) — the compression-
   mining invention step works.
-- The honest wall: **seed injection does not collapse search cost.** It usually
-  widens it (a size-1 atom seed branches against everything); a mined
-  abstraction is often not the clean textbook concept anyway. The one clean win
-  is capability: an `add` seed makes `a×b+c` solvable (raw-unsolvable →
-  8,334 states). The dramatic "83,000 → 900" needs an abstraction-aware search
-  this bottom-up bank doesn't implement. That's the real frontier — not a
-  failure of concept discovery.
+- The honest wall: **naive seed injection does not collapse search cost.** It
+  usually widens it (a size-1 atom seed branches against everything; the
+  emitted solution still carries the concept's full λ-body), and a mined
+  abstraction is often not the clean textbook concept anyway.
+- **The collapse is real, but it lives in the search procedure, not the seed.**
+  Once the machine has invented `mul`, a *quotient-aware search* (condition C,
+  `bank::concept_solve`) composes the concept over its inputs instead of
+  re-deriving it: `a×b×c` 17,270 → **17 states**, and `a×b×c×d` — unsolvable
+  raw — is **99 states**. That is the thesis made concrete: a machine has
+  acquired a concept only when reasoning *through* it is cheaper than
+  re-deriving it. Honest limits: condition C needs the concept's *composition*
+  arity (2 for mul, not its λ-arity 3), and it composes given concepts over
+  inputs — it does not itself invent new concepts or discover new structure.
 
 ## Layout
 

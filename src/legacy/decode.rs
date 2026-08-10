@@ -930,6 +930,7 @@ pub fn unshift(t: &Rc<Term>, by: u32) -> Option<Rc<Term>> {
                 }
             }
             Term::Free(_) => Some(t.clone()),
+            Term::Prim(_) => Some(t.clone()),
             Term::Lam(b) => Some(lam(go(b, by, depth + 1)?)),
             Term::App(f, a) => Some(app(go(f, by, depth)?, go(a, by, depth)?)),
         }

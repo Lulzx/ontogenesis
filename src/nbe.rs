@@ -116,6 +116,7 @@ pub fn eval(env: &Env, t: &Rc<Term>, fuel: &mut Fuel) -> Result<Rc<Val>, Abort> 
         }
         Term::Free(i) => Ok(Rc::new(Val::Neu(Head::Ctx(*i), Vec::new()))),
         Term::Lam(b) => Ok(Rc::new(Val::Lam(env.clone(), b.clone()))),
+        Term::Prim(b) => eval(env, b, fuel),
         Term::App(f, a) => {
             let fv = eval(env, f, fuel)?;
             let arg = thunk_delayed(env.clone(), a.clone());

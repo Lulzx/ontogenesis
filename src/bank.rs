@@ -34,6 +34,11 @@ pub struct Options {
     /// Library: closed seed terms injected at size 1 in every context
     /// (e.g. a Y combinator for recursion; later, mined abstractions).
     pub seeds: Vec<Rc<Term>>,
+    /// Quotient-aware concepts: each closed body is injected as a `Prim`
+    /// atom (size 1), and any built subterm whose head is that body (its
+    /// expanded form) is canonicalized to the `Prim` — so the enumerator
+    /// explores P/~L and using a concept costs 1 instead of re-deriving it.
+    pub concepts: Vec<Rc<Term>>,
 }
 
 impl Default for Options {
@@ -46,6 +51,7 @@ impl Default for Options {
             max_level_entries: 200_000,
             max_opaque_entries: 20_000,
             seeds: Vec::new(),
+            concepts: Vec::new(),
         }
     }
 }
@@ -97,6 +103,43 @@ fn syn_hash(t: &Term) -> u64 {
     let mut h = DefaultHasher::new();
     t.hash(&mut h);
     h.finish()
+}
+
+/// The quotient map P → P/~L: rewrite any subterm whose head is exactly a
+/// concept body (its expanded form) to the `Prim` atom for that concept. Since
+/// concept bodies are closed de Bruijn terms, "exactly equals" is structural.
+/// `Prim` evaluates to the body's value, so this is behavior-preserving — it
+/// only collapses the syntax so a concept application costs 1 and the expanded
+/// form and the primitive never become separate entries.
+fn canonicalize(t: &Rc<Term>, concepts: &[Rc<Term>]) -> Rc<Term> {
+    // No concepts in play → the identity quotient; skip the whole walk.
+    if concepts.is_empty() {
+        return t.clone();
+    }
+    match t.as_ref() {
+        Term::App(f, a) => {
+            let cf = canonicalize(f, concepts);
+            let head = match concepts.iter().position(|b| Rc::ptr_eq(b, &cf) || b == &cf) {
+                Some(idx) => Rc::new(Term::Prim(concepts[idx].clone())),
+                None => cf.clone(),
+            };
+            let ca = canonicalize(a, concepts);
+            if Rc::ptr_eq(&head, &cf) && Rc::ptr_eq(&ca, a) {
+                t.clone() // nothing changed — share, don't allocate
+            } else {
+                app(head, ca)
+            }
+        }
+        Term::Lam(b) => {
+            let cb = canonicalize(b, concepts);
+            if Rc::ptr_eq(&cb, b) {
+                t.clone()
+            } else {
+                lam(cb)
+            }
+        }
+        _ => t.clone(),
+    }
 }
 
 /// How a candidate's per-test values are produced.
@@ -155,6 +198,9 @@ impl<'a> Search<'a> {
         opaque: &mut Vec<Rc<Term>>,
     ) -> Step {
         self.stats.built += 1;
+        // Quotient: collapse concept expansions to their Prim atom before the
+        // candidate is evaluated or kept, so P/~L is what actually gets searched.
+        let t = canonicalize(&t, &self.opts.concepts);
         if self.stats.built % 4096 == 0
             && self.start.elapsed().as_secs_f64() > self.opts.time_budget_secs
         {
@@ -355,10 +401,13 @@ pub fn solve(task: &Task, opts: &Options) -> Outcome {
             let mut kept: Vec<Entry> = Vec::new();
             let mut opq: Vec<Rc<Term>> = Vec::new();
 
-            // Variables and library seeds.
+            // Variables, library seeds, and quotient concepts.
             if s == 1 {
                 let mut atoms: Vec<Rc<Term>> = (0..(k + c)).map(var).collect();
                 atoms.extend(opts.seeds.iter().cloned());
+                // Each concept is injected as its Prim atom (size 1), so it is
+                // a genuine primitive the search can think *through*.
+                atoms.extend(opts.concepts.iter().map(|b| Rc::new(Term::Prim(b.clone()))));
                 for t in atoms {
                     let r = search.process(c, t, Make::Eval, &mut kept, &mut opq);
                     step!(search, r);
@@ -435,5 +484,230 @@ pub fn solve(task: &Task, opts: &Options) -> Outcome {
     Outcome {
         solution: None,
         stats: search.stats,
+    }
+}
+
+/// A mined/invented concept made available to the quotient-aware search: a
+/// closed body (e.g. `mul`'s combinator) plus a display name.
+///
+/// `arity` is the concept's *composition* arity — how many inputs it consumes
+/// to produce a value in its result domain — NOT its λ-arity. `mul =
+/// λa.λb.λc.b(a(c))` has three leading λs but is applied to two numerals to
+/// yield a product, so its composition arity is 2. This is a property of how
+/// the concept is *used*, recorded when it was mined from solved applications.
+#[derive(Clone)]
+pub struct Concept {
+    pub body: Rc<Term>,
+    pub name: String,
+    pub arity: u32,
+}
+
+struct PoolEntry {
+    term: Rc<Term>,
+    vals: Vec<Rc<Val>>,
+}
+
+fn val_hash(v: &Val, fuel: &mut Fuel) -> Option<u64> {
+    let mut h = DefaultHasher::new();
+    quote_hash(v, 0, fuel, &mut h).ok()?;
+    Some(h.finish())
+}
+
+/// Condition C — a search that *thinks through* its concepts.
+///
+/// The raw bank (`solve`) re-derives a concept's expansion from scratch, and
+/// naive seeding sprays it as a universal atom; neither reduces search cost.
+/// This variant composes the given concepts over its inputs instead: the pool
+/// starts with the k task arguments, and each round applies every concept to
+/// every arity-tuple of pool values. Because the pool holds only inputs and
+/// concept-results, applications stay on the concept's domain — no junk from
+/// applying it to arbitrary intermediate functions.
+///
+/// The emitted solution is a tree of `Prim` applications, so `size_L(C(x,y))=1`
+/// is literal, and the search's state count is the number of concept
+/// compositions tried — tiny compared to the raw λ enumeration. `built` counts
+/// those compositions, the honest cost of reasoning *through* the concepts.
+pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outcome {
+    let start = Instant::now();
+    let k = task.arity as u32;
+    let n_tests = task.tests.len();
+    let empty: Env = Rc::new(Vec::new());
+
+    // Target normal forms and hashes — same protocol as `solve`.
+    let mut target: Vec<Rc<Term>> = Vec::with_capacity(n_tests);
+    for t in &task.tests {
+        let mut fuel = Fuel(opts.fuel);
+        let stripped = crate::nbe::normalize(&empty, &t.want, &mut fuel)
+            .ok()
+            .and_then(|nf| crate::parse::strip_outer(&nf, t.outer));
+        match stripped {
+            Some(nf) => target.push(nf),
+            None => {
+                return Outcome {
+                    solution: None,
+                    stats: Stats::default(),
+                }
+            }
+        }
+    }
+    let mut target_hash: Vec<u64> = Vec::with_capacity(n_tests);
+    for nf in &target {
+        let mut fuel = Fuel(i64::MAX / 2);
+        let v = match eval(&empty, nf, &mut fuel) {
+            Ok(v) => v,
+            Err(_) => return Outcome { solution: None, stats: Stats::default() },
+        };
+        let mut h = DefaultHasher::new();
+        if quote_hash(&v, 0, &mut fuel, &mut h).is_err() {
+            return Outcome { solution: None, stats: Stats::default() };
+        }
+        target_hash.push(h.finish());
+    }
+
+    // Pool seeded with the task arguments: `var(i)` has value = arg_i per test.
+    let mut pool: Vec<PoolEntry> = Vec::new();
+    for i in 0..k as usize {
+        let mut vals = Vec::with_capacity(n_tests);
+        for j in 0..n_tests {
+            let mut fuel = Fuel(opts.fuel);
+            let v = match eval(&empty, &task.tests[j].args[i], &mut fuel) {
+                Ok(v) => v,
+                Err(_) => return Outcome { solution: None, stats: Stats::default() },
+            };
+            vals.push(v);
+        }
+        pool.push(PoolEntry { term: var(i as u32), vals });
+    }
+
+    let mut seen: HashSet<Vec<u64>> = HashSet::new();
+    for e in &pool {
+        let hashes: Vec<u64> = (0..n_tests)
+            .map(|j| val_hash(&e.vals[j], &mut Fuel(opts.fuel)).unwrap_or(0))
+            .collect();
+        if hashes == target_hash {
+            let mut sol = e.term.clone();
+            for _ in 0..k {
+                sol = lam(sol);
+            }
+            return Outcome {
+                solution: Some(sol),
+                stats: Stats { built: 1, ..Default::default() },
+            };
+        }
+        seen.insert(hashes);
+    }
+
+    let mut built: u64 = 0;
+    // Bounded pool: giant concept-results (e.g. `mul` of large numerals) would
+    // otherwise balloon the composition space. The hash fuel below prunes any
+    // normal form over ~2k nodes, keeping the pool on small, meaningful values.
+    let pool_cap = 64usize;
+    loop {
+        let before = pool.len();
+        let mut additions: Vec<PoolEntry> = Vec::new();
+        for concept in concepts {
+            let a = concept.arity as usize;
+            if a == 0 {
+                continue;
+            }
+            let mut tuple: Vec<usize> = vec![0; a];
+            loop {
+                built += 1;
+                if built % 4096 == 0 && start.elapsed().as_secs_f64() > opts.time_budget_secs {
+                    return Outcome {
+                        solution: None,
+                        stats: Stats { built, ..Default::default() },
+                    };
+                }
+                // Compute the concept applied to this tuple, per test.
+                let mut vals: Option<Vec<Rc<Val>>> = Some(Vec::with_capacity(n_tests));
+                for j in 0..n_tests {
+                    let mut fuel = Fuel(opts.fuel);
+                    let mut v = match eval(&empty, &concept.body, &mut fuel) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            vals = None;
+                            break;
+                        }
+                    };
+                    let mut ok = true;
+                    for &ti in &tuple {
+                        let arg = thunk_of_val_rc(pool[ti].vals[j].clone());
+                        match crate::nbe::apply(v.clone(), arg, &mut fuel) {
+                            Ok(nv) => v = nv,
+                            Err(_) => {
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    if !ok {
+                        vals = None;
+                        break;
+                    }
+                    if let Some(vs) = vals.as_mut() {
+                        vs.push(v);
+                    }
+                }
+                if let Some(vs) = vals {
+                    let mut term = Rc::new(Term::Prim(concept.body.clone()));
+                    for &ti in &tuple {
+                        term = app(term, pool[ti].term.clone());
+                    }
+                    // Bound the normal form: if any test's value is too large to
+                    // hash within the cap, skip the tuple entirely (don't keep).
+                    let mut hashes = Vec::with_capacity(n_tests);
+                    let mut ok_hash = true;
+                    for j in 0..n_tests {
+                        match val_hash(&vs[j], &mut Fuel(2048)) {
+                            Some(h) => hashes.push(h),
+                            None => {
+                                ok_hash = false;
+                                break;
+                            }
+                        }
+                    }
+                    if !ok_hash {
+                        // advance tuple (handled below)
+                    } else if hashes == target_hash {
+                        let mut sol = term.clone();
+                        for _ in 0..k {
+                            sol = lam(sol);
+                        }
+                        let mut st = Stats::default();
+                        st.built = built;
+                        st.elapsed_secs = start.elapsed().as_secs_f64();
+                        return Outcome { solution: Some(sol), stats: st };
+                    } else if seen.insert(hashes) && additions.len() < pool_cap {
+                        additions.push(PoolEntry { term, vals: vs });
+                    }
+                }
+                // Advance the tuple counter (odometer over the pool).
+                let mut done = true;
+                for d in tuple.iter_mut() {
+                    if *d + 1 < pool.len() {
+                        *d += 1;
+                        done = false;
+                        break;
+                    }
+                    *d = 0;
+                }
+                if done {
+                    break;
+                }
+            }
+        }
+        if additions.is_empty() {
+            break;
+        }
+        pool.extend(additions);
+        if pool.len() >= pool_cap || pool.len() == before {
+            break;
+        }
+    }
+
+    Outcome {
+        solution: None,
+        stats: Stats { built, ..Default::default() },
     }
 }

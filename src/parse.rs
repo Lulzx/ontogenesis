@@ -304,6 +304,7 @@ fn subst_escaping(t: &Rc<Term>, m: u32, d: u32) -> Rc<Term> {
             }
         }
         Term::Free(_) => t.clone(),
+        Term::Prim(_) => t.clone(),
         Term::Lam(b) => lam(subst_escaping(b, m, d + 1)),
         Term::App(f, a) => app(subst_escaping(f, m, d), subst_escaping(a, m, d)),
     }

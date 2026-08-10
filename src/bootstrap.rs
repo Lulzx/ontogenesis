@@ -127,7 +127,7 @@ impl Default for MineOptions {
 fn collect_subterms_term(t: &Rc<Term>, d: u32, f: &mut impl FnMut(&Rc<Term>, u32)) {
     f(t, d);
     match t.as_ref() {
-        Term::Var(_) | Term::Free(_) => {}
+        Term::Var(_) | Term::Free(_) | Term::Prim(_) => {}
         Term::Lam(b) => collect_subterms_term(b, d + 1, f),
         Term::App(fn_, a) => {
             collect_subterms_term(fn_, d, f);
@@ -146,7 +146,7 @@ fn collect_free(t: &Rc<Term>, d: u32, root_env: u32, order: &mut Vec<u32>, seen:
                 order.push(c);
             }
         }
-        Term::Var(_) | Term::Free(_) => {}
+        Term::Var(_) | Term::Free(_) | Term::Prim(_) => {}
         Term::Lam(b) => collect_free(b, d + 1, root_env, order, seen),
         Term::App(f, a) => {
             collect_free(f, d, root_env, order, seen);
@@ -177,6 +177,7 @@ fn rewrite(t: &Rc<Term>, d: u32, k: u32, pos: &[usize]) -> Rc<Term> {
             }
         }
         Term::Free(f) => Rc::new(Term::Free(*f)),
+        Term::Prim(_) => t.clone(), // a closed atom: nothing to abstract
         Term::Lam(b) => lam(rewrite(b, d + 1, k, pos)),
         Term::App(f, a) => app(rewrite(f, d, k, pos), rewrite(a, d, k, pos)),
     }
@@ -612,6 +613,7 @@ fn has_free(t: &Rc<Term>) -> bool {
     match t.as_ref() {
         Term::Free(_) => true,
         Term::Var(_) => false,
+        Term::Prim(_) => false,
         Term::Lam(b) => has_free(b),
         Term::App(f, a) => has_free(f) || has_free(a),
     }

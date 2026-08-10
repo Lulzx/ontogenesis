@@ -805,6 +805,9 @@ fn ladder(args: &[String]) {
     let mut corpus: Vec<Rc<term::Term>> = Vec::new();
     let mut seen: std::collections::HashSet<bootstrap::BehaviorKey> =
         std::collections::HashSet::new();
+    // Concepts the machine *discovered* by raw enumeration (name, body, arity),
+    // used to demonstrate the quotient-aware search below.
+    let mut discovered: Vec<(&str, Rc<term::Term>, u32)> = Vec::new();
 
     // Each rung solves a small *recurring family* for its concept (so the
     // miner sees the concept as a repeated idiom, not an isolated term), mines
@@ -882,6 +885,17 @@ fn ladder(args: &[String]) {
                 term::show(sol),
                 sol.size()
             );
+            // Record a discovered concept (composition arity) for the
+            // quotient-aware demonstration below. mul/square consume 2/1 inputs.
+            let arity = match rung.name {
+                "mul" => 2,
+                "square" => 1,
+                "power" => 2,
+                _ => 0,
+            };
+            if arity > 0 {
+                discovered.push((rung.name, sol.clone(), arity));
+            }
         }
 
         // 2. Measure the held-out task BEFORE this rung's concept is promoted.
@@ -954,6 +968,58 @@ fn ladder(args: &[String]) {
         std::io::stdout().flush().ok();
     }
 
+    // ── Quotient-aware search (condition C): does the acquired concept change
+    // the effective cost of *future* cognition? Once the machine has discovered
+    // `mul`, a search that composes it over its inputs instead of re-deriving it
+    // collapses the held-out product family's cost — including tasks the raw
+    // bank cannot solve at all.
+    if let Some((cname, cbody, carity)) = discovered.first() {
+        let concept = bank::Concept {
+            body: cbody.clone(),
+            name: cname.to_string(),
+            arity: *carity,
+        };
+        let product3 = task(
+            3,
+            [(2u32, 3u32, 2u32), (1, 4, 3), (3, 2, 2), (2, 2, 3), (1, 1, 5)]
+                .into_iter()
+                .map(|(a, b, c)| (vec![a, b, c], num(a * b * c)))
+                .collect(),
+        );
+        let product4 = task(
+            4,
+            [(2u32, 3u32, 2u32, 2u32), (1, 4, 3, 2), (3, 2, 2, 1), (2, 2, 3, 1)]
+                .into_iter()
+                .map(|(a, b, c, d)| (vec![a, b, c, d], num(a * b * c * d)))
+                .collect(),
+        );
+        println!("\n── Quotient-aware search: reasoning *through* the invented {} ──", concept.name);
+        println!(
+            "   A raw bank            C search that composes {} over its inputs",
+            concept.name
+        );
+        for (name, t) in [("a×b×c", &product3), ("a×b×c×d", &product4)] {
+            let raw = bank::solve(t, &bank_opts(&[], budget, max_size));
+            let comp = bank::concept_solve(t, &[concept.clone()], &bank_opts(&[], budget, max_size));
+            let rs = raw
+                .solution
+                .as_ref()
+                .map(|_| format!("{:>7} states", raw.stats.built))
+                .unwrap_or_else(|| "  ✗ unsolvable".into());
+            let cs = comp
+                .solution
+                .as_ref()
+                .map(|s| format!("{:>7} states  (solution size {})", comp.stats.built, s.size()))
+                .unwrap_or_else(|| "✗".into());
+            println!("   {name:>8}   {rs}   →   {cs}");
+        }
+        println!(
+            "   The concept has been *acquired* only when it changes the cost structure of future\n\
+             cognition: composing it collapses a family the raw bank cannot solve at all."
+        );
+        std::io::stdout().flush().ok();
+    }
+
     println!("\nFinal language ({} seeds):", seeds.len());
     println!("  {}", labels.join(" "));
     println!(
@@ -971,10 +1037,17 @@ fn ladder(args: &[String]) {
            idiom), so it does not read as 'C17 = mul'."
     );
     println!(
-        "  • Seeding has MIXED cost effects: it widens search for tasks that don't use the seed\n\
-           (measured dearer above), helps some that do, and lets some become solvable. The dramatic\n\
-           '83,000 → 900' collapse needs an abstraction-aware search this bottom-up bank does not\n\
-           implement — that is the real wall, not a failure of concept discovery."
+        "  • Naive seeding (injecting a concept as a size-1 atom) does NOT collapse search cost: it\n\
+           widens it for tasks that don't use the seed (▲ dearer above). The size-1 slot is not\n\
+           size-1 — the emitted solution still carries the concept's full λ-body."
+    );
+    println!(
+        "  • The cost collapse IS real, but it comes from changing the *search procedure* (condition\n\
+           C: compose the concept over its inputs), not from seeding the existing bottom-up bank.\n\
+           That is the thesis made concrete — a machine has acquired a concept only when reasoning\n\
+           through it is cheaper than re-deriving it. Honest limits: condition C needs the concept's\n\
+           composition arity (2 for mul, not its λ-arity 3), and it composes given concepts over\n\
+           inputs — it does not itself invent new concepts or discover new structure."
     );
 }
 
@@ -1185,7 +1258,134 @@ fn closed_above(t: &term::Term, depth: u32) -> bool {
     match t {
         term::Term::Var(i) => *i < depth,
         term::Term::Free(_) => false,
+        term::Term::Prim(_) => true,
         term::Term::Lam(b) => closed_above(b, depth + 1),
         term::Term::App(f, a) => closed_above(f, depth) && closed_above(a, depth),
+    }
+}
+
+#[cfg(test)]
+mod probe {
+    use crate::bank;
+    use crate::parse;
+    use crate::term;
+    use std::rc::Rc;
+
+    fn church(n: u32) -> Rc<term::Term> {
+        let src = crate::bootstrap::church_num_str(n);
+        let e = parse::parse_expr(&src).unwrap();
+        parse::to_term(&e).unwrap()
+    }
+
+    // product of n factors (arity = n)
+    fn prod_task(n: u32) -> parse::Task {
+        let vals: Vec<Vec<u32>> = vec![
+            vec![2, 3, 2, 2],
+            vec![1, 5, 4, 3],
+            vec![3, 2, 1, 2],
+            vec![2, 2, 3, 5],
+        ];
+        let mut tests = Vec::new();
+        for v in &vals {
+            let args: Vec<Rc<term::Term>> = v.iter().take(n as usize).map(|x| church(*x)).collect();
+            let mut prod = 1u32;
+            for x in v.iter().take(n as usize) {
+                prod *= x;
+            }
+            tests.push(parse::Test { args, want: church(prod), outer: 0 });
+        }
+        parse::Task { tests, arity: n as usize }
+    }
+
+    fn closed(s: &str) -> Rc<term::Term> {
+        let e = parse::parse_expr(s).unwrap();
+        parse::to_term(&e).unwrap()
+    }
+
+    fn raw_opts(budget: f64) -> bank::Options {
+        bank::Options {
+            max_size: 18,
+            max_depth: 2,
+            fuel: 40_000,
+            time_budget_secs: budget,
+            max_level_entries: 200_000,
+            max_opaque_entries: 20_000,
+            seeds: vec![],
+            concepts: vec![],
+        }
+    }
+
+    fn has_prim(t: &Rc<term::Term>) -> bool {
+        use term::Term;
+        match t.as_ref() {
+            Term::Prim(_) => true,
+            Term::Lam(b) => has_prim(b),
+            Term::App(f, a) => has_prim(f) || has_prim(a),
+            _ => false,
+        }
+    }
+
+    /// The controlled three-condition experiment: Raw bank (A) vs naive seed
+    /// (B) vs quotient-aware concept composition (C). The milestone is C2 ≪ C0
+    /// on a held-out recurring family — here the products of Church numerals.
+    #[test]
+    fn quotient_collapses_search_cost() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let mul = closed("λa.λb.λc.b(a(c))");
+                // Composition arity 2: mul consumes two numerals to make a product.
+                let mulc = vec![bank::Concept {
+                    body: mul.clone(),
+                    name: "mul".into(),
+                    arity: 2,
+                }];
+                let ab = prod_task(2);
+                let abc = prod_task(3);
+                let abcd = prod_task(4);
+
+                // C solves the family, compactly (Prim atoms) and cheaply.
+                let c = bank::concept_solve(&ab, &mulc, &raw_opts(20.0));
+                assert!(c.solution.is_some(), "concept-solve a*b");
+                assert!(c.stats.built <= 4, "a*b compose cost {}", c.stats.built);
+                assert!(has_prim(c.solution.as_ref().unwrap()), "solution must use Prim");
+
+                let c3 = bank::concept_solve(&abc, &mulc, &raw_opts(20.0));
+                assert!(c3.solution.is_some(), "concept-solve a*b*c");
+                assert!(c3.stats.built < 50, "a*b*c compose cost {}", c3.stats.built);
+
+                let c4 = bank::concept_solve(&abcd, &mulc, &raw_opts(20.0));
+                assert!(c4.solution.is_some(), "concept-solve a*b*c*d (raw cannot)");
+                assert!(c4.stats.built < 200, "a*b*c*d compose cost {}", c4.stats.built);
+
+                // The collapse against raw on the two raw-solvable tasks.
+                let r = bank::solve(&ab, &raw_opts(20.0));
+                assert!(r.solution.is_some());
+                assert!(
+                    c.stats.built < r.stats.built,
+                    "C({}) not < raw({}) for a*b",
+                    c.stats.built,
+                    r.stats.built
+                );
+                let r3 = bank::solve(&abc, &raw_opts(20.0));
+                assert!(r3.solution.is_some());
+                assert!(
+                    c3.stats.built < r3.stats.built,
+                    "C({}) not < raw({}) for a*b*c",
+                    c3.stats.built,
+                    r3.stats.built
+                );
+
+                // Headline: a*b*c*d is unsolvable raw (short budget), but the
+                // concept-composing search makes it trivial. The "acquisition"
+                // of the concept changed the cost structure of future cognition.
+                let r4 = bank::solve(&abcd, &raw_opts(2.0));
+                assert!(r4.solution.is_none(), "raw should not solve a*b*c*d");
+                assert!(c4.stats.built < r4.stats.built, "C({}) not < raw wall ({})",
+                    c4.stats.built, r4.stats.built);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 }
