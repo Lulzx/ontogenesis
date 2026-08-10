@@ -3599,6 +3599,11 @@ fn disc(args: &[String]) {
     std::io::stdout().flush().ok();
 }
 
+// The counterfactual acquisition gate. main.rs is the legacy binary that declares
+// its own engine modules (mod bank/parse/...), so these types are distinct from the
+// lib's; the canonical copy of this gate lives in `supsearch::acquire` for consumers
+// of the lib (e.g. demo/arc-1). Kept here until main.rs migrates onto the lib.
+
 /// Cost sentinel for "the reasoner cannot solve this task" (unreachable).
 /// Large enough that "makes an unsolvable task solvable" reads as the
 /// strongest possible promotion signal, but below u64::MAX to avoid overflow
@@ -3729,6 +3734,15 @@ fn gain_rank(a: &Gain, b: &Gain) -> std::cmp::Ordering {
     }
 }
 
+/// Display a cost, collapsing `UNREACHABLE` to the "✗" (unsolved) marker.
+fn disp_cost(x: u64) -> String {
+    if x >= UNREACHABLE {
+        "✗".into()
+    } else {
+        format!("{x}")
+    }
+}
+
 /// n-fold product task over Church numerals (arity = n), several distinct rows.
 /// Numerals stay in 1..=3 so products stay small — a product of big numerals
 /// makes the quotient search normalize ever-larger Church values and grind.
@@ -3759,14 +3773,6 @@ fn promote_prod_task(n: u32) -> parse::Task {
     parse::Task {
         tests,
         arity: n as usize,
-    }
-}
-
-fn disp_cost(x: u64) -> String {
-    if x >= UNREACHABLE {
-        "✗".into()
-    } else {
-        format!("{x}")
     }
 }
 

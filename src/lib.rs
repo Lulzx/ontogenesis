@@ -13,6 +13,7 @@
 //! - [`bank`]: the search — raw `solve` plus the quotient-aware `concept_solve`.
 //! - [`bootstrap`]: probe universes, compression mining, Church-numeral encoding.
 
+pub mod acquire;
 pub mod bank;
 pub mod bootstrap;
 pub mod canon;
