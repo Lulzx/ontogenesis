@@ -2308,7 +2308,7 @@ fn meta(args: &[String]) {
 
     // ── round 0: O_0 = {cons}, M all available ──
     let onto: Vec<bank::Concept> = Vec::new();
-    let avail0 = available(&onto);
+    let _avail0 = available(&onto);
     let mut retained: Vec<&str> = Vec::new();
 
     // iterate: replicate = iterate(cons, nil)
@@ -2414,7 +2414,7 @@ fn meta(args: &[String]) {
     // iterate now has concat as substrate → iterate(concat, nil) = concat_n,
     // the depth-2 list concept. This is the payoff: reduce (acquired in round 0
     // because iterate couldn't produce concat) restores iterate's leverage.
-    let avail1 = available(&o1);
+    let _avail1 = available(&o1);
     let cnat_cand = iterate(&concat_cand, &nil);
     let cnat_ok = solves(&cnat_task, &cnat_cand);
     let cnat_base = concept_cost(&h_cnat, &o1, &opts); // {replicate,concat}: expect ✗
@@ -2761,7 +2761,6 @@ fn solves_cand(t: &parse::Task, body: &Rc<term::Term>, opts: &bank::Options) -> 
 struct Prefiltered {
     t: MTm,
     target: String,
-    gain: Gain,
 }
 
 /// Owned construction environment for the C8 string task family. Built fresh
@@ -2980,11 +2979,10 @@ fn prefilter_templates(
                 }
             }
         }
-        if let Some((target, gain)) = best {
+        if let Some((target, _)) = best {
             out.push(Prefiltered {
                 t: t.clone(),
                 target,
-                gain,
             });
         }
     }
@@ -3182,15 +3180,6 @@ fn disc(args: &[String]) {
             "∅".into()
         } else {
             v.join(",")
-        }
-    };
-    let lbl_of = |t: &MTm| -> &'static str {
-        if *t == iter_sh {
-            "iterate-like"
-        } else if *t == red_sh {
-            "reduce-like"
-        } else {
-            "novel"
         }
     };
     println!("\n── horizon control: V(g|H=1) vs V(g|H=2) ──");
@@ -3906,21 +3895,16 @@ fn classify(d: &bank::Diag, anc_keys: &std::collections::HashSet<Vec<u64>>) -> C
     }
 }
 
-/// usage: supsearch diag [--budget SECS] [--max-fold N]
+/// usage: supsearch diag [--budget SECS]
 fn diag(args: &[String]) {
     use std::io::Write;
 
     let mut budget = 8.0f64;
-    let mut max_fold = 11u32;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--budget" => {
                 budget = args[i + 1].parse().unwrap();
-                i += 2;
-            }
-            "--max-fold" => {
-                max_fold = args[i + 1].parse().unwrap();
                 i += 2;
             }
             other => {
@@ -4608,6 +4592,126 @@ mod probe {
                 // (d) honest bound: the 9-fold is a hard wall (representation, not budget).
                 let w9 = bank::concept_solve(&crate::promote_prod_task(9), &mul_only, &opts_front);
                 assert!(w9.solution.is_none(), "9-fold should be a hard wall for mul");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// The ontology-dependence matrix, asserted: a concept's value is not intrinsic
+    /// but a property of the candidate × ontology pair. Locks in the mirror-image
+    /// relation that `ontogen` (and the README) only print:
+    ///   • square is valuable under ∅ (x² is otherwise unsolvable) but redundant
+    ///     under {mul}, because mul(x,x) already reaches x² — Gain(square|{mul})≤0;
+    ///   • power is worthless under ∅ but valuable under {mul}, because
+    ///     x^(n+1) = mul(x, power(x,n)) needs mul as a substrate — Gain(power|∅)≤0.
+    ///
+    /// The candidate bodies are `ontogen`'s own raw-discovered forms (confirmed via
+    /// `cargo run -- ontogen`: mul=λa.λb.λc.b(a(c)), square=λa.λb.a(a(b)),
+    /// power=λa.λb.λc.λd.b(a,c,d)), hard-coded so this runs fast in the debug test
+    /// profile (raw discovery of `power` is impractically slow there). Each cell is
+    /// measured at the candidate's *known correct interface arity* (square@1,
+    /// power@2) — a targeted check of the value relationship rather than a full
+    /// re-run of `propose_value`'s arity search, which would grind on the
+    /// unsolvable baselines. This was the one load-bearing claim in the summary
+    /// that was previously only runtime-printed and so unguarded by any test.
+    #[test]
+    fn ontology_dependence_matrix() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let task = |arity: usize, tests: Vec<(Vec<u32>, Rc<term::Term>)>| parse::Task {
+                    arity,
+                    tests: tests
+                        .into_iter()
+                        .map(|(args, want)| parse::Test {
+                            args: args.iter().map(|&n| church(n)).collect(),
+                            want,
+                            outer: 0,
+                        })
+                        .collect(),
+                };
+
+                let base = vec![closed("λa.λb.λf.λx.a(f)(b(f)(x))")]; // add
+                // Tight budget: the unsolvable baselines (✗) terminate quickly here,
+                // while the solvable cells build only a handful of states, so a short
+                // budget never hides a real frontier.
+                let opts = crate::bank_opts(&base, 2, 14);
+
+                let mk = |body: Rc<term::Term>, name: &str, arity: u32| bank::Concept {
+                    body,
+                    name: name.into(),
+                    arity,
+                };
+                let c_mul = mk(closed("λa.λb.λc.b(a(c))"), "mul", 2);
+                let c_square = mk(closed("λa.λb.a(a(b))"), "square", 1);
+                let c_power = mk(closed("λa.λb.λc.λd.b(a, c, d)"), "power", 2);
+                let empty: Vec<bank::Concept> = vec![];
+
+                // Held-outs that isolate each candidate's own contribution (same as
+                // `ontogen`): square → x², power → x^(n+1).
+                let h_square = task(
+                    1,
+                    [2u32, 3, 1, 0, 5, 4]
+                        .into_iter()
+                        .map(|x| (vec![x], church(x * x)))
+                        .collect(),
+                );
+                let h_power = task(
+                    2,
+                    [(2, 3), (3, 2), (1, 4), (2, 1), (4, 2), (1, 0)]
+                        .into_iter()
+                        .map(|(x, n): (u32, u32)| (vec![x, n], church(x.pow(n + 1))))
+                        .collect(),
+                );
+
+                let cost = |t: &parse::Task, set: &[bank::Concept]| crate::concept_cost(t, set, &opts);
+
+                // ── square: valuable under ∅, redundant under {mul} ────────────────
+                // Under ∅, x² is unsolvable (concept_solve over {add} cannot build
+                // square); installing square@1 makes it solvable → a frontier.
+                let before = cost(&h_square, &empty);
+                let after = cost(&h_square, &[c_square.clone()]);
+                assert!(
+                    before >= crate::UNREACHABLE && after < crate::UNREACHABLE,
+                    "Gain(square|∅) must be a frontier: before={}, after={}",
+                    crate::disp_cost(before),
+                    crate::disp_cost(after)
+                );
+                // Under {mul}, mul(x,x) already reaches x², so square adds no strict
+                // gain (after ≥ before → not earns()).
+                let before = cost(&h_square, &[c_mul.clone()]);
+                let after = cost(&h_square, &[c_mul.clone(), c_square.clone()]);
+                assert!(
+                    after >= before,
+                    "Gain(square|{{mul}}) must NOT earn: mul(x,x) already reaches x² \
+                     (before={}, after={})",
+                    crate::disp_cost(before),
+                    crate::disp_cost(after)
+                );
+
+                // ── power: worthless under ∅, valuable under {mul} ─────────────────
+                // Under ∅, x^(n+1) is unsolvable even with power (power alone yields
+                // x^n, not x^(n+1)); installing power@2 changes nothing → no gain.
+                let before = cost(&h_power, &empty);
+                let after = cost(&h_power, &[c_power.clone()]);
+                assert!(
+                    before >= crate::UNREACHABLE && after >= crate::UNREACHABLE,
+                    "Gain(power|∅) must NOT earn: x^(n+1) needs mul as substrate \
+                     (before={}, after={})",
+                    crate::disp_cost(before),
+                    crate::disp_cost(after)
+                );
+                // Under {mul}, power becomes the mirror-image frontier:
+                // x^(n+1) = mul(x, power(x,n)).
+                let before = cost(&h_power, &[c_mul.clone()]);
+                let after = cost(&h_power, &[c_mul.clone(), c_power.clone()]);
+                assert!(
+                    before >= crate::UNREACHABLE && after < crate::UNREACHABLE,
+                    "Gain(power|{{mul}}) must be a frontier: before={}, after={}",
+                    crate::disp_cost(before),
+                    crate::disp_cost(after)
+                );
             })
             .unwrap()
             .join()

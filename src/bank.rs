@@ -505,9 +505,6 @@ pub struct Concept {
 struct PoolEntry {
     term: Rc<Term>,
     vals: Vec<Rc<Val>>,
-    /// Identity keys per test value (structural hashes in `concept_solve`; in
-    /// `concept_solve_abl` the chosen identity — structural or canonical).
-    keys: Vec<u64>,
 }
 
 fn val_hash(v: &Val, fuel: &mut Fuel) -> Option<u64> {
@@ -579,7 +576,7 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
             };
             vals.push(v);
         }
-        pool.push(PoolEntry { term: var(i as u32), vals, keys: Vec::new() });
+        pool.push(PoolEntry { term: var(i as u32), vals });
     }
 
     let mut seen: HashSet<Vec<u64>> = HashSet::new();
@@ -682,7 +679,7 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
                         st.elapsed_secs = start.elapsed().as_secs_f64();
                         return Outcome { solution: Some(sol), stats: st };
                     } else if seen.insert(hashes.clone()) && additions.len() < pool_cap {
-                        additions.push(PoolEntry { term, vals: vs, keys: hashes });
+                        additions.push(PoolEntry { term, vals: vs });
                     }
                 }
                 // Advance the tuple counter (odometer over the pool).
@@ -824,7 +821,6 @@ pub fn concept_solve_abl(
         pool.push(PoolEntry {
             term: var(i as u32),
             vals,
-            keys: Vec::new(),
         });
     }
 
@@ -944,7 +940,7 @@ pub fn concept_solve_abl(
                             m,
                         );
                     } else if seen.insert(keys.clone()) && additions.len() < pool_cap {
-                        additions.push(PoolEntry { term, vals: vs, keys });
+                        additions.push(PoolEntry { term, vals: vs });
                     }
                 }
                 let mut done = true;
