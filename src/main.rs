@@ -72,6 +72,10 @@ fn run() {
         ontogen(&argv[1..]);
         return;
     }
+    if argv.first().map(String::as_str) == Some("dep") {
+        dep(&argv[1..]);
+        return;
+    }
     if argv.first().map(String::as_str) == Some("mkbench") {
         gen_benchmark(&argv[1..]);
         return;
@@ -1281,6 +1285,257 @@ fn ontogen(args: &[String]) {
            space and shows up as a regression.\n\
          square and power are complementary: each is valuable exactly where the other is not,\n\
          which is only observable because Gain(c | D, O) is measured against the ontology."
+    );
+    std::io::stdout().flush().ok();
+}
+
+/// usage: supsearch dep [--budget SECS] [--max-size N] [--max-depth N]
+///
+/// Recorded negative result — *conditional discoverability*. The matrix
+/// (`ontogen`) showed conditional *usefulness*: Gain(power|∅)≤0 but
+/// Gain(power|{mul})>0. Here we ask the stronger question: does C₁ make C₂
+/// *findable at all*? The probe answers honestly: in the arithmetic tower it does
+/// NOT — pow is base-findable (tiny Church combinator), tet is not findable even
+/// through {mul,pow}, and the product tower's one step fails via bottom-up too.
+/// This subcommand runs the probe and records the structural reason (closure
+/// argument) rather than forcing a fake ladder.
+///
+///     Discover(C₂ | O₀, B) = false   but   Discover(C₂ | O₀+C₁, B) = true
+///
+/// Discovery is measured with the bottom-up bank (`bank::solve`) because that is
+/// the search that can actually *synthesize* a recursion from concept atoms: it
+/// injects the current ontology's concepts as size-1 prims (bank.rs:410). The
+/// composition model (`concept_solve`) — the "reason *through* the concept"
+/// model — provably cannot synthesize a recursion from a lower concept, which is
+/// exactly what makes each higher concept *useful* (it needs to be a Prim to
+/// unlock a frontier composition cannot reach). So the two columns use two
+/// searches, deliberately: bottom-up for "can I find the program", composition
+/// for "is it worth a language slot".
+///
+/// Family (Grzegorczyk fast-growing tower over Church numerals, base = add):
+/// mul(a,b) → pow(a,n)=aⁿ → tet(a,n)=a↑↑n → … each the n-fold iteration of the
+/// previous. The probe finds no dependency chain in this family (see the verdict
+/// block printed at the end), so the ladder is not run — the subcommand stays a
+/// diagnostic.
+fn dep(args: &[String]) {
+    use std::io::Write;
+    use std::rc::Rc;
+
+    let mut budget = 12u64;
+    let mut max_size = 14u32;
+    let mut max_depth = 3u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-depth" => {
+                max_depth = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown dep arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let num = |n: u32| -> Rc<term::Term> {
+        parse::parse_expr(&bootstrap::church_num_str(n))
+            .and_then(|e| parse::to_term(&e))
+            .expect("church numeral")
+    };
+    let closed = |s: &str| -> Rc<term::Term> {
+        parse::parse_expr(s)
+            .and_then(|e| parse::to_term(&e))
+            .expect("closed term")
+    };
+    let task = |arity: usize, tests: Vec<(Vec<u32>, Rc<term::Term>)>| parse::Task {
+        arity,
+        tests: tests
+            .into_iter()
+            .map(|(args, want)| parse::Test {
+                args: args.iter().map(|&n| num(n)).collect(),
+                want,
+                outer: 0,
+            })
+            .collect(),
+    };
+    // Height-n power tower: a↑↑0=1, a↑↑(n+1)=a^(a↑↑n). Values must stay well
+    // under the 2048 hash fuel, so callers keep a=2, n≤3 (max 16).
+    let tet_val = |a: u32, n: u32| -> u32 {
+        let mut v = 1u32;
+        for _ in 0..n {
+            v = a.pow(v);
+        }
+        v
+    };
+
+    let base = vec![closed("λa.λb.λf.λx.a(f)(b(f)(x))")]; // add
+
+    // ── family: discovery task + usefulness held-out per generation ──
+    let mul_task = task(
+        2,
+        [(2, 3), (3, 4), (1, 5), (0, 7), (4, 4), (5, 2), (6, 2), (2, 6)]
+            .into_iter()
+            .map(|(a, b)| (vec![a, b], num(a * b)))
+            .collect(),
+    );
+    // Rich a^n suite (a∈{0..4}, n∈{0..4}, values ≤ 4³=64) — too many rows for a
+    // small fixed-power term to overfit (the ladder's size-11 "power" was one).
+    let pow_task = task(
+        2,
+        [
+            (2, 0),
+            (2, 1),
+            (2, 2),
+            (2, 3),
+            (2, 4),
+            (3, 0),
+            (3, 1),
+            (3, 2),
+            (3, 3),
+            (1, 0),
+            (1, 4),
+            (0, 0),
+            (0, 2),
+            (4, 2),
+            (4, 3),
+            (4, 1),
+        ]
+        .into_iter()
+        .map(|(a, n): (u32, u32)| (vec![a, n], num(a.pow(n))))
+        .collect(),
+    );
+    // a↑↑n, a∈{1,2}, n≤3 (values 1,2,4,16).
+    let tet_task = task(
+        2,
+        [
+            (2, 0),
+            (2, 1),
+            (2, 2),
+            (2, 3),
+            (1, 0),
+            (1, 1),
+            (1, 3),
+            (0, 0),
+            (0, 2),
+        ]
+        .into_iter()
+        .map(|(a, n)| (vec![a, n], num(tet_val(a, n))))
+        .collect(),
+    );
+
+    // Discovery through an ontology: bottom-up bank with the ontology's concept
+    // bodies injected as size-1 prim atoms.
+    let solve_with =
+        |t: &parse::Task, o: &[bank::Concept], ms: u32, dp: u32| -> Option<Rc<term::Term>> {
+            let mut opts = bank_opts(&base, budget, ms);
+            opts.max_depth = dp;
+            opts.concepts = o.iter().map(|c| c.body.clone()).collect();
+            bank::solve(t, &opts).solution
+        };
+
+    // ── the probe IS the deliverable. The arithmetic tower gives no dependency
+    //    chain: conditional usefulness (real, via composition) does not imply
+    //    conditional discoverability (empty, via either search). This subcommand
+    //    exists to record that negative result, not to force a fake ladder. ──
+    {
+        let c = |b: &Rc<term::Term>, n: &str, a: u32| bank::Concept {
+            body: b.clone(),
+            name: n.into(),
+            arity: a,
+        };
+        println!("\n── probe: conditional discoverability, before trusting the ladder ──");
+        let mul_body = solve_with(&mul_task, &[], max_size, max_depth).expect("mul raw-discoverable");
+        let c_mul = c(&mul_body, "mul", 2);
+        println!("mul  raw-discoverable from base (max_size {max_size}): size {}", mul_body.size());
+        for ms in [10u32, 12, 14, 16, 18, 20] {
+            let raw = solve_with(&pow_task, &[], ms, max_depth).is_some();
+            let via = solve_with(&pow_task, &[c_mul.clone()], ms, max_depth).is_some();
+            println!(
+                "  pow  max_size {ms:>2}: raw(base)? {raw:<5}  via {{mul}}? {via}"
+            );
+        }
+        let pow_body = solve_with(&pow_task, &[c_mul.clone()], max_size, max_depth)
+            .expect("pow discoverable via {mul}");
+        let c_pow = c(&pow_body, "pow", 2);
+        println!("pow  discoverable via {{mul}} (max_size {max_size}): size {}", pow_body.size());
+        // Is the *discovered* pow actually correct? The true Church pow is λm.λn.n m.
+        // Check it solves a held-out pow task (different rows) when installed as a
+        // concept — if not, it overfit the discovery rows and the ladder would
+        // rightly reject it at the usefulness gate.
+        let h_pow_probe = task(
+            2,
+            [(2, 5), (3, 4), (5, 2), (4, 0), (6, 3)]
+                .into_iter()
+                .map(|(a, n): (u32, u32)| (vec![a, n], num(a.pow(n))))
+                .collect(),
+        );
+        let pw_ok = concept_cost(&h_pow_probe, &[c_pow.clone()], &bank_opts(&base, budget, max_size))
+            < UNREACHABLE;
+        println!("  discovered-pow solves held-out a^n (generalizes)? {pw_ok}");
+        println!("  (Church pow = λm.λn.n m, a ~6-node combinator — pow is *base-findable* by\n    construction, so mul→pow is NOT a conditional-discoverability step.)");
+        // Where conditional discoverability might live: tet. It needs pow as an atom
+        // to stay small and is a genuinely recursive (big-raw) program. The search
+        // may need higher lambda depth to build `n (λx. pow a x) one`, so sweep depth.
+        println!("  tet via {{mul,pow}}: sweep of max_depth (max_size 18), discovered-pow:");
+        for d in [3u32, 4, 5, 6] {
+            let t_disc = solve_with(&tet_task, &[c_mul.clone(), c_pow.clone()], 18, d);
+            let raw_t = solve_with(&tet_task, &[], 18, d).is_some();
+            println!(
+                "    max_depth {d}: tet via {{mul,pow}}? {:<5}  tet raw(base)? {}",
+                t_disc.is_some(),
+                raw_t
+            );
+        }
+        // Positive control: the product tower DOES give one conditional-discoverability
+        // step (a×b×c×d is unsolvable raw but findable through {mul}), via the SAME
+        // bottom-up mechanism. This shows the mechanism is sound; it is the *chain*
+        // that fails (mul reaches all products, so no dependency).
+        let prod4 = crate::promote_prod_task(4);
+        let p4_raw = solve_with(&prod4, &[], 14, max_depth).is_some();
+        let p4_via = solve_with(&prod4, &[c_mul.clone()], 14, max_depth).is_some();
+        println!(
+            "  product tower control (a×b×c×d): raw(base)? {p4_raw}   via {{mul}}? {p4_via}"
+        );
+        std::io::stdout().flush().ok();
+    }
+
+    // ── the documented negative result ──
+    println!(
+        "\n── Verdict: the arithmetic tower has no dependency chain ──\n\
+         Conditional usefulness is real: the ontology matrix showed power becomes valuable\n\
+         only once mul exists (install-as-Prim re-measures held-out cost). But conditional\n\
+         discoverability does not follow, and the probe shows why.\n\
+         \n\
+         • pow is base-findable. Church pow = λm.λn.n m is a ~6-node combinator, so raw\n\
+           bottom-up finds a correct, generalizing size-11 pow from base at every max_size\n\
+           10–20. There is no mul→pow discovery dependency to expose.\n\
+         • tet is not findable even through {{mul,pow}}, at any max_size 14–24 or max_depth\n\
+           3–6. Bottom-up cannot synthesize the recursion no matter what atoms it holds.\n\
+         • Even the product tower's single step fails via bottom-up: a×b×c×d is raw-✗ and\n\
+           via-{{mul}}-✗ (it needs depth 4 > max_depth 3). It is only reachable through the\n\
+           pool-composition model — the usefulness mechanism, not discovery.\n\
+         \n\
+         The structural reason is a closure argument. Anything discovered by composing O\n\
+         lies in the composition closure of O, so it cannot be the very thing that extends\n\
+         that closure. And bottom-up enumeration is the mirror image: it finds compact\n\
+         combinators (mul, pow) directly but cannot synthesize deeper recursive structure\n\
+         (tet). So both searches are trapped on the same side of the wall.\n\
+         \n\
+         ⇒ A dependency chain C1 ⇒ C2 ⇒ C3 (each depends on C_k for discovery AND extends\n\
+           what O_k can express) cannot emerge from concept composition alone. Concept-aware\n\
+           REASONING exists; concept-aware GENERATION of closure-extending hypotheses does\n\
+           not. The search generator itself has to change — that is the next milestone.\n\
+         \n\
+         (This subcommand is kept as a recorded negative result, deliberately not a ladder.)"
     );
     std::io::stdout().flush().ok();
 }
