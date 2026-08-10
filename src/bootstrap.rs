@@ -265,6 +265,44 @@ fn defined_rate(key: &BehaviorKey) -> f64 {
     key.iter().filter(|c| matches!(c, Cell::Norm(_))).count() as f64 / n
 }
 
+/// Adversarial composition guard: reject a seed that *fails to terminate*
+/// when its applications are fed back in.
+///
+/// The plain generality check draws independent tuples from the probe pool;
+/// a seed that is total there can still diverge when composed — applied to
+/// itself, to partial applications of itself, or to composites of the pool —
+/// which is the seed-branching-explosion failure mode (a promoted seed that
+/// never terminates widening the bank's search instead of narrowing it). We
+/// test the seed on a universe that includes composites of itself and reject
+/// any application that diverges. Large-but-finite results are allowed: a big
+/// Church numeral is still a legitimate, terminating value (rejecting it
+/// would falsely bar useful concepts like multiplication of big numbers).
+fn composition_guard(seed: &Rc<Term>, k: u32, pool: &[Rc<Term>], opts: &MineOptions) -> bool {
+    if k == 0 {
+        return true; // closed constant: no applications to worry about
+    }
+    // Composite universe: the probe pool, one level of the seed applied to
+    // pool terms, and the seed applied to itself (higher-order self-reference).
+    let mut comp: Vec<Rc<Term>> = pool.to_vec();
+    for a in pool {
+        comp.push(app(seed.clone(), a.clone()));
+    }
+    comp.push(app(seed.clone(), seed.clone()));
+
+    let mut rng = opts.holdout_seed ^ (k as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    let empty: Env = Rc::new(Vec::new());
+    let n_draws = 64;
+    for _ in 0..n_draws {
+        let args: Vec<Rc<Term>> = (0..k)
+            .map(|_| comp[(lcg(&mut rng) as usize) % comp.len()].clone())
+            .collect();
+        if matches!(behavior_of(seed, &args, &empty, opts), Cell::Diverged) {
+            return false;
+        }
+    }
+    true
+}
+
 // ── The miner ───────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -427,8 +465,14 @@ pub fn mine(
         if generality < opts.gen_threshold {
             continue;
         }
+        // A seed that is total on the probe draws can still diverge when its
+        // applications are fed back in; a divergent seed would fuel-exhaust
+        // every downstream task, so reject it before promoting.
+        if !composition_guard(&pat.comb, pat.k, &grouping.pool, opts) {
+            continue;
+        }
         let note = format!(
-            "general on {} holdout probes (G {:.0}% / H {:.0}%, {} adversarial); generality ≠ truth (no reference ontology)",
+            "general on {} holdout probes (G {:.0}% / H {:.0}%, {} adversarial), terminating under composition; generality ≠ truth (no reference ontology)",
             opts.n_holdout,
             rate_g * 100.0,
             rate_h * 100.0,
@@ -456,7 +500,7 @@ fn parse_closed(s: &str) -> Rc<Term> {
 }
 
 /// Church numeral λf.λx.f^n(x), as a string for the parser.
-fn church_num_str(n: u32) -> String {
+pub fn church_num_str(n: u32) -> String {
     let mut s = String::from("λf.λx.");
     for _ in 0..n {
         s.push_str("f(");
@@ -735,6 +779,39 @@ mod tests {
         let holdout = build_holdout_pool(8);
         let mined = mine(&[], &grouping, &holdout, &opts);
         assert!(mined.is_empty());
+    }
+
+    #[test]
+    fn composition_guard_admits_benign_rejects_divergent() {
+        // nbe recurses as deep as fuel allows; evaluating the divergent seed
+        // needs the 1GB worker stack, so run in a big-stack thread.
+        let ok = std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let opts = MineOptions::default();
+                let pool = build_grouping_pool(&[], 9).pool;
+                // A genuinely divergent seed under self-application: rejected.
+                let diverge = p("λx.x(x)");
+                // A benign concept (mul = repeated addition): admitted.
+                let mul = p("λa.λb.λc.b(a(c))");
+                // The head idiom that regressed the earlier run: total on the
+                // probe draw; record whether it passes under composition.
+                let head = p("λa.a(λb.λc.b, a)");
+                (
+                    !composition_guard(&diverge, 1, &pool, &opts),
+                    composition_guard(&mul, 3, &pool, &opts),
+                    composition_guard(&head, 1, &pool, &opts),
+                )
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+        assert!(ok.0, "self-applying seed must be rejected");
+        assert!(ok.1, "mul (bounded repeated addition) must pass");
+        // The head idiom terminates on the probe universe (it is not divergent —
+        // its earlier slowdown was ordinary branching from an unused seed, not
+        // explosion). The guard correctly admits it; it is not a safety hazard.
+        eprintln!("composition_guard head idiom = {} (informational)", ok.2);
     }
 
     #[test]

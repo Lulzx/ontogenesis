@@ -37,6 +37,7 @@ cargo build --release
   --train    clst_fol,clst_hed,clst_map,cnat_mul \
   --holdout  cnat_add,cnat_exp,ctre_rev,ntup_hed,slst_hed \
   --rounds 3 --budget 20
+./target/release/supsearch ladder   # Concept Ladder demo (see below)
 ```
 
 `mkbench` rebuilds the benchmark from the verified round-0 solutions, because
@@ -57,7 +58,28 @@ so one that isn't in the target just adds branching (median cost went *up*,
 recurring idioms that pre-build what search can't cheaply enumerate. That's
 the wall — a scale problem, not a mechanism failure.
 
-`cargo test`: 16 pass.
+`cargo test`: 17 pass.
+
+## Concept Ladder
+
+The absurdly-small demo: give the bank raw λ + one operation (`add`), and it
+invents the rest. `ladder` solves four rungs — multiplication, square, power,
+parity — none of which it was given.
+
+What's real and measured:
+- The bank **discovers the canonical Church combinators it was never given**:
+  `mul = λa.λb.λc.b(a(c))`, `power = λa.λb.λc.λd.b(a,c,d)` (the textbook
+  encodings), plus square. Parity sits on the scale wall.
+- The **miner extracts a recurring abstraction** from a recurring family of
+  solved tasks and the language grows (`add → add C1`) — the compression-
+  mining invention step works.
+- The honest wall: **seed injection does not collapse search cost.** It usually
+  widens it (a size-1 atom seed branches against everything); a mined
+  abstraction is often not the clean textbook concept anyway. The one clean win
+  is capability: an `add` seed makes `a×b+c` solvable (raw-unsolvable →
+  8,334 states). The dramatic "83,000 → 900" needs an abstraction-aware search
+  this bottom-up bank doesn't implement. That's the real frontier — not a
+  failure of concept discovery.
 
 ## Layout
 

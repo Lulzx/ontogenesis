@@ -21,7 +21,7 @@ pub struct Test {
     pub outer: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Task {
     pub tests: Vec<Test>,
     pub arity: usize,
