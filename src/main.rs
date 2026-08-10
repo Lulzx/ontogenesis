@@ -1,12 +1,23 @@
+// The ontology-bootstrap track (live): raw λ-term growth with no semantic
+// vocabulary. bank = raw-λ search, bootstrap = the miner + grow driver.
 mod bank;
 mod bootstrap;
-mod compile;
-mod decode;
-mod dsl;
-mod sem;
 mod nbe;
 mod parse;
 mod term;
+
+// The frozen 120/120 semantic engine (historical, not developed further):
+// a typed DSL over decoded Church/Scott values. Kept compilable so the
+// `sem`/`grow`/`mine`/`validate` subcommands still run, but superseded by
+// the raw-λ bootstrap track above.
+#[path = "legacy/sem.rs"]
+mod sem;
+#[path = "legacy/decode.rs"]
+mod decode;
+#[path = "legacy/dsl.rs"]
+mod dsl;
+#[path = "legacy/compile.rs"]
+mod compile;
 
 use parse::TaskError;
 use std::fs;

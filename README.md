@@ -1,156 +1,139 @@
-# supsearch
+# supsearch — ontology bootstrap
 
-supsearch is a program synthesis engine. It solves all 120 tasks of
-[LamBench](https://github.com/VictorTaelin/LamBench), Victor Taelin's pure
-λ-calculus benchmark, scoring 120/120 as certified by the benchmark's own
-referee. The best LLMs score 108/120.
+**supsearch** is an experiment in a machine that starts with almost no
+human-designed concepts and invents its own executable language of thought.
 
-It is about 2,500 lines of Rust with no dependencies. There is no neural
-network, no new language and no special runtime: candidate programs are
-enumerated bottom-up, deduplicated by their behavior on the test inputs,
-compiled to λ-calculus through a small hand-written standard library, and
-verified against the benchmark's oracle. Every solution in `outsem/` was
-produced by the engine; none was written by a human or an LLM.
+The thesis is Taelin's: a superposition — share work across candidates,
+verify against an oracle that cannot be gamed, grow a library of solved
+abstractions — should fit in ordinary code on ordinary hardware. The
+superposition becomes a hash table keyed on *behavior*; the library is a
+list of λ-terms the machine abstracted from its own solved problems.
 
-## News
+This repository is that growth track made self-contained. It has **no
+semantic vocabulary**: no Church/Scott decoder, no typed DSL, no hand-chosen
+operations. The only signal is the oracle — the test inputs of the tasks
+it solves. It is ~1,700 lines of Rust, no dependencies.
 
-- 2026-07-22: 120/120. The `algo_` category (brainfuck interpreter, SAT,
-  Sudoku, TSP, convex hull, maze, MST, λ-evaluator, type checker, Bresenham)
-  and both FFT tasks solved; the four remaining template-solved ADT tasks
-  (`ctr`, `mrg`) re-derived by search. TSP was found as a composition:
-  `MinL(MapB(Perms(Range0 n), λp.CycleCost(D, p)))`.
-- earlier: 108/120 with the semantic-search pipeline (ties the LLM
-  leaderboard leaders); 9/120 with raw λ-term enumeration.
+## The frontier
 
-## Results
+The falsifiable claim is a cost curve `C(L₀) > C(L₁) > C(L₂)…` on
+**held-out** tasks: as the machine abstracts and re-injects its own
+abstractions, solving new tasks should get cheaper. The honest framing is
+stated plainly, not elided:
 
-| Score | Entry |
-|-------|-------|
-| **120/120 (100%)** | **supsearch (this repo — a search engine, not a model)** |
-| 108/120 (90.0%) | GPT-5.3 Codex |
-| 108/120 (90.0%) | Opus 4.6 |
-| 106/120 (88.3%) | Opus 4.7 |
-| 106/120 (88.3%) | Gemini 3.1 Pro |
-| 96/120 (80.0%) | GPT-5.4 |
-| 89/120 (74.2%) | GPT-5.5 |
-| 88/120 (73.3%) | GPT-5.2 |
-| 87/120 (72.5%) | Sonnet 4.6 |
-| 72/120 (60.0%) | GPT-5.4-mini |
-| 57/120 (47.5%) | Qwen 3.6 Plus |
-| 55/120 (45.8%) | Grok 4.20 |
-| 55/120 (45.8%) | DeepSeek v4 Pro |
-| 47/120 (39.2%) | Gemini 3.1 Flash Lite |
-| 38/120 (31.7%) | GLM 5.1 |
-| 34/120 (28.3%) | Kimi K2 Thinking |
-| 32/120 (26.7%) | MiMo v2.5 Pro |
-| 30/120 (25.0%) | Gemma 4 31B IT |
-| 26/120 (21.7%) | Kimi K2.6 |
-| 14/120 (11.7%) | GPT-5.3 Codex Spark |
-| 0/120 (0.0%) | GPT-5.1, Opus 4.5, Sonnet 4.5 |
-
-Model scores are the official LamBench rankings. The supsearch run is
-certified locally by LamBench's harness (`bun src/check.ts`); it holds no
-official leaderboard row. Wall-clock per task ranges from 16 ms to 826 s.
+- **The input-domain commitment is unavoidable.** The oracle passes raw
+  λ-terms, so *something* is the input universe. supsearch commits only to
+  "the corpus test inputs plus Church/Scott data and functions as *input
+  generators*" — zero operations, zero decode, zero output typing. That is
+  "start with almost no human concepts," not "from literally nothing."
+- **There is no reference ontology to validate against.** Validation
+  therefore measures *generality* — defined-rate and self-consistency across
+  a broad held-out probe draw — and **generality ≠ truth**. Each promoted
+  seed carries that caveat in its note.
+- **A bad seed can never corrupt a solution.** `bank::solve` re-verifies
+  every winning candidate's normal form against the oracle, so an overfit
+  seed is a *performance* hazard, never a *correctness* one.
 
 ## How it works
 
-1. **Decode.** Test inputs and expected outputs are λ normal forms whose
-   shape is fixed by the task's encoding (Church/Scott naturals, lists,
-   trees, ADTs, tuples, balanced ternary, the GN number tower). Recognizers
-   turn them into native values.
-2. **Search.** A small typed DSL (~70 operations) is enumerated bottom-up by
-   expression size. Each candidate is evaluated on the real test inputs;
-   candidates with identical output vectors are merged, so millions of
-   syntactically distinct programs collapse into thousands of behaviorally
-   distinct ones. The first expression matching all outputs wins.
-3. **Compile.** The winning expression is emitted as a `.lam` program
-   through a hand-written λ standard library, with encoding adapters at the
-   boundaries.
-4. **Verify.** The program is checked against every test by an internal
-   normalizer, then graded by LamBench's own referee. Nothing unsound can
-   escape.
+1. **Raw-λ search** (`bank.rs`). Candidate programs are enumerated bottom-up
+   and deduplicated by their behavior on the test inputs (a hash table keyed
+   on normal-form vectors — the superposition). No decode, no typed ops.
+2. **The miner** (`bootstrap.rs`). From the solutions the bank finds, it
+   extracts *open* subterms, abstracts them into closed combinators, and
+   **groups behaviorally**: syntactically distinct combinators that behave
+   identically merge into one class (semantic abstraction over raw λ). It
+   ranks classes by compression gain and validates each for generality on a
+   fresh holdout probe universe before promoting it as a seed.
+3. **The grow driver** (`bootstrap` subcommand). Solve train → measure
+   held-out cost → mine → validate → inject seeds → repeat to a fixed point,
+   recording `C(Lₜ)` at each generation.
+4. **The benchmark** (`mkbench` subcommand). The repo vendors the verified
+   round-0 *solutions* but not the external benchmark's task files, so a
+   valid corpus is synthesized from the solutions themselves (see below).
 
-A direct λ-term enumerator (normal-form-keyed behavioral dedup over pure
-λ-terms) exists as a fallback track; it solves 9/120 on its own. Searching
-in the semantic space instead of the term space is what moves the score.
-
-## Attribution
-
-Search finds different amounts per task, and the split is stated plainly:
-
-- ~50 tasks: raw compositional search over arithmetic/list operations.
-- ~58 tasks: search over generic per-encoding machinery (descriptor-driven
-  ADT fold/unfold, serializers, constructor builders, tree operations).
-- 1 task (`algo_tsp`): a full algorithm discovered as a composition, with
-  no TSP-specific primitive in the library.
-- 11 tasks: one hand-written algorithm-library routine each (BFS, hull,
-  Bresenham, SAT, Sudoku, STLC checking, β-normalization, brainfuck, GN
-  DFT); search contributes decoding, selection, wiring and verification.
-
-The library is human capital, as in any compiler; the engine decides what
-to call, how to wire it, and whether the result is right. An earlier run in
-which an LLM wrote six passing solutions directly was rejected and deleted.
-The reference solutions shipped in `lambench/lam/` are never read.
-
-## Usage
-
-Requires Rust and [Bun](https://bun.sh) (for the referee), plus a checkout
-of [LamBench](https://github.com/VictorTaelin/LamBench) in `lambench/`.
-
-```sh
+```
 cargo build --release
 
-# solve everything into outsem/
-./target/release/supsearch lambench/tsk --out outsem
+# 1. (re)generate the benchmark corpus from the verified round-0 solutions
+./target/release/supsearch mkbench solutions/round0 bench
 
-# certify with LamBench's own harness
-cd lambench && bun src/check.ts ../outsem
+# 2. run the Milestone-0 split: mine on 4, measure the curve on 5
+./target/release/supsearch bootstrap bench \
+  --train    clst_fol,clst_hed,clst_map,cnat_mul \
+  --holdout  cnat_add,cnat_exp,ctre_rev,ntup_hed,slst_hed \
+  --rounds 3 --budget 20 --lib lib/bootstrap.lib
 ```
 
-Useful environment variables: `SUP_BUDGET` (search deadline in seconds,
-default 90), `SUP_DEBUG` (decode dumps), `SUP_PROBE=OpName` (evaluate one
-candidate against all tests), `SUP_NOOPS=Op1,Op2` (disable operations).
+### The synthesized benchmark (honesty note)
 
-## Technical notes
+`mkbench` writes one `.tsk` per solution. Every task test has the shape
+`λA₁…λAₖ. @main(A₁,…,Aₖ)` — apply the program to `k` fresh binders — so a
+valid task reconstructs from the verified solution alone: the test is the
+solution's binder-head, the expected output is the solution itself. **These
+are synthesized single-probe tasks, NOT the real external benchmark with its
+rich concrete input suites.** They exercise the full driver loop faithfully
+to the Milestone-0 task *set*, and each file's header says so. The cost curve
+is meaningful only relative to this corpus, not as a claim about the external
+benchmark.
 
-- **The referee's cost model is part of the spec.** LamBench's `lam`
-  evaluator is call-by-name with no sharing: any computed value consumed
-  twice is recomputed, and iteration state chained through recursion goes
-  exponential. The λ standard library is therefore written in affine style
-  with explicit CPS duplication (`@sdup`) — hand-rolled interaction-net dup
-  nodes, i.e. exactly the bookkeeping HVM automates, done in ~40 lines.
-- **The tests are the real spec.** The task prose does not tell you that
-  Bresenham rounds half-steps down, that both FFTs take input in
-  bit-reversal order while only `stre_fft` also emits it, or what the
-  Church-tree normal forms look like (plain constructor spines at value
-  roots, self-passing spines `n(a,b,n,l)` / `l(x,n,l)` below — a shape that
-  lets converters recurse by self-application, no Y combinator needed).
-  All of it is recovered from the tests.
-- **The FFT number system.** GN(m) = GN(m−1)[w] with w² = the previous
-  root and w₀ = −1, over balanced-ternary integers. Multiplication by a
-  root of unity is structural: `mulw(B(a,b)) = B(mulw(b), a)`, negation at
-  scalars. An O(N²) DFT over this tower passes with seconds to spare.
-- **Enumeration fuzzes your own primitives.** Bottom-up search feeds every
-  operation every value it can build; it found a latent nontermination in
-  the ADT deserializer (a 1-constructor descriptor consumes no tag bits but
-  recurses into fields) that the ADT tasks themselves cannot trigger.
-- **The finite oracle is memorizable.** ~70 tasks have fully concrete test
-  inputs and would fall to a lookup table; we don't do this. Tasks whose
-  tests pass free variables are immune — universally quantified tests are
-  the better oracle design.
+## Where the frontier stands (verified, honest)
 
-Full timings, per-task notes and the complete honesty audit are in
-[RESULTS.md](RESULTS.md).
+- The **mechanism works**: on the 9-solution corpus the miner fires — it
+  mines the head idioms `λa.a(λb.λc.b)` (gain 4) and `λa.a(λb.λc.b, a)`
+  (gain 3), validates them on the holdout probe draw (G 100% / H 100%), and
+  promotes them. A unit test (`mined_seed_is_executable_succ`) proves a
+  mined abstraction actually computes successor on Church numerals.
+- The **4-task Milestone-0 split is too thin**: with only four solutions the
+  best recurring behavioral class (composition `λa.λb.λc.a(b(c))`) recurs
+  twice but has gain 0, below the bar, so no seeds and a flat curve. Set
+  `BOOT_DEBUG=1` to see exactly why — this is the plan's anticipated
+  thin-corpus fallback, diagnosable instead of silent.
+- **Naive seed injection widens search.** Seeds are injected as size-1
+  atoms, so a promoted seed that isn't a subterm of the target adds junk
+  branching — median cost *rose* 0.016s → 0.265s in one run. This is the
+  plan's Risk #3 (seed branching explosion), the same lesson the frozen
+  engine recorded in `lib/small.lib`. The lever that changes the curve is
+  more raw solves → larger recurring idioms that pre-build structure the
+  bank can't cheaply enumerate.
 
-## Background
+`cargo test` passes (16 tests, incl. the safety property that bad seeds
+cannot corrupt answers and the executable-succ proof).
 
-The project tests a thesis about Taelin's optimal-computation program: the
-durable ideas — share work across candidates, verify with an oracle that
-cannot be gamed, grow a library of solved abstractions — fit in ordinary
-code on ordinary hardware. The superposition becomes a hash table keyed on
-behavior; the substrate tax was never owed. LamBench was chosen because it
-is his benchmark, graded by his referee.
+## Layout
+
+```
+src/             the ontology-bootstrap track (live)
+  bank.rs        raw-λ search: behavior-keyed superposition, oracle verify
+  bootstrap.rs   miner: open-subterm abstraction, behavioral grouping,
+                 reference-free generality validation, probe universes
+  nbe.rs         normalizer / evaluator
+  term.rs        λ-terms, de Bruijn, printing
+  parse.rs       .tsk task parser
+  legacy/        the frozen 120/120 semantic engine (sem, decode, dsl, compile)
+bench/           synthesized Milestone-0 corpus (.tsk)
+lib/             mined seed libraries
+legacy/          frozen engine outputs: outsem/, final/, out2/, solutions/
+                 semantic, RESULTS.md, certify.sh
+```
+
+## Legacy: the 120/120 semantic engine
+
+Before the ontology-bootstrap pivot, supsearch solved **all 120 LamBench
+tasks** with a hand-built semantic vocabulary — a typed DSL (~70 operations)
+over decoded Church/Scott values, compiled through a hand-written λ standard
+library. That work is frozen (not developed further) and lives in
+[`legacy/`](legacy/RESULTS.md): `src/legacy/` holds the code (still
+compilable; the `sem`/`grow`/`mine`/`validate` subcommands still run), and
+`legacy/outsem/`, `legacy/final/`, `legacy/solutions_semantic/` hold the
+outputs and the certified run.
+
+Its 9→120 score jump is the payoff of that human vocabulary, not an invention
+of it — which is exactly why the frontier exists. The raw-λ bank, with no
+vocabulary, solved 9/120 on its own; the bootstrap track asks whether
+behavioral quotienting + compression mining can re-derive the useful
+abstractions from those 9 using only the oracle.
 
 ## License
 
-MIT. LamBench is by Victor Taelin (MIT), vendored under `lambench/`.
+MIT.
