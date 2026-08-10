@@ -24,6 +24,7 @@ use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::time::Instant;
 
+#[derive(Clone)]
 pub struct Options {
     pub max_size: u32,
     pub max_depth: u32,
@@ -172,6 +173,11 @@ struct Search<'a> {
     target_hash: Vec<u64>,
     levels: Vec<Level>,
     stats: Stats,
+    /// Canonical-keying ablation: when true, candidate and target identity use
+    /// the compact canonical key ([`crate::canon::canonicalize`]) instead of the
+    /// structural `quote_hash`, so ARC-sized grids stay hashable past the 2048
+    /// structural cap. Representation-only — search semantics are unchanged.
+    use_canon: bool,
 }
 
 impl<'a> Search<'a> {
@@ -201,7 +207,7 @@ impl<'a> Search<'a> {
         // Quotient: collapse concept expansions to their Prim atom before the
         // candidate is evaluated or kept, so P/~L is what actually gets searched.
         let t = canonicalize(&t, &self.opts.concepts);
-        if self.stats.built % 4096 == 0
+        if self.stats.built % 256 == 0
             && self.start.elapsed().as_secs_f64() > self.opts.time_budget_secs
         {
             return Step::OutOfTime;
@@ -213,9 +219,14 @@ impl<'a> Search<'a> {
         for j in 0..self.n_tests {
             let mut fuel = Fuel(self.opts.fuel);
             let r = self.make_val(c, j, &t, &mk, &mut fuel).and_then(|v| {
-                let mut h = DefaultHasher::new();
-                quote_hash(&v, 0, &mut fuel, &mut h)?;
-                Ok((v, h.finish()))
+                if self.use_canon {
+                    let mut h = DefaultHasher::new();
+                    crate::canon::canonicalize(&v, &mut fuel, &mut h).map(|cv| (v, cv.key()))
+                } else {
+                    let mut h = DefaultHasher::new();
+                    quote_hash(&v, 0, &mut fuel, &mut h)?;
+                    Ok((v, h.finish()))
+                }
             });
             match r {
                 Ok((v, h)) => {
@@ -248,11 +259,18 @@ impl<'a> Search<'a> {
         }
 
         if c == 0 && hashes == self.target_hash {
-            // Hash match: verify structurally before declaring victory.
-            let verified = (0..self.n_tests).all(|j| {
-                let mut fuel = Fuel(self.opts.fuel);
-                quote_eq(&vals[j], &self.target[j], 0, &mut fuel).unwrap_or(false)
-            });
+            // Hash match: verify structurally before declaring victory. In
+            // canonical mode the key IS the exact identity (compact numeral/grid
+            // key), so no structural re-check is needed — and quoting an
+            // ARC-sized grid to verify would itself blow the fuel budget.
+            let verified = if self.use_canon {
+                true
+            } else {
+                (0..self.n_tests).all(|j| {
+                    let mut fuel = Fuel(self.opts.fuel);
+                    quote_eq(&vals[j], &self.target[j], 0, &mut fuel).unwrap_or(false)
+                })
+            };
             if verified {
                 let mut sol = t;
                 for _ in 0..self.k {
@@ -280,6 +298,25 @@ fn thunk_of_val_rc(v: Rc<Val>) -> Thunk {
 /// Search for `@main` for this task. Returns the full closed solution term
 /// (already wrapped in the k argument lambdas) if found within budget.
 pub fn solve(task: &Task, opts: &Options) -> Outcome {
+    solve_internal(task, opts, false)
+}
+
+/// [`solve`] through the canonical-keying ablation path: candidate and target
+/// identity use the compact canonical key instead of the structural hash, so
+/// ARC-sized grids stay hashable past the 2048 structural cap. Representation-
+/// only — the search language is unchanged. This is what lets the A1 slice's
+/// "naive seeds" control (B) reason about 8×8 grids on the same footing as the
+/// canonical concept path (C), so the ontogenesis-vs-seeds comparison is not
+/// confounded by the structural wall.
+///
+/// Lib-only API: consumed by the `arc1` demo crate, not by main.rs's private
+/// copy of this module (which is why it is `#[allow(dead_code)]` here).
+#[allow(dead_code)]
+pub fn solve_abl(task: &Task, opts: &Options, use_canon: bool) -> Outcome {
+    solve_internal(task, opts, use_canon)
+}
+
+fn solve_internal(task: &Task, opts: &Options, use_canon: bool) -> Outcome {
     let start = Instant::now();
     let k = task.arity as u32;
     let n_tests = task.tests.len();
@@ -317,14 +354,25 @@ pub fn solve(task: &Task, opts: &Options) -> Outcome {
                 }
             }
         };
-        let mut h = DefaultHasher::new();
-        if quote_hash(&v, 0, &mut fuel, &mut h).is_err() {
-            return Outcome {
-                solution: None,
-                stats: Stats::default(),
-            };
+        let key = if use_canon {
+            let mut h = DefaultHasher::new();
+            match crate::canon::canonicalize(&v, &mut fuel, &mut h) {
+                Ok(cv) => Some(cv.key()),
+                Err(_) => None,
+            }
+        } else {
+            let mut h = DefaultHasher::new();
+            quote_hash(&v, 0, &mut fuel, &mut h).ok().map(|_| h.finish())
+        };
+        match key {
+            Some(k) => target_hash.push(k),
+            None => {
+                return Outcome {
+                    solution: None,
+                    stats: Stats::default(),
+                }
+            }
         }
-        target_hash.push(h.finish());
     }
 
     // Shared, memoized argument thunks: each test input is evaluated at most
@@ -371,6 +419,7 @@ pub fn solve(task: &Task, opts: &Options) -> Outcome {
         target_hash,
         levels,
         stats: Stats::default(),
+        use_canon,
     };
 
     macro_rules! step {

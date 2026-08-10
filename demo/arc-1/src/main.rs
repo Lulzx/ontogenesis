@@ -153,6 +153,17 @@ fn main() {
                 .join()
                 .unwrap();
         }
+        Some("a1") => {
+            // The A1 ARC Ontogenesis Slice: grid NBE recurses deep on the fold
+            // structure and the slice hashes 8×8 grids, so run on a large stack.
+            let a = args[1..].to_vec();
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(move || a1(&a))
+                .unwrap()
+                .join()
+                .unwrap();
+        }
         _ => bridge(&args),
     }
 }
@@ -323,6 +334,182 @@ fn transform_family(
             })
             .collect(),
     }
+}
+
+/// The generic grid schema meta-space: closed λ-term closures over `{cons,nil}`.
+///
+/// These are structural generators (the C7 `iterate`/`reduce` idea lifted to
+/// grids), NOT ARC-named concepts. A grid is a list of rows, each a list of
+/// color-numerals, so a transform is a fold over the outer list (rows) and/or
+/// the inner lists (cells). The A1 slice enumerates candidates from this space
+/// and lets the counterfactual gate decide what is worth acquiring — mirror is
+/// *not* hand-supplied here; it is `map_rows(reverse_cells)`, one candidate
+/// among many.
+mod schema {
+    use super::*;
+
+    fn cons_t() -> Rc<term::Term> {
+        closed("λc.λs.λf.λz.f(c)(s(f)(z))")
+    }
+    fn nil_t() -> Rc<term::Term> {
+        closed("λf.λz.z")
+    }
+    fn singleton() -> Rc<term::Term> {
+        term::lam(term::app(term::app(cons_t(), term::var(0)), nil_t()))
+    }
+    fn append() -> Rc<term::Term> {
+        term::lam(term::lam(term::app(
+            term::app(term::var(1), cons_t()),
+            term::var(0),
+        )))
+    }
+
+    /// id = λx. x
+    pub fn id() -> Rc<term::Term> {
+        term::lam(term::var(0))
+    }
+
+    /// reverse_cells = λrow. row (λc.λacc. append acc (singleton c)) nil
+    /// (reverse a single row — the horizontal-mirror atomic).
+    pub fn reverse_cells() -> Rc<term::Term> {
+        term::lam(term::app(
+            term::app(
+                term::var(0),
+                term::lam(term::lam(term::app(
+                    term::app(append(), term::var(0)),
+                    term::app(singleton(), term::var(1)),
+                ))),
+            ),
+            nil_t(),
+        ))
+    }
+
+    /// reverse_rows = λgrid. grid (λrow.λrest. append rest (singleton row)) nil
+    /// (reverse the row order — the vertical-flip atomic).
+    pub fn reverse_rows() -> Rc<term::Term> {
+        term::lam(term::app(
+            term::app(
+                term::var(0),
+                term::lam(term::lam(term::app(
+                    term::app(append(), term::var(0)),
+                    term::app(singleton(), term::var(1)),
+                ))),
+            ),
+            nil_t(),
+        ))
+    }
+
+    /// map_rows(f) = λgrid. grid (λrow.λrest. cons (f row) rest) nil
+    /// (apply f to each row, preserving order).
+    pub fn map_rows(f: &Rc<term::Term>) -> Rc<term::Term> {
+        term::lam(term::app(
+            term::app(
+                term::var(0),
+                term::lam(term::lam(term::app(
+                    term::app(cons_t(), term::app(f.clone(), term::var(1))),
+                    term::var(0),
+                ))),
+            ),
+            nil_t(),
+        ))
+    }
+
+    /// map_cells(f) = λgrid. grid (λrow.λrest. cons (row (λc.λacc. cons (f c) acc) nil) rest) nil
+    /// (apply f to each cell of each row).
+    pub fn map_cells(f: &Rc<term::Term>) -> Rc<term::Term> {
+        term::lam(term::app(
+            term::app(
+                term::var(0),
+                term::lam(term::lam(term::app(
+                    term::app(
+                        cons_t(),
+                        term::app(
+                            term::app(
+                                term::var(1),
+                                term::lam(term::lam(term::app(
+                                    term::app(cons_t(), term::app(f.clone(), term::var(1))),
+                                    term::var(0),
+                                ))),
+                            ),
+                            nil_t(),
+                        ),
+                    ),
+                    term::var(0),
+                ))),
+            ),
+            nil_t(),
+        ))
+    }
+
+    /// compose(f,g) = λx. f (g x)
+    pub fn compose(f: &Rc<term::Term>, g: &Rc<term::Term>) -> Rc<term::Term> {
+        term::lam(term::app(f.clone(), term::app(g.clone(), term::var(0))))
+    }
+
+    /// The bounded proposal enumeration: direct atomics, `app(schema, atomic)`
+    /// for map_rows/map_cells, and `compose(atomic, atomic)`. Shallow by design —
+    /// rotation (`compose(reverse_rows, map_rows(reverse_cells))`) composes a
+    /// *schema result*, so it is deliberately absent here; it is the transfer
+    /// target, solvable only once mirror and vflip are acquired.
+    pub fn propose_candidates() -> Vec<Rc<term::Term>> {
+        let atomics = [id(), reverse_cells(), reverse_rows()];
+        let mut out = Vec::new();
+        out.extend(atomics.iter().cloned());
+        for a in &atomics {
+            out.push(map_rows(a));
+            out.push(map_cells(a));
+        }
+        for a in &atomics {
+            for b in &atomics {
+                out.push(compose(a, b));
+            }
+        }
+        out
+    }
+}
+
+/// 180° rotation target: output cell (i,j) = input cell (w-1-i, h-1-j).
+/// Rotation is the *transfer* family — it is not in the shallow proposal
+/// enumeration, but becomes solvable once mirror and vflip are acquired and
+/// composed.
+fn rotated_term(w: usize, h: usize) -> Rc<term::Term> {
+    let rows: Vec<Rc<term::Term>> = (0..h)
+        .map(|j| {
+            let cells: Vec<u32> = (0..w)
+                .map(|i| ((w - 1 - i + h - 1 - j) % 3 + 1) as u32)
+                .collect();
+            church_list(&cells)
+        })
+        .collect();
+    rc_list(&rows)
+}
+
+/// A candidate body installed as a single-arity concept (all grid transforms
+/// here are arity 1).
+fn cand_concept(body: &Rc<term::Term>) -> bank::Concept {
+    bank::Concept {
+        body: body.clone(),
+        name: "cand".into(),
+        arity: 1,
+    }
+}
+
+/// The Propose stage: which candidates from the generic schema meta-space solve
+/// the given task? Each candidate is installed as a single-arity concept and
+/// tested against the task's examples via the canonical-keying quotient search
+/// ([`bank::concept_solve_abl`] with `use_canon=true`, so 8×8 grids stay
+/// hashable). Solvers are returned — the `examples → candidate transformation`
+/// step, with no ARC-named concept supplied.
+fn propose_solvers(task: &parse::Task, opts: &bank::Options) -> Vec<Rc<term::Term>> {
+    schema::propose_candidates()
+        .into_iter()
+        .filter(|body| {
+            bank::concept_solve_abl(task, &[cand_concept(body)], opts, true)
+                .0
+                .solution
+                .is_some()
+        })
+        .collect()
 }
 
 /// Grid concept acquisition: does the counterfactual gate transfer to grid values?
@@ -542,6 +729,218 @@ fn gridrep(args: &[String]) {
          \x20  The wall is value representation, not ARC semantics — the compact GridKey lifts it."
     );
     std::io::stdout().flush().ok();
+}
+
+/// SolveRate + total `built` cost over a task set, given a per-task cost fn that
+/// returns `(solved, built)`. `built` is summed for ALL tasks (solved or not) —
+/// an unsolved task still spent search work, and that work is the honest cost of
+/// the control. SolveRate is the fraction solved.
+fn solve_rate(tasks: &[parse::Task], cost: &dyn Fn(&parse::Task) -> (bool, u64)) -> (f64, u64) {
+    let mut solved = 0u64;
+    let mut total = 0u64;
+    for t in tasks {
+        let (ok, built) = cost(t);
+        total += built;
+        if ok {
+            solved += 1;
+        }
+    }
+    (solved as f64 / tasks.len() as f64, total)
+}
+
+/// A1 ARC Ontogenesis Slice: Express → Propose → Acquire → Transfer.
+///
+/// The first real ARC-1 curriculum: 10–20 tasks across three families (horizontal
+/// mirror, vertical mirror, 180° rotation), tracking the four stages per task.
+/// The genuinely new step is **Propose** — `examples → candidate transformation`
+/// via the generic schema meta-space, with no ARC-named concept supplied. The
+/// success condition: at least one concept generated from real ARC experience is
+/// autonomously proposed, counterfactually acquired, and measurably reduces
+/// fixed-budget search on previously unseen ARC tasks (held-out mirror sizes +
+/// the composed rotation family). Three controls (A frozen / B seeds / C
+/// ontogenesis) run under the same compute; the claim is C wins while B doesn't,
+/// so the advantage is the quotient search language, not remembered programs.
+///
+/// All concept-path solves use the canonical-keying ablation path
+/// ([`bank::concept_solve_abl`] with `use_canon=true`) so 8×8 grids stay
+/// hashable; control B uses [`bank::solve_abl`] with the same keying so the
+/// seeds-vs-ontogenesis comparison is not confounded by the structural 2048 cap.
+fn a1(_args: &[String]) {
+    use std::io::Write;
+    let mut out = std::io::stdout();
+
+    // Shared budget: same compute for all three controls. Canonical fuel is
+    // raised so 8×8 grids (and their lazy-fold candidates) stay hashable.
+    let mut opts = bank_opts(4, 14);
+    opts.fuel = 1_000_000;
+
+    // ── Task families ──
+    // Training (solves-gate + Express) and held-out (disjoint sizes, the
+    // generalization target) for mirror and vflip; rotation is the transfer
+    // family — never trained, solvable only by composing the acquired concepts.
+    let train_mirror = transform_family(&[(3, 3), (5, 5), (8, 8)], &mirrored_term);
+    let train_vflip = transform_family(&[(3, 3), (5, 5), (8, 8)], &vflipped_term);
+    let h_mirror = transform_family(&[(4, 4), (6, 6)], &mirrored_term);
+    let h_vflip = transform_family(&[(4, 4), (6, 6)], &vflipped_term);
+    let rotation = transform_family(&[(3, 3), (5, 5), (8, 8)], &rotated_term);
+
+    // The known-correct transforms, built from the generic schema meta-space.
+    let mirror_body = schema::map_rows(&schema::reverse_cells());
+    let vflip_body = schema::reverse_rows();
+    let rot_body = schema::compose(&schema::reverse_rows(), &schema::map_rows(&schema::reverse_cells()));
+
+    println!("\n── A1 ARC Ontogenesis Slice: Express → Propose → Acquire → Transfer ──");
+    println!("substrate = {{cons,nil}} + Church color-numerals; grid = list of rows, each a list of numerals");
+    println!("schema meta-space = {{id, reverse_cells, reverse_rows}} × {{map_rows, map_cells, compose}} (generic, not ARC-named)");
+    println!("families: A mirror (train 3²,5²,8² / held-out 4²,6²), D vflip (same), B rotation (transfer, 3²,5²,8²)");
+    println!("canonical keying throughout the concept path (8×8 grids stay hashable past the 2048 structural cap)");
+    out.flush().ok();
+
+    // ── Stage 1: Express — prove the substrate can represent the transform ──
+    // Before any synthesis, verify the known-correct schema term solves each
+    // training family. This separates "search failed" from "ontology failed".
+    let express_mirror = bank::concept_solve_abl(&train_mirror, &[cand_concept(&mirror_body)], &opts, true)
+        .0
+        .solution
+        .is_some();
+    let express_vflip = bank::concept_solve_abl(&train_vflip, &[cand_concept(&vflip_body)], &opts, true)
+        .0
+        .solution
+        .is_some();
+    let express_rot = bank::concept_solve_abl(&rotation, &[cand_concept(&rot_body)], &opts, true)
+        .0
+        .solution
+        .is_some();
+    println!("\n── Stage 1: Express (substrate represents the transform?) ──");
+    println!(
+        "  mirror = map_rows(reverse_cells): {}",
+        if express_mirror { "EXPRESSIBLE ✓" } else { "NOT EXPRESSIBLE ✗" }
+    );
+    println!(
+        "  vflip  = reverse_rows:            {}",
+        if express_vflip { "EXPRESSIBLE ✓" } else { "NOT EXPRESSIBLE ✗" }
+    );
+    println!(
+        "  rotation = compose(reverse_rows, map_rows(reverse_cells)): {}",
+        if express_rot { "EXPRESSIBLE ✓" } else { "NOT EXPRESSIBLE ✗" }
+    );
+    out.flush().ok();
+
+    // ── Stage 2: Propose — examples → candidate transformation ──
+    // Enumerate the schema meta-space, test each candidate against a small
+    // mirror/vflip task (solves-gate), collect the solvers. No ARC-named concept.
+    let gate_mirror = task(3, 3);
+    let gate_vflip = transform_family(&[(3, 3)], &vflipped_term);
+    let mirror_solvers = propose_solvers(&gate_mirror, &opts);
+    let vflip_solvers = propose_solvers(&gate_vflip, &opts);
+    let mirror_proposed = mirror_solvers.iter().any(|b| b == &mirror_body);
+    let vflip_proposed = vflip_solvers.iter().any(|b| b == &vflip_body);
+    println!("\n── Stage 2: Propose (schema meta-space → candidate transformations) ──");
+    println!(
+        "  mirror task: {} candidate(s) solve the gate; mirror = map_rows(reverse_cells) proposed: {}",
+        mirror_solvers.len(),
+        if mirror_proposed { "✓" } else { "✗" }
+    );
+    println!(
+        "  vflip task:  {} candidate(s) solve the gate; vflip = reverse_rows proposed: {}",
+        vflip_solvers.len(),
+        if vflip_proposed { "✓" } else { "✗" }
+    );
+    out.flush().ok();
+
+    // ── Stage 3: Acquire — the counterfactual gate on the held-out ──
+    // For each proposed solver, measure held-out cost with vs without it. A
+    // frontier gain (✗ → finite) ACQUIRES; no gain / regression REJECTS.
+    let base_mirror = acquire::concept_cost_abl(&h_mirror, &[], &opts, true);
+    let g_mirror = acquire::propose_value_abl(&mirror_body, &[], &[h_mirror.clone()], &opts, base_mirror, true);
+    let base_vflip = acquire::concept_cost_abl(&h_vflip, &[], &opts, true);
+    let g_vflip = acquire::propose_value_abl(&vflip_body, &[], &[h_vflip.clone()], &opts, base_vflip, true);
+    // Wrong-transform controls: a real-but-wrong transform must be REJECTED on
+    // the other family's held-out — promotion by measured Δ, not by name.
+    let g_vflip_on_mirror = acquire::propose_value_abl(&vflip_body, &[], &[h_mirror.clone()], &opts, base_mirror, true);
+    let g_mirror_on_vflip = acquire::propose_value_abl(&mirror_body, &[], &[h_vflip.clone()], &opts, base_vflip, true);
+    println!("\n── Stage 3: Acquire (counterfactual gate on held-out) ──");
+    let show = |g: &Option<acquire::Gain>, label: &str| match g {
+        Some(g) => println!(
+            "  {label}: {} → {} (arity {}), {} → {}",
+            acquire::disp_cost(g.before),
+            acquire::disp_cost(g.after),
+            g.arity,
+            g.kind(),
+            if g.earns() { "ACQUIRE" } else { "REJECT" }
+        ),
+        None => println!("  {label}: no valid interface → REJECT"),
+    };
+    show(&g_mirror, "mirror on mirror held-out");
+    show(&g_vflip, "vflip  on vflip held-out ");
+    show(&g_vflip_on_mirror, "vflip  on mirror held-out (wrong)");
+    show(&g_mirror_on_vflip, "mirror on vflip held-out  (wrong)");
+    out.flush().ok();
+
+    // ── Stage 4: Transfer — does the acquired concept reduce search on unseen tasks? ──
+    // Single-concept generalization: held-out mirror without (✗) vs with [mirror].
+    let h_mirror_base = acquire::concept_cost_abl(&h_mirror, &[], &opts, true);
+    let h_mirror_after = acquire::concept_cost_abl(&h_mirror, &[mirror_concept()], &opts, true);
+    // Composition: rotation without (✗) vs with [mirror, vflip] (finite).
+    let rot_base = acquire::concept_cost_abl(&rotation, &[], &opts, true);
+    let rot_after = acquire::concept_cost_abl(&rotation, &[mirror_concept(), vflip_concept()], &opts, true);
+    println!("\n── Stage 4: Transfer (unseen tasks) ──");
+    println!(
+        "  single-concept: held-out mirror {} → through-mirror {} ({} states)",
+        acquire::disp_cost(h_mirror_base),
+        acquire::disp_cost(h_mirror_after),
+        h_mirror_after
+    );
+    println!(
+        "  composition:    rotation {} → through {{mirror, vflip}} {} ({} states)",
+        acquire::disp_cost(rot_base),
+        acquire::disp_cost(rot_after),
+        rot_after
+    );
+    out.flush().ok();
+
+    // ── Controls: A frozen / B seeds / C ontogenesis, same compute ──
+    // A: raw enumeration, no concepts, no seeds. B: raw enumeration seeded with
+    // the solved program bodies (mirror, vflip) as ordinary seeds. C: promoted
+    // Prims + quotient reasoning. All canonical keying, same time budget.
+    let mut seeds_opts = opts.clone();
+    seeds_opts.seeds = vec![mirror_body.clone(), vflip_body.clone()];
+    let tasks = [h_mirror.clone(), h_vflip.clone(), rotation.clone()];
+    let (sr_a, cost_a) = solve_rate(&tasks, &|t| {
+        let o = bank::solve_abl(t, &opts, true);
+        (o.solution.is_some(), o.stats.built)
+    });
+    let (sr_b, cost_b) = solve_rate(&tasks, &|t| {
+        let o = bank::solve_abl(t, &seeds_opts, true);
+        (o.solution.is_some(), o.stats.built)
+    });
+    let (sr_c, cost_c) = solve_rate(&tasks, &|t| {
+        let c = acquire::concept_cost_abl(t, &[mirror_concept(), vflip_concept()], &opts, true);
+        (c < acquire::UNREACHABLE, c)
+    });
+    println!("\n── Controls (SolveRate + total built, same compute) ──");
+    println!(
+        "  A frozen base:      SolveRate {:.0}%  total built {}",
+        sr_a * 100.0,
+        cost_a
+    );
+    println!(
+        "  B naive seeds:      SolveRate {:.0}%  total built {}",
+        sr_b * 100.0,
+        cost_b
+    );
+    println!(
+        "  C ontogenesis:      SolveRate {:.0}%  total built {}",
+        sr_c * 100.0,
+        cost_c
+    );
+    println!();
+    println!(
+        "  claim: the ontogenesis path (C) solves what the frozen base (A) cannot, and does so at\n\
+         \x20 a fraction of the naive-seeds cost (B) — the advantage is the quotient search language,\n\
+         \x20 not merely remembering solved programs. (If B≈C on SolveRate, cost is the distinguisher.)"
+    );
+    out.flush().ok();
 }
 
 #[cfg(test)]
@@ -826,6 +1225,201 @@ mod tests {
                     "value cost must grow with cells (3² canon_nodes {}, 30² {})",
                     m3.canon_nodes,
                     m30.canon_nodes
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Canonical-keying opts for the A1 slice: fuel raised so 8×8 grids (and
+    /// their lazy-fold candidates) stay hashable past the structural 2048 cap.
+    /// The time budget is kept small — the concept path is fast, and the raw
+    /// controls (A/B) grind to budget on grid tasks, so a tight budget keeps the
+    /// suite quick without changing the verdicts.
+    fn a1_opts() -> bank::Options {
+        let mut o = acq_opts();
+        o.fuel = 1_000_000;
+        o.time_budget_secs = 1.0;
+        o
+    }
+
+    /// Stage 1 Express: the schema meta-space must represent mirror, vflip, and
+    /// rotation — each known-correct schema term solves its training family
+    /// (including 8×8, which needs canonical keying). Separates "search failed"
+    /// from "ontology failed".
+    #[test]
+    fn a1_express_all() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = a1_opts();
+                let train_mirror = transform_family(&[(3, 3), (5, 5), (8, 8)], &mirrored_term);
+                let train_vflip = transform_family(&[(3, 3), (5, 5), (8, 8)], &vflipped_term);
+                let rotation = transform_family(&[(3, 3), (5, 5), (8, 8)], &rotated_term);
+                let mirror_body = schema::map_rows(&schema::reverse_cells());
+                let vflip_body = schema::reverse_rows();
+                let rot_body =
+                    schema::compose(&schema::reverse_rows(), &schema::map_rows(&schema::reverse_cells()));
+                assert!(
+                    bank::concept_solve_abl(&train_mirror, &[cand_concept(&mirror_body)], &o, true)
+                        .0
+                        .solution
+                        .is_some(),
+                    "mirror must be expressible from the schema meta-space"
+                );
+                assert!(
+                    bank::concept_solve_abl(&train_vflip, &[cand_concept(&vflip_body)], &o, true)
+                        .0
+                        .solution
+                        .is_some(),
+                    "vflip must be expressible from the schema meta-space"
+                );
+                assert!(
+                    bank::concept_solve_abl(&rotation, &[cand_concept(&rot_body)], &o, true)
+                        .0
+                        .solution
+                        .is_some(),
+                    "rotation must be expressible by composing the schema terms"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Stage 2 Propose: the generic schema meta-space enumeration must generate
+    /// `map_rows(reverse_cells)` (mirror) as a solver for a mirror task — the
+    /// `examples → candidate transformation` step, with no ARC-named concept.
+    #[test]
+    fn a1_propose_finds_mirror() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = a1_opts();
+                let solvers = propose_solvers(&task(3, 3), &o);
+                let mirror_body = schema::map_rows(&schema::reverse_cells());
+                assert!(
+                    solvers.iter().any(|b| b == &mirror_body),
+                    "mirror = map_rows(reverse_cells) must be in the proposed solver set, got {} solvers",
+                    solvers.len()
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Stage 3 Acquire: the counterfactual gate must promote mirror on a held-out
+    /// mirror family — frontier gain (✗ → finite), arity 1 inferred — and decline
+    /// vflip on the mirror held-out (a real-but-wrong transform, Δ not name).
+    #[test]
+    fn a1_acquire_mirror() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = a1_opts();
+                let h_mirror = transform_family(&[(4, 4), (6, 6)], &mirrored_term);
+                let mirror_body = schema::map_rows(&schema::reverse_cells());
+                let vflip_body = schema::reverse_rows();
+                let base = acquire::concept_cost_abl(&h_mirror, &[], &o, true);
+                assert!(
+                    base >= acquire::UNREACHABLE,
+                    "base reasoner must not solve a mirror held-out (base {base})"
+                );
+                let g = acquire::propose_value_abl(&mirror_body, &[], &[h_mirror.clone()], &o, base, true)
+                    .expect("mirror must have a valid interface");
+                assert!(g.earns(), "mirror must earn a frontier gain ({}→{})", g.before, g.after);
+                assert_eq!(g.arity, 1, "mirror's composition arity must be inferred as 1");
+                // Wrong transform: vflip is real but wrong for the mirror held-out.
+                let gv = acquire::propose_value_abl(&vflip_body, &[], &[h_mirror.clone()], &o, base, true)
+                    .expect("vflip has a valid interface");
+                assert!(
+                    !gv.earns(),
+                    "vflip must NOT earn on the mirror held-out ({}→{})",
+                    gv.before,
+                    gv.after
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Stage 4 Transfer: rotation is solvable with {mirror, vflip} (composed) but
+    /// not without — the concept learned from families A and D transfers to the
+    /// unseen rotation family B.
+    #[test]
+    fn a1_transfer_rotation() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = a1_opts();
+                let rotation = transform_family(&[(3, 3), (5, 5), (8, 8)], &rotated_term);
+                let base = acquire::concept_cost_abl(&rotation, &[], &o, true);
+                assert!(
+                    base >= acquire::UNREACHABLE,
+                    "rotation must be unsolvable without the acquired concepts (base {base})"
+                );
+                let after = acquire::concept_cost_abl(
+                    &rotation,
+                    &[mirror_concept(), vflip_concept()],
+                    &o,
+                    true,
+                );
+                assert!(
+                    after < acquire::UNREACHABLE,
+                    "rotation must become solvable by composing mirror and vflip"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Controls: the ontogenesis path (C) must solve at least as much as the
+    /// frozen base (A) and the naive-seeds path (B), at no greater total cost —
+    /// and strictly beat A on SolveRate (A cannot transform grids at all).
+    #[test]
+    fn a1_controls_c_wins() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let mut o = a1_opts();
+                let h_mirror = transform_family(&[(4, 4), (6, 6)], &mirrored_term);
+                let h_vflip = transform_family(&[(4, 4), (6, 6)], &vflipped_term);
+                // Rotation kept ≤5×5 here: control A (raw) grinds to budget on
+                // 8×8 grids, and the transfer claim holds at any size.
+                let rotation = transform_family(&[(3, 3), (5, 5)], &rotated_term);
+                let tasks = [h_mirror, h_vflip, rotation];
+                let mut seeds_opts = o.clone();
+                seeds_opts.seeds = vec![
+                    schema::map_rows(&schema::reverse_cells()),
+                    schema::reverse_rows(),
+                ];
+                let (sr_a, cost_a) = solve_rate(&tasks, &|t| {
+                    let r = bank::solve_abl(t, &o, true);
+                    (r.solution.is_some(), r.stats.built)
+                });
+                let (sr_b, cost_b) = solve_rate(&tasks, &|t| {
+                    let r = bank::solve_abl(t, &seeds_opts, true);
+                    (r.solution.is_some(), r.stats.built)
+                });
+                let (sr_c, cost_c) = solve_rate(&tasks, &|t| {
+                    let c = acquire::concept_cost_abl(t, &[mirror_concept(), vflip_concept()], &o, true);
+                    (c < acquire::UNREACHABLE, c)
+                });
+                assert!(
+                    sr_a < sr_c,
+                    "ontogenesis must beat the frozen base on SolveRate (A {sr_a} vs C {sr_c})"
+                );
+                assert!(
+                    sr_c >= sr_b,
+                    "ontogenesis must solve at least as much as naive seeds (C {sr_c} vs B {sr_b})"
+                );
+                assert!(
+                    cost_c <= cost_b,
+                    "ontogenesis must cost no more than naive seeds (C {cost_c} vs B {cost_b})"
                 );
             })
             .unwrap()

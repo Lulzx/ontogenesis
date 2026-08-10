@@ -34,6 +34,25 @@ pub fn concept_cost(t: &parse::Task, set: &[bank::Concept], opts: &bank::Options
     }
 }
 
+/// [`concept_cost`] through the canonical-keying ablation path
+/// ([`bank::concept_solve_abl`] with `use_canon`). Same cost semantics; the
+/// value identity is the compact canonical key (numeral/grid) instead of the
+/// structural hash, so ARC-sized grids stay hashable within budget. This is the
+/// general mechanism the A1 slice uses to reason about grids past the 2048
+/// structural cap — canonical keying is representation-only, not a new concept.
+pub fn concept_cost_abl(
+    t: &parse::Task,
+    set: &[bank::Concept],
+    opts: &bank::Options,
+    use_canon: bool,
+) -> u64 {
+    let (o, _m) = bank::concept_solve_abl(t, set, opts, use_canon);
+    match o.solution {
+        Some(_) => o.stats.built,
+        None => UNREACHABLE,
+    }
+}
+
 /// Cost of a task through the raw bottom-up bank (the machine before it has
 /// any concept to reason through).
 pub fn raw_cost(t: &parse::Task, opts: &bank::Options) -> u64 {
@@ -64,6 +83,36 @@ pub fn propose_value(
     opts: &bank::Options,
     baseline: u64,
 ) -> Option<Gain> {
+    propose_value_with(body, current, holdout, opts, baseline, &concept_cost)
+}
+
+/// [`propose_value`] through the canonical-keying ablation path: the held-out
+/// cost is measured with [`concept_cost_abl`] instead of [`concept_cost`], so
+/// the gate can reason about ARC-sized grids past the structural 2048 cap. The
+/// verdict semantics are identical — promotion iff `after < before`.
+pub fn propose_value_abl(
+    body: &Rc<term::Term>,
+    current: &[bank::Concept],
+    holdout: &[parse::Task],
+    opts: &bank::Options,
+    baseline: u64,
+    use_canon: bool,
+) -> Option<Gain> {
+    propose_value_with(body, current, holdout, opts, baseline, &|t, set, o| {
+        concept_cost_abl(t, set, o, use_canon)
+    })
+}
+
+/// The shared acquisition loop, parameterized by the held-out cost function so
+/// the structural and canonical paths share one gate. See [`propose_value`].
+fn propose_value_with(
+    body: &Rc<term::Term>,
+    current: &[bank::Concept],
+    holdout: &[parse::Task],
+    opts: &bank::Options,
+    baseline: u64,
+    cost: &dyn Fn(&parse::Task, &[bank::Concept], &bank::Options) -> u64,
+) -> Option<Gain> {
     // Early-exit on the first arity that earns: in these tasks exactly one arity
     // is the correct interface (others produce non-domain values and cost more),
     // so the first win is the inferred interface, and the wrong-arity grind is
@@ -77,7 +126,7 @@ pub fn propose_value(
             name: "cand".into(),
             arity: k,
         });
-        let after: u64 = holdout.iter().map(|t| concept_cost(t, &set, opts)).sum();
+        let after: u64 = holdout.iter().map(|t| cost(t, &set, opts)).sum();
         let g = Gain {
             arity: k,
             before: baseline,
