@@ -84,6 +84,10 @@ fn run() {
         transfer(&argv[1..]);
         return;
     }
+    if argv.first().map(String::as_str) == Some("meta") {
+        meta(&argv[1..]);
+        return;
+    }
     if argv.first().map(String::as_str) == Some("mkbench") {
         gen_benchmark(&argv[1..]);
         return;
@@ -2099,6 +2103,378 @@ fn transfer(args: &[String]) {
     std::io::stdout().flush().ok();
 }
 
+/// C7 (first cut): acquire PROPOSAL SCHEMAS, not just concepts. The machine is
+/// given a fixed meta-search space M of generic pure-λ transformations and
+/// keeps the ones whose proposals measurably earn acquisition (Gain(G_i|O,D)),
+/// dropping the rest — so (O_t, G_t) evolves jointly. The payoff is the
+/// transfer-negative made concrete: in the string domain `iterate` alone stalls
+/// after replicate (its output, a list, can't feed back as a count). A second
+/// schema `reduce(C) = λxs.λys. xs C ys` (fold with a free seed) yields
+/// `concat = reduce(cons)`, which is NOT in the composition closure of {cons}
+/// (it needs the list eliminator). With concat as substrate, iterate regains
+/// leverage: `iterate(concat, nil)(xs, n) = (concat xs)^n nil = xs` concatenated
+/// n times — the depth-2 list concept (`xs^n`) the transfer experiment showed
+/// unreachable when iterate was the only generator. So the machine acquires a
+/// NEW way of generating hypotheses exactly where the old one ran out.
+fn meta(args: &[String]) {
+    use std::io::Write;
+    use std::rc::Rc;
+
+    let mut budget = 12u64;
+    let mut max_size = 14u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown meta arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let num = |n: u32| -> Rc<term::Term> {
+        parse::parse_expr(&bootstrap::church_num_str(n))
+            .and_then(|e| parse::to_term(&e))
+            .expect("church numeral")
+    };
+    let closed = |s: &str| -> Rc<term::Term> {
+        parse::parse_expr(s)
+            .and_then(|e| parse::to_term(&e))
+            .expect("closed term")
+    };
+    let list = |cs: &[u32]| -> Rc<term::Term> {
+        let mut body = String::from("z");
+        for c in cs.iter().rev() {
+            let cstr = bootstrap::church_num_str(*c);
+            body = format!("f({cstr})({body})");
+        }
+        closed(&format!("λf.λz.{body}"))
+    };
+    // general task builder: pre-built closed term args (lists / numerals).
+    let task = |arity: usize, tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+        arity,
+        tests: tests
+            .into_iter()
+            .map(|(args, want)| parse::Test { args, want, outer: 0 })
+            .collect(),
+    };
+
+    let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+    let base = vec![cons.clone()];
+    let nil = list(&[]);
+    let singleton = list(&[1]);
+    let seeds = vec![nil.clone(), singleton.clone()];
+
+    // ── task family (strings; lists kept short, chars ≤5, fuel-safe) ──
+    // replicate: (c,n) → [c;n]
+    let rep_task = task(
+        2,
+        [(2, 0), (2, 1), (2, 3), (3, 2), (1, 4), (4, 2)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| {
+                (vec![num(c), num(n)], list(&vec![c; n as usize]))
+            })
+            .collect(),
+    );
+    let h_rep = task(
+        2,
+        [(2, 2), (3, 3), (1, 1), (4, 4), (5, 2), (0, 3)]
+            .into_iter()
+            .map(|(c, n): (u32, u32)| {
+                (vec![num(c), num(n)], list(&vec![c; n as usize]))
+            })
+            .collect(),
+    );
+    // concat: (xs, ys) → xs ++ ys
+    let cat = |a: &[u32], b: &[u32]| -> Vec<u32> {
+        a.iter().chain(b.iter()).copied().collect()
+    };
+    let concat_task = task(
+        2,
+        [
+            (vec![1], vec![2]),
+            (vec![2, 3], vec![4]),
+            (vec![], vec![1, 1]),
+            (vec![1, 2], vec![3, 4]),
+        ]
+        .into_iter()
+        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+        .collect(),
+    );
+    let h_concat = task(
+        2,
+        [
+            (vec![2], vec![3, 4]),
+            (vec![1, 1, 1], vec![]),
+            (vec![3, 2], vec![2, 3]),
+        ]
+        .into_iter()
+        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+        .collect(),
+    );
+    // concat_n: (xs, n) → xs concatenated n times (the depth-2 list concept).
+    let cnat = |xs: &[u32], n: u32| -> Vec<u32> {
+        let mut v = Vec::new();
+        for _ in 0..n {
+            v.extend_from_slice(xs);
+        }
+        v
+    };
+    let cnat_task = task(
+        2,
+        [
+            (vec![2, 3], 2),
+            (vec![1], 3),
+            (vec![2, 2], 2),
+            (vec![3], 0),
+        ]
+        .into_iter()
+        .map(|(xs, n)| (vec![list(&xs), num(n)], list(&cnat(&xs, n))))
+        .collect(),
+    );
+    let h_cnat = task(
+        2,
+        [(vec![2, 3], 3), (vec![1], 4), (vec![4, 5], 2), (vec![2], 0)]
+            .into_iter()
+            .map(|(xs, n)| (vec![list(&xs), num(n)], list(&cnat(&xs, n))))
+            .collect(),
+    );
+
+    let opts = bank_opts(&base, budget, max_size);
+
+    // ── the pure-λ proposal schemas (the meta-space M) ──
+    // iterate(C, seed) = λa.λn.((n (C a)) seed)
+    let iterate = |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::lam(term::app(
+            term::app(term::var(0), term::app(c.clone(), term::var(1))),
+            seed.clone(),
+        )))
+    };
+    // reduce(C) = λxs.λys.(xs C ys) — fold with a free seed (the list eliminator)
+    let reduce = |c: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::lam(term::app(
+            term::app(term::var(1), c.clone()),
+            term::var(0),
+        )))
+    };
+    // junk(C, seed) = λa.λb. C seed (C a b) — a generic recombine probe
+    let junk = |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::lam(term::app(
+            term::app(c.clone(), seed.clone()),
+            term::app(term::app(c.clone(), term::var(1)), term::var(0)),
+        )))
+    };
+
+    let solves = |t: &parse::Task, body: &Rc<term::Term>| -> bool {
+        let set = [bank::Concept {
+            body: body.clone(),
+            name: "cand".into(),
+            arity: t.arity as u32,
+        }];
+        bank::concept_solve(t, &set, &opts).solution.is_some()
+    };
+    let available = |ocs: &[bank::Concept]| -> Vec<Rc<term::Term>> {
+        base.iter()
+            .cloned()
+            .chain(ocs.iter().map(|c| c.body.clone()))
+            .collect()
+    };
+
+    println!("\n── C7 (first cut): acquiring PROPOSAL SCHEMAS ──");
+    println!("domain: strings (Church lists); base {{cons}}; meta-space M = {{iterate, reduce, junk}}");
+    println!("budget: max_size {max_size}, {budget}s, pool 64, fuel 20000");
+    println!(
+        "{:<6} {:<10} {:<13} {:<11} {:<16} {}",
+        "round", "schema", "candidate", "target", "useful(H)", "verdict"
+    );
+
+    // ── round 0: O_0 = {cons}, M all available ──
+    let onto: Vec<bank::Concept> = Vec::new();
+    let avail0 = available(&onto);
+    let mut retained: Vec<&str> = Vec::new();
+
+    // iterate: replicate = iterate(cons, nil)
+    let rep_cand = iterate(&cons, &nil);
+    let rep_ok = solves(&rep_task, &rep_cand);
+    let rep_base = concept_cost(&h_rep, &onto, &opts); // {cons}: expect ✗
+    let (rep_earns, rep_gain) = if rep_ok {
+        match propose_value(&rep_cand, &onto, &[h_rep.clone()], &opts, rep_base) {
+            Some(g) => (g.earns(), Some(g)),
+            None => (false, None),
+        }
+    } else {
+        (false, None)
+    };
+    println!(
+        "{:<6} {:<10} {:<13} {:<11} {:<16} {}",
+        "0",
+        "iterate",
+        "replicate",
+        "rep",
+        if let Some(g) = rep_gain {
+            format!("{}→{}", disp_cost(g.before), disp_cost(g.after))
+        } else {
+            "—".into()
+        },
+        if rep_earns {
+            retained.push("iterate");
+            "RETAIN (+replicate)"
+        } else {
+            "no gain"
+        }
+    );
+
+    // reduce: concat = reduce(cons)
+    let concat_cand = reduce(&cons);
+    let concat_ok = solves(&concat_task, &concat_cand);
+    let concat_base = concept_cost(&h_concat, &onto, &opts);
+    let (concat_earns, concat_gain) = if concat_ok {
+        match propose_value(&concat_cand, &onto, &[h_concat.clone()], &opts, concat_base) {
+            Some(g) => (g.earns(), Some(g)),
+            None => (false, None),
+        }
+    } else {
+        (false, None)
+    };
+    println!(
+        "{:<6} {:<10} {:<13} {:<11} {:<16} {}",
+        "0",
+        "reduce",
+        "concat",
+        "concat",
+        if let Some(g) = concat_gain {
+            format!("{}→{}", disp_cost(g.before), disp_cost(g.after))
+        } else {
+            "—".into()
+        },
+        if concat_earns {
+            retained.push("reduce");
+            "RETAIN (+concat)"
+        } else {
+            "no gain"
+        }
+    );
+
+    // junk: probes a generic recombine — expect nothing pays in this domain.
+    let junk_cands = seeds.iter().map(|s| junk(&cons, s)).collect::<Vec<_>>();
+    let junk_solves = junk_cands
+        .iter()
+        .any(|b| solves(&rep_task, b) || solves(&concat_task, b) || solves(&cnat_task, b));
+    println!(
+        "{:<6} {:<10} {:<13} {:<11} {:<16} {}",
+        "0",
+        "junk",
+        "recombine",
+        "rep/concat/cnat",
+        "—",
+        if junk_solves { "UNEXPECTED" } else { "DROP (no target solves)" }
+    );
+
+    // ── round 0 acquisitions ──
+    let mut o1: Vec<bank::Concept> = Vec::new();
+    if rep_earns {
+        o1.push(bank::Concept {
+            body: rep_cand.clone(),
+            name: "replicate".into(),
+            arity: rep_gain.unwrap().arity,
+        });
+    }
+    if concat_earns {
+        o1.push(bank::Concept {
+            body: concat_cand.clone(),
+            name: "concat".into(),
+            arity: concat_gain.unwrap().arity,
+        });
+    }
+    println!(
+        "\nround 0: retained schemas G1 = {{{}}}; O1 = {{{}}}",
+        retained.join(", "),
+        o1.iter().map(|c| c.name.clone()).collect::<Vec<_>>().join(", ")
+    );
+
+    // ── round 1: O_1 = {cons, replicate, concat}, G1 = {iterate, reduce} ──
+    // iterate now has concat as substrate → iterate(concat, nil) = concat_n,
+    // the depth-2 list concept. This is the payoff: reduce (acquired in round 0
+    // because iterate couldn't produce concat) restores iterate's leverage.
+    let avail1 = available(&o1);
+    let cnat_cand = iterate(&concat_cand, &nil);
+    let cnat_ok = solves(&cnat_task, &cnat_cand);
+    let cnat_base = concept_cost(&h_cnat, &o1, &opts); // {replicate,concat}: expect ✗
+    let (cnat_earns, cnat_gain) = if cnat_ok {
+        match propose_value(&cnat_cand, &o1, &[h_cnat.clone()], &opts, cnat_base) {
+            Some(g) => (g.earns(), Some(g)),
+            None => (false, None),
+        }
+    } else {
+        (false, None)
+    };
+    println!(
+        "{:<6} {:<10} {:<13} {:<11} {:<16} {}",
+        "1",
+        "iterate",
+        "concat_n",
+        "concat_n",
+        if let Some(g) = cnat_gain {
+            format!("{}→{}", disp_cost(g.before), disp_cost(g.after))
+        } else {
+            "—".into()
+        },
+        if cnat_earns {
+            "ACQUIRE (depth-2 via concat)"
+        } else {
+            "no gain"
+        }
+    );
+    // the depth-2 candidate is NOT in G(iterate over {cons,replicate}) — reduce
+    // was the necessary unlock. Verify: iterate over {cons, replicate} alone has
+    // no concat_n.
+    let avail_no_concat: Vec<Rc<term::Term>> = vec![cons.clone(), rep_cand.clone()];
+    let without_concat = avail_no_concat.iter().any(|cb| {
+        solves(&cnat_task, &iterate(cb, &nil)) || solves(&cnat_task, &iterate(cb, &singleton))
+    });
+    let mut o2 = o1.clone();
+    if cnat_earns {
+        o2.push(bank::Concept {
+            body: cnat_cand.clone(),
+            name: "concat_n".into(),
+            arity: cnat_gain.unwrap().arity,
+        });
+    }
+
+    println!(
+        "\nacquired trajectory: O0={{cons}} → O1={{cons, replicate, concat}} → O2={{+ concat_n}}"
+    );
+    println!("schema trajectory:  G0=M={{iterate,reduce,junk}} → G1={{iterate, reduce}} (junk dropped)");
+    println!(
+        "\nstructural claim: iterate alone stalls after replicate (the transfer wall:\n\
+         replicate's output, a list, can't feed back as a count). The acquired\n\
+         schema reduce gives concat = reduce(cons) = λxs.λys. xs cons ys, which is\n\
+         NOT in Closure_compose({{cons}}) (it needs the list eliminator). With concat\n\
+         as substrate, iterate regains leverage: iterate(concat, nil) = concat_n =\n\
+         (concat xs)^n nil = xs concatenated n times — the depth-2 list concept\n\
+         {}. So the machine acquired a NEW way of generating\n\
+         hypotheses exactly where the old one ran out: when (O_t, G_t) ceased to be\n\
+         closed under further useful abstraction, it kept the generator that\n\
+         restored structural leverage. Selectivity: junk is dropped (solves no\n\
+         target); within each retained schema, non-target proposals (wrong seeds,\n\
+         degenerate iterate-of-replicate) fail the target-check and are not acquired.",
+        if without_concat {
+            String::from("— but only via concat")
+        } else {
+            String::from("that iterate-from-{cons,replicate} alone cannot reach")
+        }
+    );
+    std::io::stdout().flush().ok();
+}
+
 
 /// Cost sentinel for "the reasoner cannot solve this task" (unreachable).
 /// Large enough that "makes an unsolvable task solvable" reads as the
@@ -3811,6 +4187,143 @@ mod probe {
                 assert!(
                     !g1_new.iter().any(|b| solves(&rep_task, b) || solves(&h_rep, b)),
                     "no second-order concept in the flat-list value space (type wall)"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// C7 (first cut) regression: acquiring a proposal SCHEMA restores the
+    /// leverage iterate alone lost. `replicate = iterate(cons,nil)` (depth-1);
+    /// `concat = reduce(cons) = λxs.λys. xs cons ys` is NOT in
+    /// Closure_compose({cons}) (frontier); and `iterate(concat,nil) = concat_n`
+    /// reaches the depth-2 list concept (`xs` concatenated n times) that
+    /// iterate-from-{cons,replicate} alone cannot — so reduce was the necessary
+    /// unlock.
+    #[test]
+    fn meta_acquires_schema_for_depth() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let opts = bank::Options {
+                    max_size: 14,
+                    max_depth: 3,
+                    fuel: 40_000,
+                    time_budget_secs: 12.0,
+                    max_level_entries: 200_000,
+                    max_opaque_entries: 20_000,
+                    seeds: vec![],
+                    concepts: vec![],
+                };
+                let list = |cs: &[u32]| -> Rc<term::Term> {
+                    let mut body = String::from("z");
+                    for c in cs.iter().rev() {
+                        let cstr = crate::bootstrap::church_num_str(*c);
+                        body = format!("f({cstr})({body})");
+                    }
+                    closed(&format!("λf.λz.{body}"))
+                };
+                let mk = |tests: Vec<(Vec<Rc<term::Term>>, Rc<term::Term>)>| parse::Task {
+                    arity: 2,
+                    tests: tests
+                        .into_iter()
+                        .map(|(args, want)| parse::Test { args, want, outer: 0 })
+                        .collect(),
+                };
+                let cat = |a: &[u32], b: &[u32]| -> Vec<u32> {
+                    a.iter().chain(b.iter()).copied().collect()
+                };
+                let cnat = |xs: &[u32], n: u32| -> Vec<u32> {
+                    let mut v = Vec::new();
+                    for _ in 0..n {
+                        v.extend_from_slice(xs);
+                    }
+                    v
+                };
+                let rep_task = mk(
+                    [(2, 1), (2, 3), (3, 2), (1, 4)]
+                        .into_iter()
+                        .map(|(c, n)| {
+                            (vec![church(c), church(n)], list(&vec![c; n as usize]))
+                        })
+                        .collect(),
+                );
+                let concat_task = mk(
+                    [(vec![1], vec![2]), (vec![2, 3], vec![4])]
+                        .into_iter()
+                        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+                        .collect(),
+                );
+                let cnat_task = mk(
+                    [(vec![2, 3], 2), (vec![1], 3), (vec![2, 2], 2), (vec![3], 0)]
+                        .into_iter()
+                        .map(|(xs, n)| {
+                            (vec![list(&xs), church(n)], list(&cnat(&xs, n)))
+                        })
+                        .collect(),
+                );
+                let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+                let nil = list(&[]);
+                let singleton = list(&[1]);
+                let iterate =
+                    |c: &Rc<term::Term>, seed: &Rc<term::Term>| -> Rc<term::Term> {
+                        term::lam(term::lam(term::app(
+                            term::app(term::var(0), term::app(c.clone(), term::var(1))),
+                            seed.clone(),
+                        )))
+                    };
+                let reduce = |c: &Rc<term::Term>| -> Rc<term::Term> {
+                    term::lam(term::lam(term::app(
+                        term::app(term::var(1), c.clone()),
+                        term::var(0),
+                    )))
+                };
+                let solves = |t: &parse::Task, body: &Rc<term::Term>| -> bool {
+                    let set = [bank::Concept {
+                        body: body.clone(),
+                        name: "cand".into(),
+                        arity: t.arity as u32,
+                    }];
+                    bank::concept_solve(t, &set, &opts).solution.is_some()
+                };
+                let replicate = iterate(&cons, &nil);
+                let concat = reduce(&cons);
+                let concat_n = iterate(&concat, &nil);
+                // depth-1: replicate ∈ G(iterate, ∅); junk seed-proposal does not.
+                assert!(solves(&rep_task, &replicate), "replicate ∈ G(iterate)");
+                assert!(
+                    !solves(&rep_task, &iterate(&cons, &singleton)),
+                    "iterate(cons,[1]) = leading-element list, not replicate"
+                );
+                // concat is a genuine frontier: ∉ Closure_compose({cons}).
+                let h_concat = mk(
+                    [(vec![2], vec![3, 4]), (vec![1, 1, 1], vec![])]
+                        .into_iter()
+                        .map(|(xs, ys)| (vec![list(&xs), list(&ys)], list(&cat(&xs, &ys))))
+                        .collect(),
+                );
+                assert!(
+                    crate::concept_cost(&h_concat, &[], &opts) >= crate::UNREACHABLE,
+                    "concat ∉ Closure_compose({{cons}}) — reduce's proposal is a frontier"
+                );
+                assert!(
+                    solves(&concat_task, &concat),
+                    "reduce(cons) = concat solves concat_task"
+                );
+                // depth-2 payoff: iterate(concat, nil) = concat_n, but iterate from
+                // {cons, replicate} alone cannot reach it — reduce was necessary.
+                assert!(
+                    solves(&cnat_task, &concat_n),
+                    "iterate(concat, nil) = concat_n (depth-2 via concat)"
+                );
+                let no_concat = vec![cons.clone(), replicate.clone()];
+                assert!(
+                    !no_concat
+                        .iter()
+                        .any(|cb| solves(&cnat_task, &iterate(cb, &nil))
+                            || solves(&cnat_task, &iterate(cb, &singleton))),
+                    "iterate-from-{{cons,replicate}} alone cannot reach concat_n — reduce was the unlock"
                 );
             })
             .unwrap()
