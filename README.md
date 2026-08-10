@@ -38,6 +38,7 @@ cargo build --release
   --holdout  cnat_add,cnat_exp,ctre_rev,ntup_hed,slst_hed \
   --rounds 3 --budget 20
 ./target/release/supsearch ladder   # Concept Ladder demo (see below)
+./target/release/supsearch promote  # autonomous concept promotion (see below)
 ```
 
 `mkbench` rebuilds the benchmark from the verified round-0 solutions, because
@@ -86,6 +87,27 @@ What's real and measured:
   re-deriving it. Honest limits: condition C needs the concept's *composition*
   arity (2 for mul, not its λ-arity 3), and it composes given concepts over
   inputs — it does not itself invent new concepts or discover new structure.
+
+## Autonomous promotion (`promote`)
+
+The next step: nobody tells the machine which thing is a concept. Starting from
+raw λ + `add` it discovers `mul`, **infers its interface** (composition arity 2,
+by the cost structure — wrong arities cost more or fail, not by a label), and
+**promotes it iff measured held-out reasoning gain Δ > 0**. Then it uses the
+promoted concept to reach what it couldn't before.
+
+What's real and measured:
+- `mul` is promoted (Δ > 0: it turns a×b×c×d from raw-✗ into 65 states), and its
+  arity is inferred, not given. The frontier moves: a×b×c×d through the 8-fold
+  product all become reachable where raw search could not reach them.
+- **Two negative controls pass:** the wrong-family `square` and the redundant
+  4-fold (Δ = 0, since `mul` alone already reaches the 5-fold) are both declined.
+  The machine promotes exactly one concept, and it is the right one.
+- **The recursion is honestly bounded by the representation:** product values grow
+  exponentially as Church numerals and near the hash fuel, so the 9-fold is a hard
+  wall no product sub-concept breaks (a chunked 8-fold Prim at its correct arity 8
+  still fails). Genuine multi-generation recursion needs a family whose *values*
+  stay small while the *computation* grows — that is the open frontier.
 
 ## Layout
 
