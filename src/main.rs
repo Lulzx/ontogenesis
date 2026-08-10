@@ -60,6 +60,14 @@ fn run() {
         ablation(&argv[1..]);
         return;
     }
+    if argv.first().map(String::as_str) == Some("diag") {
+        diag(&argv[1..]);
+        return;
+    }
+    if argv.first().map(String::as_str) == Some("prune") {
+        prune(&argv[1..]);
+        return;
+    }
     if argv.first().map(String::as_str) == Some("mkbench") {
         gen_benchmark(&argv[1..]);
         return;
@@ -1530,6 +1538,406 @@ fn ablation(args: &[String]) {
     std::io::stdout().flush().ok();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// C5A: composition-search diagnosis (`supsearch diag`). A1–A5. Reads what the
+// existing search is doing on the fold family before any search policy changes:
+// recover the winning ancestry DAG, quantify semantic redundancy, and compare
+// the pool-cap-saturated run against the successful run. Observational only.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A pool entry that is causally necessary to construct the winning solution.
+struct Ancestry {
+    /// Pool ids on the solution path (the winner itself is not a pool entry).
+    pool_ids: std::collections::HashSet<usize>,
+    /// Their behavior keys.
+    keys: std::collections::HashSet<Vec<u64>>,
+    /// Admission positions, ascending.
+    ordered: Vec<usize>,
+}
+
+fn recover_ancestry(d: &bank::Diag) -> Option<Ancestry> {
+    let w = d.winner.as_ref()?;
+    let mut pool_ids = std::collections::HashSet::new();
+    let mut stack: Vec<usize> = w.parents.clone();
+    while let Some(id) = stack.pop() {
+        if pool_ids.insert(id) {
+            for &p in &d.pool[id].parent_ids {
+                stack.push(p);
+            }
+        }
+    }
+    let keys: std::collections::HashSet<Vec<u64>> =
+        pool_ids.iter().map(|&id| d.pool[id].keys.clone()).collect();
+    let mut ordered: Vec<usize> = pool_ids.iter().copied().collect();
+    ordered.sort_unstable();
+    Some(Ancestry { pool_ids, keys, ordered })
+}
+
+/// Aggregate stats over every built candidate, grouped by behavior key.
+struct Classification {
+    class_count: usize,
+    candidate_count: usize,
+    /// Candidates sharing (behavior, cost) with a same-key same-cost twin.
+    duplicates: usize,
+    /// Candidates strictly more expensive than their class minimum cost.
+    dominated: usize,
+    /// Number of classes with exactly one candidate.
+    unique_classes: usize,
+    /// A4 buckets over NON-ancestor candidates: [exact dup, dominated, unique].
+    buckets: [usize; 3],
+}
+
+fn classify(d: &bank::Diag, anc_keys: &std::collections::HashSet<Vec<u64>>) -> Classification {
+    use std::collections::HashMap;
+    let mut cls: HashMap<Vec<u64>, (usize, u32)> = HashMap::new(); // (count, min_cost)
+    let mut pair_cnt: HashMap<(Vec<u64>, u32), usize> = HashMap::new();
+    for c in &d.candidates {
+        let e = cls.entry(c.key.clone()).or_insert((0, c.cost));
+        e.0 += 1;
+        if c.cost < e.1 {
+            e.1 = c.cost;
+        }
+        *pair_cnt.entry((c.key.clone(), c.cost)).or_insert(0) += 1;
+    }
+    let mut duplicates = 0usize;
+    let mut dominated = 0usize;
+    let mut unique_classes = 0usize;
+    let mut buckets = [0usize; 3];
+    for c in &d.candidates {
+        let (_, min_cost) = &cls[&c.key];
+        let twin = pair_cnt.get(&(c.key.clone(), c.cost)).copied().unwrap_or(0);
+        if twin >= 2 {
+            duplicates += 1;
+        }
+        if c.cost > *min_cost {
+            dominated += 1;
+        }
+        if anc_keys.contains(&c.key) {
+            continue; // not a wasted candidate
+        }
+        if twin >= 2 {
+            buckets[0] += 1; // exact duplicate (same behavior AND cost)
+        } else if c.cost > *min_cost {
+            buckets[1] += 1; // dominated (pricier than the class minimum)
+        } else {
+            buckets[2] += 1; // unique/best representative of a wasted class
+        }
+    }
+    for (_, (count, _)) in cls.iter() {
+        if *count == 1 {
+            unique_classes += 1;
+        }
+    }
+    Classification {
+        class_count: cls.len(),
+        candidate_count: d.candidates.len(),
+        duplicates,
+        dominated,
+        unique_classes,
+        buckets,
+    }
+}
+
+/// usage: supsearch diag [--budget SECS] [--max-fold N]
+fn diag(args: &[String]) {
+    use std::io::Write;
+
+    let mut budget = 8.0f64;
+    let mut max_fold = 11u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-fold" => {
+                max_fold = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown diag arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let add_seed: Rc<term::Term> = parse::parse_expr("λa.λb.λf.λx.a(f)(b(f)(x))")
+        .and_then(|e| parse::to_term(&e))
+        .expect("add");
+    let mul = parse::parse_expr("λa.λb.λc.b(a(c))")
+        .and_then(|e| parse::to_term(&e))
+        .expect("mul");
+    let concepts = vec![bank::Concept {
+        body: mul,
+        name: "mul".into(),
+        arity: 2,
+    }];
+    let opts = bank::Options {
+        max_size: 18,
+        max_depth: 2,
+        fuel: 40_000,
+        time_budget_secs: budget,
+        max_level_entries: 200_000,
+        max_opaque_entries: 20_000,
+        seeds: vec![add_seed.clone()],
+        concepts: vec![],
+    };
+
+    // Sanity: diag(Baseline, cap=64) must reproduce concept_solve's built count.
+    let sanity = promote_prod_task(3);
+    let ref_o = bank::concept_solve(&sanity, &concepts, &opts);
+    let diag_o = bank::concept_solve_diag(&sanity, &concepts, &opts, 64, bank::DiagMode::Baseline);
+    let ref_built = ref_o.stats.built;
+    let diag_built = diag_o.built;
+    println!(
+        "sanity: concept_solve(fold3, cap64) built={}  diag(fold3, cap64) built={}  {}",
+        ref_built,
+        diag_built,
+        if ref_built == diag_built { "MATCH ✓" } else { "MISMATCH ✗" }
+    );
+    std::io::stdout().flush().ok();
+
+    // ── A2/A5: the successful fold9 at cap 512 vs the failing cap 64 ──
+    let t9 = promote_prod_task(9);
+    let hi = bank::concept_solve_diag(&t9, &concepts, &opts, 512, bank::DiagMode::Baseline);
+    let lo = bank::concept_solve_diag(&t9, &concepts, &opts, 64, bank::DiagMode::Baseline);
+
+    println!("\n── A2  fold9 @ pool_cap=512 (successful run) ──");
+    let anc = recover_ancestry(&hi);
+    match &anc {
+        Some(a) => {
+            let total_built = hi.built;
+            let total_admitted = hi.pool.len();
+            let anc_count = a.pool_ids.len() + 1; // +1 for the winner itself
+            let nonanc = total_admitted - a.pool_ids.len();
+            let frac = anc_count as f64 / total_built.max(1) as f64;
+            println!(
+                "  total_built            = {total_built}\n  \
+                 total_admitted         = {total_admitted}\n  \
+                 solution_ancestor_count= {anc_count}  (winner + {} pool entries)\n  \
+                 nonancestor_count      = {nonanc}  (admitted, off the solution path)\n  \
+                 ancestor_fraction      = {:.4}  (= |ancestors| / |all_built|)",
+                a.pool_ids.len(),
+                frac
+            );
+            let w = hi.winner.as_ref().unwrap();
+            println!(
+                "  winner: constructor={} cost={}  admission context: pool_len_at_solve={}",
+                w.constructor, w.cost, w.pool_len_at_solve
+            );
+            println!("  ancestry pool ids (admission order): {:?}", a.ordered);
+            if hi.time_budget_hit {
+                println!("  (search hit the time budget)");
+            }
+            std::io::stdout().flush().ok();
+        }
+        None => {
+            println!("  fold9 did NOT solve at cap 512 in budget — ancestry unavailable.");
+            std::io::stdout().flush().ok();
+            return;
+        }
+    }
+    let anc = anc.unwrap();
+
+    // ── A3/A4: semantic redundancy over the successful run's built candidates ──
+    println!("\n── A3/A4  semantic redundancy (fold9, cap512, all built candidates) ──");
+    let cl = classify(&hi, &anc.keys);
+    println!(
+        "  semantic_class_count     = {}\n  \
+         candidate_count           = {}\n  \
+         unique_semantic_classes   = {}  (classes with exactly one candidate)\n  \
+         duplicate_candidate_count = {}  (share behavior AND cost with a twin)\n  \
+         dominated_candidate_count = {}  (strictly pricier than class minimum)\n  \
+         unique_semantic_fraction  = {:.4}  (= unique_classes / candidate_count)",
+        cl.class_count,
+        cl.candidate_count,
+        cl.unique_classes,
+        cl.duplicates,
+        cl.dominated,
+        cl.unique_classes as f64 / cl.candidate_count.max(1) as f64,
+    );
+    println!(
+        "  A4 buckets over NON-ancestor candidates:\n  \
+           B1 exact semantic duplicate = {}\n  \
+           B2 semantically dominated   = {}\n  \
+           B3 unique/wasted semantic   = {}",
+        cl.buckets[0], cl.buckets[1], cl.buckets[2],
+    );
+    let admitted = hi.candidates.iter().filter(|c| c.admitted).count();
+    println!(
+        "  of all built candidates: {} admitted to the pool, {} discarded (deduped/duplicate/saturated)",
+        admitted,
+        hi.candidates.len() - admitted
+    );
+    std::io::stdout().flush().ok();
+
+    // ── A5: what the cap-64 run was missing ──
+    println!("\n── A5  cap=64 vs cap=512 ──");
+    // The cap-64 pool is a deterministic prefix of the cap-512 pool (identical
+    // search up to the cap). Verify that invariant, then find the first ancestor
+    // absent from the cap-64 pool.
+    let hi_keys: Vec<Vec<u64>> = hi.pool.iter().map(|e| e.keys.clone()).collect();
+    let lo_keys: Vec<Vec<u64>> = lo.pool.iter().map(|e| e.keys.clone()).collect();
+    let prefix = lo_keys.len() <= hi_keys.len()
+        && lo_keys
+            .iter()
+            .zip(hi_keys.iter())
+            .all(|(a, b)| a == b);
+    println!(
+        "  cap64 solved? {}   built={}  pool={}",
+        if lo.solution.is_some() { "yes" } else { "no" },
+        lo.built,
+        lo.pool.len()
+    );
+    println!(
+        "  cap512 solved? {}  built={}  pool={}",
+        if hi.solution.is_some() { "yes" } else { "no" },
+        hi.built,
+        hi.pool.len()
+    );
+    println!("  cap64 pool is a deterministic prefix of cap512 pool: {}", if prefix { "yes ✓" } else { "NO ✗" });
+
+    // First ancestor (by cap512 admission order) absent from the cap64 pool.
+    let lo_set: std::collections::HashSet<Vec<u64>> = lo_keys.iter().cloned().collect();
+    let mut first_absent: Option<usize> = None; // cap512 admission position
+    let mut ancestors_present = 0usize;
+    for &id in &anc.ordered {
+        let k = hi.pool[id].keys.clone();
+        if lo_set.contains(&k) {
+            ancestors_present += 1;
+        } else if first_absent.is_none() {
+            first_absent = Some(id);
+        }
+    }
+    println!("  solution ancestors present in the cap64 pool: {ancestors_present}/{}", anc.ordered.len());
+    match first_absent {
+        Some(pos) => {
+            println!(
+                "  first absent ancestor: admission #{pos} in the cap512 run (absent from cap64 pool)"
+            );
+            // The cap64 pool is exactly the candidates that "occupied the pool
+            // before" the missing ancestor.
+            println!(
+                "  cap64 pool (what filled the slots before the wall): {} distinct semantics,\n  \
+                    of which {} are also solution ancestors.",
+                lo.pool.len(),
+                ancestors_present
+            );
+        }
+        None => println!("  (no ancestor absent from the cap64 pool — unexpected)"),
+    }
+    std::io::stdout().flush().ok();
+}
+
+/// usage: supsearch prune [--budget SECS] [--max-fold N]
+///
+/// A6/A7 — the first composition-search intervention. Freeze pool_cap = 64 and
+/// compare baseline composition search against semantic-dominance pruning
+/// (C5A A6): a candidate behaviorally equivalent to an already-admitted
+/// representative is kept only if strictly cheaper (else discarded; cheaper
+/// replaces). No learned ranking, no beam, no stochastic search. The decisive
+/// question: does quotient-aware pruning make fold9 reachable at cap 64?
+fn prune(args: &[String]) {
+    use std::io::Write;
+
+    let mut budget = 8.0f64;
+    let mut max_fold = 11u32;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-fold" => {
+                max_fold = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                eprintln!("unknown prune arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let add_seed: Rc<term::Term> = parse::parse_expr("λa.λb.λf.λx.a(f)(b(f)(x))")
+        .and_then(|e| parse::to_term(&e))
+        .expect("add");
+    let mul = parse::parse_expr("λa.λb.λc.b(a(c))")
+        .and_then(|e| parse::to_term(&e))
+        .expect("mul");
+    let concepts = vec![bank::Concept {
+        body: mul,
+        name: "mul".into(),
+        arity: 2,
+    }];
+    let opts = bank::Options {
+        max_size: 18,
+        max_depth: 2,
+        fuel: 40_000,
+        time_budget_secs: budget,
+        max_level_entries: 200_000,
+        max_opaque_entries: 20_000,
+        seeds: vec![add_seed.clone()],
+        concepts: vec![],
+    };
+
+    println!("\n── A6/A7  semantic-dominance pruning @ pool_cap=64 (folds 2–{max_fold}) ──");
+    println!(
+        "  {:<7} {:>8} {:>8} {:>9} {:>9} {:>8} {:>8} {:>9} {:>9}",
+        "fold", "base_slv", "prn_slv", "base_bld", "prn_bld", "base_pl", "prn_pl", "classes", "dom_rm"
+    );
+    let mut solved_count = 0u32;
+    for n in 2..=max_fold {
+        let t = promote_prod_task(n);
+        let b = bank::concept_solve_diag(&t, &concepts, &opts, 64, bank::DiagMode::Baseline);
+        let p = bank::concept_solve_diag(&t, &concepts, &opts, 64, bank::DiagMode::Prune);
+        let b_slv = b.solution.is_some();
+        let p_slv = p.solution.is_some();
+        if p_slv && !b_slv {
+            solved_count += 1;
+        }
+        // Dominated removed: candidates that were admitted in baseline but
+        // dropped/replaced in pruned mode — i.e. extra pool slots freed.
+        let dom_removed = b.pool.len().saturating_sub(p.pool.len());
+        println!(
+            "  {:<7} {:>8} {:>8} {:>9} {:>9} {:>8} {:>8} {:>9} {:>9}",
+            format!("{n}-fold"),
+            if b_slv { "✓" } else { "✗" },
+            if p_slv { "✓" } else { "✗" },
+            b.built,
+            p.built,
+            b.pool.len(),
+            p.pool.len(),
+            distinct_semantics(&p),
+            dom_removed,
+        );
+        std::io::stdout().flush().ok();
+    }
+    println!("\nDecisive: folds newly solvable under pruning at cap 64 = {solved_count}");
+    if solved_count == 0 {
+        println!(
+            "→ Outcome B: semantic pruning does NOT extend the cap-64 frontier on this family.\n\
+             The pool is already behaviorally deduped (zero dominated candidates per the\n\
+             diagnosis), so cost-aware replacement has nothing to remove; the wall is genuine\n\
+             distinct-semantic width + ordering, not redundant representatives."
+        );
+    } else {
+        println!("→ Outcome A: pruning unlocked fold(s) at cap 64 — quotienting removed the wall.");
+    }
+    std::io::stdout().flush().ok();
+}
+
+/// Number of distinct admitted semantics in a diag result's pool.
+fn distinct_semantics(d: &bank::Diag) -> usize {
+    let mut s = std::collections::HashSet::new();
+    for e in &d.pool {
+        s.insert(e.keys.clone());
+    }
+    s.len()
+}
+
 /// Human name for a rung's held-out task, for the cost table.
 fn label_of_holdout(rung: &str) -> &'static str {
     match rung {
@@ -1931,6 +2339,160 @@ mod probe {
                 // (d) honest bound: the 9-fold is a hard wall (representation, not budget).
                 let w9 = bank::concept_solve(&crate::promote_prod_task(9), &mul_only, &opts_front);
                 assert!(w9.solution.is_none(), "9-fold should be a hard wall for mul");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    fn mul_concept() -> bank::Concept {
+        bank::Concept {
+            body: closed("λa.λb.λc.b(a(c))"),
+            name: "mul".into(),
+            arity: 2,
+        }
+    }
+
+    /// True if `t` embeds a `Prim` whose body is `body`.
+    fn uses(t: &Rc<term::Term>, body: &Rc<term::Term>) -> bool {
+        use term::Term;
+        match t.as_ref() {
+            Term::Prim(b) => Rc::ptr_eq(b, body) || b == body || uses(b, body),
+            Term::Lam(b) => uses(b, body),
+            Term::App(f, a) => uses(f, body) || uses(a, body),
+            _ => false,
+        }
+    }
+
+    fn distinct_semantics(d: &bank::Diag) -> usize {
+        let mut s = std::collections::HashSet::new();
+        for e in &d.pool {
+            s.insert(e.keys.clone());
+        }
+        s.len()
+    }
+
+    /// A single-argument task: given `base`, return `base^exp`.
+    fn pow_task(base: u32, exp: u32) -> parse::Task {
+        parse::Task {
+            tests: vec![parse::Test {
+                args: vec![church(base)],
+                want: church(base.pow(exp)),
+                outer: 0,
+            }],
+            arity: 1,
+        }
+    }
+
+    fn diag64(t: &parse::Task, c: &[bank::Concept], mode: bank::DiagMode) -> bank::Diag {
+        bank::concept_solve_diag(t, c, &raw_opts(20.0), 64, mode)
+    }
+
+    /// C5A A8 — pruning must never admit MORE distinct semantic states than the
+    /// baseline at the same pool cap: it only compresses representatives in
+    /// place, it never widens the semantic pool.
+    #[test]
+    fn semantic_pruning_never_increases_semantic_pool_width() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let mul = mul_concept();
+                for n in 2..=11u32 {
+                    let t = crate::promote_prod_task(n);
+                    let b = diag64(&t, &[mul.clone()], bank::DiagMode::Baseline);
+                    let p = diag64(&t, &[mul.clone()], bank::DiagMode::Prune);
+                    assert!(
+                        distinct_semantics(&p) <= distinct_semantics(&b),
+                        "fold{n}: pruning widened the semantic pool ({} > {})",
+                        distinct_semantics(&p),
+                        distinct_semantics(&b)
+                    );
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// C5A A8 — pruning preserves solution correctness and does not alter search
+    /// semantics: it solves exactly the folds baseline solves, to the same cost.
+    #[test]
+    fn semantic_pruning_preserves_solution_correctness() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let mul = mul_concept();
+                for n in 2..=8u32 {
+                    let t = crate::promote_prod_task(n);
+                    let b = diag64(&t, &[mul.clone()], bank::DiagMode::Baseline);
+                    let p = diag64(&t, &[mul.clone()], bank::DiagMode::Prune);
+                    assert_eq!(
+                        p.solution.is_some(),
+                        b.solution.is_some(),
+                        "fold{n}: prune/ baseline solve agreement broken"
+                    );
+                    assert_eq!(p.built, b.built, "fold{n}: pruning changed search cost");
+                    assert!(p.solution.is_some(), "fold{n} should solve under prune");
+                }
+                // The cap-64 wall is unchanged: folds 9..11 still fail under prune.
+                for n in 9..=11u32 {
+                    let t = crate::promote_prod_task(n);
+                    let p = diag64(&t, &[mul.clone()], bank::DiagMode::Prune);
+                    assert!(p.solution.is_none(), "fold{n} should still be a wall under prune");
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// C5A A8 — the dominance rule itself: given `square(x)=x·x` alongside `mul`,
+    /// the value x² is built two ways at different costs (`mul(x,x)` size 3 vs
+    /// `square(x)` size 2). Baseline keeps the pricier first-seen representative;
+    /// pruning replaces it in place with the cheapest. Both still solve.
+    #[test]
+    fn semantic_dominance_keeps_cheapest_representative() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let mul = mul_concept();
+                let square_body = closed("λa.λc.a(a(c))");
+                let square = bank::Concept {
+                    body: square_body.clone(),
+                    name: "square".into(),
+                    arity: 1,
+                };
+                let concepts = vec![mul, square];
+                let t = pow_task(2, 5); // a^5 — forces ≥3 rounds, so the cheaper
+                                        // square(a) re-derivation arrives in a LATER
+                                        // round than the mul(a,a) representative.
+                let b = diag64(&t, &concepts, bank::DiagMode::Baseline);
+                let p = diag64(&t, &concepts, bank::DiagMode::Prune);
+                assert!(b.solution.is_some(), "baseline should solve a^5");
+                assert!(p.solution.is_some(), "prune should solve a^5");
+                // Baseline never admits a square-based term: every square output
+                // (x²) is behaviorally identical to mul(x,x), which mul produces
+                // first, so `seen` drops it.
+                assert!(
+                    !b.pool.iter().any(|e| uses(&e.term, &square_body)),
+                    "baseline should keep the pricier mul(x,x) representative"
+                );
+                // Prune replaces the mul(x,x) rep with the cheaper square(x).
+                assert!(
+                    p.pool.iter().any(|e| uses(&e.term, &square_body)),
+                    "prune should keep the cheaper square(x) representative"
+                );
+                // The representative for the x² key is strictly cheaper under prune.
+                let key = p
+                    .pool
+                    .iter()
+                    .find(|e| uses(&e.term, &square_body))
+                    .unwrap()
+                    .keys
+                    .clone();
+                let b_cost = b.pool.iter().find(|e| e.keys == key).unwrap().cost;
+                let p_cost = p.pool.iter().find(|e| e.keys == key).unwrap().cost;
+                assert!(p_cost < b_cost, "prune rep ({p_cost}) not < baseline rep ({b_cost})");
             })
             .unwrap()
             .join()

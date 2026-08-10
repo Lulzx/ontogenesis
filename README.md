@@ -43,6 +43,7 @@ The walls are honest too:
 
 - Naive seed injection *widens* search (one run: median cost 0.016s → 0.265s). A size-1 atom seed branches against everything.
 - The 9-fold product is a wall no product sub-concept breaks. `ablation` proves it's the composition search, not the value representation — compact semantic keys at full eval budget move nothing. Same columns, identical numbers.
+- `diag` measures the composition wall exactly, and the verdict is sharper: the pool is already behaviorally deduped and contains **zero dominated** candidates, so semantic pruning is a no-op here (folds 2–11 give byte-identical baseline vs pruned). fold9 fails at cap 64 because it needs a single distinct intermediate at admission #133, and cap 64 saturates at 104 distinct semantics before it — a genuine width/ordering wall, not redundant representatives.
 
 The real lever is more raw solves → bigger recurring idioms. That's the wall — a scale problem, not a mechanism failure.
 
@@ -55,9 +56,11 @@ cargo build --release
 ./target/release/supsearch ladder    # it invents mul/square/power from raw λ + add
 ./target/release/supsearch promote   # it picks mul itself, infers its arity, promotes it
 ./target/release/supsearch ablation  # why the fold-9 wall isn't the value representation
+./target/release/supsearch diag      # provenance: winner ancestry, semantic redundancy, cap64 vs cap512
+./target/release/supsearch prune     # decisive: semantic pruning @ cap64 — Outcome B (no-op on this family)
 ```
 
-`cargo test`: 17 pass.
+`cargo test`: 24 pass.
 
 ## Layout
 

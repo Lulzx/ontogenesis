@@ -19,7 +19,7 @@ use crate::nbe::{
 use crate::parse::Task;
 use crate::term::{app, lam, var, Term};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::time::Instant;
@@ -978,4 +978,471 @@ pub fn concept_solve_abl(
     m.canon_aborts = crate::canon::canon_aborts();
     m.max_transient = crate::canon::max_transient();
     (Outcome { solution: None, stats: Stats { built, ..Default::default() } }, m)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C5A diagnostic instrumentation. A mirror of `concept_solve` (structural
+// keys, 2048-fuel hash cap) that records PROVENANCE for every admitted pool
+// entry, every BUILT candidate, and the winning composition, so the fold≥9
+// composition wall can be measured rather than assumed. Search semantics are
+// identical to `concept_solve` when `prune == false` and `pool_cap == 64`
+// (verified by matching `built` counts). Observational only.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Whether to apply semantic-dominance pruning (C5A A6). In `Prune` mode a
+/// newly built candidate that is behaviorally equivalent to an already-admitted
+/// representative is discarded unless it is strictly cheaper, in which case it
+/// replaces the representative. Search order, seen-set gating, and the pool
+/// length cap are otherwise unchanged.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DiagMode {
+    Baseline,
+    Prune,
+}
+
+/// One admitted pool entry with its provenance.
+#[derive(Clone)]
+pub struct DiagEntry {
+    /// Logical admission index (== final pool position; parent ids use these).
+    pub id: usize,
+    /// Search level that produced it: 0 = the raw task-argument leaves.
+    pub generation: u32,
+    /// The composed term (Prim applications over pool terms; a leaf is `var`).
+    pub term: Rc<Term>,
+    /// Term cost (node count; Prim and Var both count 1).
+    pub cost: u32,
+    /// Behavior identity per test (the full signature vector).
+    pub keys: Vec<u64>,
+    /// Pool indices of the operands that built this entry (empty for leaves).
+    pub parent_ids: Vec<usize>,
+    /// The concept/operator that built it, or "<arg>" for a leaf.
+    pub constructor: String,
+    /// Whether this entry replaced an earlier representative of the same key
+    /// (prune mode) rather than being freshly admitted.
+    pub replaced: bool,
+}
+
+/// Every built candidate (one per concept-application tuple tried). Includes
+/// candidates that were deduped by the seen-set, dropped when the pool cap was
+/// saturated, and the winner itself — so redundancy can be classified.
+///
+/// `parents`/`constructor` are A1 provenance, recorded observationally for every
+/// candidate; only `key`/`cost`/`admitted` are consumed by the printed analysis,
+/// but the full record is kept so a future pass can walk arbitrary candidate
+/// ancestry without re-running the search.
+#[allow(dead_code)]
+pub struct DiagCandidate {
+    pub key: Vec<u64>,
+    pub cost: u32,
+    /// True if it claimed a pool slot (fresh key admitted, or a replacement).
+    pub admitted: bool,
+    pub parents: Vec<usize>,
+    pub constructor: String,
+}
+
+/// The winning composition (key == target). Not admitted to the pool (the
+/// search returns immediately on a match), so it carries its own provenance.
+#[allow(dead_code)]
+pub struct DiagWinner {
+    pub key: Vec<u64>,
+    pub cost: u32,
+    pub parents: Vec<usize>,
+    pub constructor: String,
+    /// Number of pool entries admitted before the winner was found.
+    pub pool_len_at_solve: usize,
+}
+
+pub struct Diag {
+    pub solution: Option<Rc<Term>>,
+    pub built: u64,
+    /// All admitted entries, in admission order (this is the pool).
+    pub pool: Vec<DiagEntry>,
+    /// All built candidates (for redundancy classification).
+    pub candidates: Vec<DiagCandidate>,
+    pub winner: Option<DiagWinner>,
+    pub time_budget_hit: bool,
+}
+
+pub fn concept_solve_diag(
+    task: &Task,
+    concepts: &[Concept],
+    opts: &Options,
+    pool_cap: usize,
+    mode: DiagMode,
+) -> Diag {
+    let start = Instant::now();
+    let k = task.arity as u32;
+    let n_tests = task.tests.len();
+    let empty: Env = Rc::new(Vec::new());
+    let prune = mode == DiagMode::Prune;
+
+    // Target normal forms and hashes — identical to `concept_solve`.
+    let mut target: Vec<Rc<Term>> = Vec::with_capacity(n_tests);
+    for t in &task.tests {
+        let mut fuel = Fuel(opts.fuel);
+        let stripped = crate::nbe::normalize(&empty, &t.want, &mut fuel)
+            .ok()
+            .and_then(|nf| crate::parse::strip_outer(&nf, t.outer));
+        match stripped {
+            Some(nf) => target.push(nf),
+            None => {
+                return Diag {
+                    solution: None,
+                    built: 0,
+                    pool: Vec::new(),
+                    candidates: Vec::new(),
+                    winner: None,
+                    time_budget_hit: false,
+                }
+            }
+        }
+    }
+    let mut target_hash: Vec<u64> = Vec::with_capacity(n_tests);
+    for nf in &target {
+        let mut fuel = Fuel(i64::MAX / 2);
+        let v = match eval(&empty, nf, &mut fuel) {
+            Ok(v) => v,
+            Err(_) => {
+                return Diag {
+                    solution: None,
+                    built: 0,
+                    pool: Vec::new(),
+                    candidates: Vec::new(),
+                    winner: None,
+                    time_budget_hit: false,
+                }
+            }
+        };
+        let mut h = DefaultHasher::new();
+        if quote_hash(&v, 0, &mut fuel, &mut h).is_err() {
+            return Diag {
+                solution: None,
+                built: 0,
+                pool: Vec::new(),
+                candidates: Vec::new(),
+                winner: None,
+                time_budget_hit: false,
+            };
+        }
+        target_hash.push(h.finish());
+    }
+
+    // Pool seeded with the task arguments (leaves, generation 0).
+    let mut pool: Vec<DiagEntry> = Vec::new();
+    let mut pool_vals: Vec<Vec<Rc<Val>>> = Vec::new();
+    for i in 0..k as usize {
+        let mut vals = Vec::with_capacity(n_tests);
+        for j in 0..n_tests {
+            let mut fuel = Fuel(opts.fuel);
+            let v = match eval(&empty, &task.tests[j].args[i], &mut fuel) {
+                Ok(v) => v,
+                Err(_) => {
+                    return Diag {
+                        solution: None,
+                        built: 0,
+                        pool: Vec::new(),
+                        candidates: Vec::new(),
+                        winner: None,
+                        time_budget_hit: false,
+                    }
+                }
+            };
+            vals.push(v);
+        }
+        pool_vals.push(vals);
+        pool.push(DiagEntry {
+            id: i,
+            generation: 0,
+            term: var(i as u32),
+            cost: 1,
+            keys: Vec::new(),
+            parent_ids: Vec::new(),
+            constructor: "<arg>".into(),
+            replaced: false,
+        });
+    }
+
+    // seen: every distinct key ever observed (blocks re-admission, unbounded).
+    let mut seen: HashSet<Vec<u64>> = HashSet::new();
+    // rep (prune only): key -> pool id of the cheapest representative so far.
+    let mut rep: HashMap<Vec<u64>, usize> = HashMap::new();
+    for i in 0..pool.len() {
+        let hashes: Vec<u64> = (0..n_tests)
+            .map(|j| val_hash(&pool_vals[i][j], &mut Fuel(opts.fuel)).unwrap_or(0))
+            .collect();
+        // NOTE: leaf keys are not target (leaves are single args, target is the
+        // whole product), but record them for seen gating just like concept_solve.
+        if hashes == target_hash {
+            let mut sol = pool[i].term.clone();
+            for _ in 0..k {
+                sol = lam(sol);
+            }
+            return Diag {
+                solution: Some(sol),
+                built: 1,
+                pool: pool.clone(),
+                candidates: Vec::new(),
+                winner: None,
+                time_budget_hit: false,
+            };
+        }
+        seen.insert(hashes.clone());
+        if prune {
+            rep.insert(hashes, i);
+        }
+    }
+
+    let mut candidates: Vec<DiagCandidate> = Vec::new();
+    let mut built: u64 = 0;
+    let mut generation: u32 = 0;
+    loop {
+        generation += 1;
+        let before = pool.len();
+        let mut additions: Vec<(DiagEntry, Vec<Rc<Val>>)> = Vec::new();
+        let mut time_budget_hit = false;
+        for concept in concepts {
+            let a = concept.arity as usize;
+            if a == 0 {
+                continue;
+            }
+            let mut tuple: Vec<usize> = vec![0; a];
+            loop {
+                built += 1;
+                if built % 512 == 0 && start.elapsed().as_secs_f64() > opts.time_budget_secs {
+                    time_budget_hit = true;
+                    break;
+                }
+                // Compute the concept applied to this tuple, per test.
+                let mut vals: Option<Vec<Rc<Val>>> = Some(Vec::with_capacity(n_tests));
+                for j in 0..n_tests {
+                    let mut fuel = Fuel(opts.fuel);
+                    let mut v = match eval(&empty, &concept.body, &mut fuel) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            vals = None;
+                            break;
+                        }
+                    };
+                    let mut ok = true;
+                    for &ti in &tuple {
+                        let arg = thunk_of_val_rc(pool_vals[ti][j].clone());
+                        match crate::nbe::apply(v.clone(), arg, &mut fuel) {
+                            Ok(nv) => v = nv,
+                            Err(_) => {
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    if !ok {
+                        vals = None;
+                        break;
+                    }
+                    if let Some(vs) = vals.as_mut() {
+                        vs.push(v);
+                    }
+                }
+                if time_budget_hit {
+                    break;
+                }
+                if let Some(vs) = vals {
+                    let mut term = Rc::new(Term::Prim(concept.body.clone()));
+                    for &ti in &tuple {
+                        term = app(term, pool[ti].term.clone());
+                    }
+                    let cost = term.size();
+                    // Behavior identity: structural hash, 2048-fuel cap.
+                    let mut hashes = Vec::with_capacity(n_tests);
+                    let mut ok_hash = true;
+                    for j in 0..n_tests {
+                        match val_hash(&vs[j], &mut Fuel(2048)) {
+                            Some(h) => hashes.push(h),
+                            None => {
+                                ok_hash = false;
+                                break;
+                            }
+                        }
+                    }
+                    if ok_hash {
+                        // parents reference pool ids; if any parent was itself
+                        // freshly added this round, keep the logical id mapping.
+                        let parent_ids = tuple
+                            .iter()
+                            .map(|&ti| pool[ti].id)
+                            .collect::<Vec<_>>();
+                        if hashes == target_hash {
+                            let mut sol = term.clone();
+                            for _ in 0..k {
+                                sol = lam(sol);
+                            }
+                            let pool_len_at_solve = pool.len() + additions.len();
+                            return Diag {
+                                solution: Some(sol),
+                                built,
+                                pool,
+                                candidates,
+                                winner: Some(DiagWinner {
+                                    key: hashes,
+                                    cost,
+                                    parents: parent_ids,
+                                    constructor: concept.name.clone(),
+                                    pool_len_at_solve,
+                                }),
+                                time_budget_hit: false,
+                            };
+                        }
+                        // Classify/record the candidate regardless of admission.
+                        if prune {
+                            if let Some(&idx) = rep.get(&hashes) {
+                                // Already have a representative. Replace only if cheaper.
+                                if cost < pool[idx].cost {
+                                    let old = &mut pool[idx];
+                                    old.term = term.clone();
+                                    old.cost = cost;
+                                    old.keys = hashes.clone();
+                                    old.parent_ids = parent_ids.clone();
+                                    old.constructor = concept.name.clone();
+                                    old.replaced = true;
+                                    old.generation = generation;
+                                    pool_vals[idx] = vs;
+                                    candidates.push(DiagCandidate {
+                                        key: hashes,
+                                        cost,
+                                        admitted: true,
+                                        parents: parent_ids,
+                                        constructor: concept.name.clone(),
+                                    });
+                                } else {
+                                    candidates.push(DiagCandidate {
+                                        key: hashes,
+                                        cost,
+                                        admitted: false,
+                                        parents: parent_ids,
+                                        constructor: concept.name.clone(),
+                                    });
+                                }
+                            } else if seen.insert(hashes.clone()) && additions.len() < pool_cap {
+                                let id = pool.len() + additions.len();
+                                additions.push((
+                                    DiagEntry {
+                                        id,
+                                        generation,
+                                        term: term.clone(),
+                                        cost,
+                                        keys: hashes.clone(),
+                                        parent_ids: parent_ids.clone(),
+                                        constructor: concept.name.clone(),
+                                        replaced: false,
+                                    },
+                                    vs,
+                                ));
+                                // NOTE: rep is populated only after the round's
+                                // additions are appended to the pool (below), so a
+                                // `rep.get` never yields a not-yet-applied index.
+                                candidates.push(DiagCandidate {
+                                    key: hashes,
+                                    cost,
+                                    admitted: true,
+                                    parents: parent_ids,
+                                    constructor: concept.name.clone(),
+                                });
+                            } else {
+                                // Fresh key but pool saturated (or additions full):
+                                // record it, mark seen so it is never re-attempted.
+                                seen.insert(hashes.clone());
+                                candidates.push(DiagCandidate {
+                                    key: hashes,
+                                    cost,
+                                    admitted: false,
+                                    parents: parent_ids,
+                                    constructor: concept.name.clone(),
+                                });
+                            }
+                        } else {
+                            if seen.insert(hashes.clone()) && additions.len() < pool_cap {
+                                let id = pool.len() + additions.len();
+                                additions.push((
+                                    DiagEntry {
+                                        id,
+                                        generation,
+                                        term: term.clone(),
+                                        cost,
+                                        keys: hashes.clone(),
+                                        parent_ids: parent_ids.clone(),
+                                        constructor: concept.name.clone(),
+                                        replaced: false,
+                                    },
+                                    vs,
+                                ));
+                                candidates.push(DiagCandidate {
+                                    key: hashes,
+                                    cost,
+                                    admitted: true,
+                                    parents: parent_ids,
+                                    constructor: concept.name.clone(),
+                                });
+                            } else {
+                                candidates.push(DiagCandidate {
+                                    key: hashes,
+                                    cost,
+                                    admitted: false,
+                                    parents: parent_ids,
+                                    constructor: concept.name.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+                // Advance the tuple counter (odometer over the pool).
+                let mut done = true;
+                for d in tuple.iter_mut() {
+                    if *d + 1 < pool.len() {
+                        *d += 1;
+                        done = false;
+                        break;
+                    }
+                    *d = 0;
+                }
+                if done {
+                    break;
+                }
+            }
+            if time_budget_hit {
+                break;
+            }
+        }
+        if time_budget_hit {
+            return Diag {
+                solution: None,
+                built,
+                pool,
+                candidates,
+                winner: None,
+                time_budget_hit: true,
+            };
+        }
+        if additions.is_empty() {
+            break;
+        }
+        for (e, v) in additions {
+            pool_vals.push(v);
+            let id = pool.len();
+            pool.push(e);
+            if prune {
+                rep.insert(pool[id].keys.clone(), id);
+            }
+        }
+        if pool.len() >= pool_cap || pool.len() == before {
+            break;
+        }
+    }
+
+    Diag {
+        solution: None,
+        built,
+        pool,
+        candidates,
+        winner: None,
+        time_budget_hit: false,
+    }
 }
