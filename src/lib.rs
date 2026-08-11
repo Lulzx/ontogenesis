@@ -32,6 +32,8 @@
 //!   contextual allocation against global, uniform, oracle, and controls.
 //! - [`learned_context`]: regret-selected representations of raw observable
 //!   task structure, frozen before they condition contextual allocation.
+//! - [`feature_invention`]: executable context predicates synthesized from a
+//!   lower-level raw tree substrate and retained by allocation regret.
 
 pub mod acquire;
 pub mod bank;
@@ -40,6 +42,7 @@ pub mod canon;
 pub mod contextual_allocation;
 pub mod contextual_guidance;
 pub mod fixpoint;
+pub mod feature_invention;
 pub mod learned_allocation;
 pub mod learned_context;
 pub mod nbe;

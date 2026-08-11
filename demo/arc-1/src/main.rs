@@ -23,6 +23,11 @@ use supsearch::{
         ConceptSet, ContextualEvidence, ContextualLedger, EvidenceDerivation, FreezeSpec,
         FrozenPolicy, TaskContext,
     },
+    feature_invention::{
+        freeze_feature_policy, invent_features, FeatureSelectionSpec, FeatureUtilityEvidence,
+        InventedFeatureRepresentation, RawExample as FeatureRawExample,
+        RawNode as FeatureRawNode, RawTask as FeatureRawTask,
+    },
     learned_context::{
         freeze_policy as freeze_learned_policy, learn_representation,
         LearnedRepresentation, RawField, RawTaskObservation, RawUtilityEvidence,
@@ -267,6 +272,14 @@ fn main() {
             std::thread::Builder::new()
                 .stack_size(1 << 30)
                 .spawn(contextual_arc)
+                .unwrap()
+                .join()
+                .unwrap();
+        }
+        Some("features") => {
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(feature_arc)
                 .unwrap()
                 .join()
                 .unwrap();
@@ -919,6 +932,76 @@ fn raw_arc_observation(task: &ArcTask) -> RawTaskObservation {
     }
 }
 
+fn feature_arc_task(task: &ArcTask) -> FeatureRawTask {
+    FeatureRawTask {
+        task_id: task.id.clone(),
+        duplicate_group_id: task.id.clone(),
+        examples: task
+            .train
+            .iter()
+            .map(|example| FeatureRawExample {
+                inputs: vec![FeatureRawNode::grid(&example.input.rows)],
+                published_output: Some(FeatureRawNode::grid(&example.output.rows)),
+            })
+            .collect(),
+    }
+}
+
+fn generated_arc_task(
+    id: &str,
+    relation: usize,
+    seed: u32,
+    dimensions: &[(usize, usize)],
+) -> ArcTask {
+    let train = dimensions
+        .iter()
+        .enumerate()
+        .map(|(example_index, &(height, width))| {
+            let input = (0..height)
+                .map(|row| {
+                    (0..width)
+                        .map(|column| {
+                            (seed
+                                + row as u32 * 3
+                                + column as u32 * 5
+                                + example_index as u32 * 7)
+                                % 10
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            let output = (0..height)
+                .map(|row| {
+                    (0..width)
+                        .map(|column| {
+                            let source_row = if relation & 2 == 0 {
+                                row
+                            } else {
+                                height - 1 - row
+                            };
+                            let source_column = if relation & 1 == 0 {
+                                column
+                            } else {
+                                width - 1 - column
+                            };
+                            input[source_row][source_column]
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            ArcExample {
+                input: ArcGrid { rows: input },
+                output: ArcGrid { rows: output },
+            }
+        })
+        .collect();
+    ArcTask {
+        id: id.into(),
+        train,
+        test: Vec::new(),
+    }
+}
+
 fn arc_provenance(
     context: &TaskContext,
     concept_ids: &[String],
@@ -975,6 +1058,35 @@ fn raw_arc_evidence(
     let ids = concept_ids.iter().map(|id| (*id).to_string()).collect::<Vec<_>>();
     RawUtilityEvidence {
         observation: raw_arc_observation(task),
+        without: RunAccounting::from_bank(
+            without,
+            opts,
+            arc_provenance(&context, &[], phase),
+        ),
+        with: RunAccounting::from_bank(
+            with,
+            opts,
+            arc_provenance(&context, &ids, phase),
+        ),
+        concept_ids: ids,
+        age: 0,
+        recorded_epoch: 1,
+        derivation: EvidenceDerivation::default(),
+    }
+}
+
+fn invented_arc_evidence(
+    task: &ArcTask,
+    concept_ids: &[&str],
+    without: &bank::Outcome,
+    with: &bank::Outcome,
+    opts: &bank::Options,
+    phase: EvidencePhase,
+) -> FeatureUtilityEvidence {
+    let context = hand_arc_context(task);
+    let ids = concept_ids.iter().map(|id| (*id).to_string()).collect::<Vec<_>>();
+    FeatureUtilityEvidence {
+        task: feature_arc_task(task),
         without: RunAccounting::from_bank(
             without,
             opts,
@@ -1145,58 +1257,15 @@ fn run_contextual_arc() -> ContextualArcReport {
     // Encoder selection gets generated, disjoint pretraining/calibration task
     // groups. It never sees any real ARC task, protected output, task identity,
     // or solution trace. Different sizes/seeds prevent exact-example leakage.
-    let generated = |id: &str, relation: usize, seed: u32, dimensions: &[(usize, usize)]| {
-        let train = dimensions
-            .iter()
-            .enumerate()
-            .map(|(example_index, &(height, width))| {
-                let input = (0..height)
-                    .map(|row| {
-                        (0..width)
-                            .map(|column| {
-                                (seed + row as u32 * 3 + column as u32 * 5
-                                    + example_index as u32 * 7)
-                                    % 10
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>();
-                let output = (0..height)
-                    .map(|row| {
-                        (0..width)
-                            .map(|column| {
-                                let source_row = if relation & 2 == 0 {
-                                    row
-                                } else {
-                                    height - 1 - row
-                                };
-                                let source_column = if relation & 1 == 0 {
-                                    column
-                                } else {
-                                    width - 1 - column
-                                };
-                                input[source_row][source_column]
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>();
-                ArcExample {
-                    input: ArcGrid { rows: input },
-                    output: ArcGrid { rows: output },
-                }
-            })
-            .collect();
-        ArcTask { id: id.into(), train, test: Vec::new() }
-    };
     let encoder_train_tasks = [
-        generated("generated-mirror-a", 1, 1, &[(2, 3), (3, 5)]),
-        generated("generated-mirror-b", 1, 2, &[(4, 3), (2, 7)]),
-        generated("generated-vflip-a", 2, 3, &[(3, 4), (5, 2)]),
-        generated("generated-vflip-b", 2, 4, &[(4, 5), (6, 3)]),
+        generated_arc_task("generated-mirror-a", 1, 1, &[(2, 3), (3, 5)]),
+        generated_arc_task("generated-mirror-b", 1, 2, &[(4, 3), (2, 7)]),
+        generated_arc_task("generated-vflip-a", 2, 3, &[(3, 4), (5, 2)]),
+        generated_arc_task("generated-vflip-b", 2, 4, &[(4, 5), (6, 3)]),
     ];
     let encoder_calibration_tasks = [
-        generated("generated-mirror-cal", 1, 5, &[(3, 7), (5, 4)]),
-        generated("generated-vflip-cal", 2, 6, &[(7, 3), (4, 6)]),
+        generated_arc_task("generated-mirror-cal", 1, 5, &[(3, 7), (5, 4)]),
+        generated_arc_task("generated-vflip-cal", 2, 6, &[(7, 3), (4, 6)]),
     ];
     let build_encoder_records = |task: &ArcTask| {
         [mirror.clone(), vflip.clone()]
@@ -1393,6 +1462,347 @@ fn run_contextual_arc() -> ContextualArcReport {
         contextual_policy,
         hand_policy,
         global_policy,
+    }
+}
+
+#[derive(Clone, Debug)]
+struct FeatureArcConditions {
+    invented: Vec<ArcAllocationCondition>,
+    engineered_projection: Vec<ArcAllocationCondition>,
+    global: Vec<ArcAllocationCondition>,
+    uniform: Vec<ArcAllocationCondition>,
+    oracle: Vec<ArcAllocationCondition>,
+    interaction_disabled: Vec<ArcAllocationCondition>,
+}
+
+impl FeatureArcConditions {
+    fn built(conditions: &[ArcAllocationCondition]) -> u64 {
+        conditions
+            .iter()
+            .map(|condition| condition.accounting.work.comparable_primary_work())
+            .sum()
+    }
+
+    fn solved(conditions: &[ArcAllocationCondition]) -> usize {
+        conditions
+            .iter()
+            .filter(|condition| condition.hidden_test_verified)
+            .count()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct FeatureArcReport {
+    invented: InventedFeatureRepresentation,
+    engineered: supsearch::learned_context::LearnedRepresentation,
+    feature_evidence_accounting: AccountingSummary,
+    feature_history: Vec<FeatureUtilityEvidence>,
+    feature_spec: FeatureSelectionSpec,
+    candidates: Vec<ConceptSet>,
+    conditions: FeatureArcConditions,
+    holdout_ids: Vec<String>,
+}
+
+fn run_feature_arc() -> FeatureArcReport {
+    let mut opts = bank_opts(4, 14);
+    opts.fuel = 1_000_000;
+    let concepts = arc_concept_map();
+    let mirror = ConceptSet::singleton("mirror");
+    let vflip = ConceptSet::singleton("vflip");
+    let pair = ConceptSet::new(["mirror".into(), "vflip".into()]);
+    let candidates = [mirror.clone(), vflip.clone(), pair.clone()];
+
+    let training_tasks = [
+        (generated_arc_task("feature-train-mirror-a", 1, 11, &[(2, 3), (4, 5)]), mirror.clone()),
+        (generated_arc_task("feature-train-mirror-b", 1, 12, &[(3, 7), (5, 4)]), mirror.clone()),
+        (generated_arc_task("feature-train-vflip-a", 2, 13, &[(3, 4), (6, 3)]), vflip.clone()),
+        (generated_arc_task("feature-train-vflip-b", 2, 14, &[(5, 6), (4, 3)]), vflip.clone()),
+        (generated_arc_task("feature-train-rotation-a", 3, 15, &[(3, 5), (6, 4)]), pair.clone()),
+        (generated_arc_task("feature-train-rotation-b", 3, 16, &[(4, 7), (5, 3)]), pair.clone()),
+    ];
+    let calibration_tasks = [
+        (generated_arc_task("feature-cal-mirror", 1, 21, &[(7, 4), (3, 8)]), mirror.clone()),
+        (generated_arc_task("feature-cal-vflip", 2, 22, &[(4, 6), (7, 3)]), vflip.clone()),
+        (generated_arc_task("feature-cal-rotation", 3, 23, &[(5, 7), (8, 3)]), pair.clone()),
+    ];
+
+    let measure = |task: &ArcTask, set: &ConceptSet| {
+        let parsed = arc_task_to_parse(task).unwrap();
+        let installed = set
+            .0
+            .iter()
+            .map(|id| concepts.get(id).unwrap().clone())
+            .collect::<Vec<_>>();
+        let (without, _) = bank::concept_solve_abl(&parsed, &[], &opts, true);
+        let (with, _) = bank::concept_solve_abl(&parsed, &installed, &opts, true);
+        (without, with)
+    };
+
+    let build_records = |tasks: &[(ArcTask, ConceptSet)], phase: EvidencePhase| {
+        let mut invented = Vec::new();
+        let mut engineered = Vec::new();
+        let mut contextual = Vec::new();
+        let mut runs = Vec::new();
+        for (task, expected) in tasks {
+            let interventions = if expected.len() == 2 {
+                candidates.to_vec()
+            } else {
+                vec![mirror.clone(), vflip.clone()]
+            };
+            for set in &interventions {
+                let (without, with) = measure(task, set);
+                let ids = set.0.iter().map(String::as_str).collect::<Vec<_>>();
+                invented.push(invented_arc_evidence(
+                    task, &ids, &without, &with, &opts, phase,
+                ));
+                engineered.push(raw_arc_evidence(
+                    task, &ids, &without, &with, &opts, phase,
+                ));
+                contextual.push(arc_evidence(
+                    hand_arc_context(task), &ids, &without, &with, &opts, phase,
+                ));
+                let context = hand_arc_context(task);
+                runs.push(RunAccounting::from_bank(
+                    &without,
+                    &opts,
+                    arc_provenance(&context, &[], phase),
+                ));
+                runs.push(RunAccounting::from_bank(
+                    &with,
+                    &opts,
+                    arc_provenance(&context, &set.0, phase),
+                ));
+            }
+        }
+        (invented, engineered, contextual, runs)
+    };
+    let (feature_training, projection_training, contextual_training, training_runs) =
+        build_records(&training_tasks, EvidencePhase::Training);
+    let (feature_calibration, projection_calibration, contextual_calibration, calibration_runs) =
+        build_records(&calibration_tasks, EvidencePhase::Calibration);
+    let feature_evidence_accounting = search_accounting::aggregate(
+        &training_runs
+            .into_iter()
+            .chain(calibration_runs)
+            .collect::<Vec<_>>(),
+    )
+    .expect("feature evidence uses one behavior-bank unit");
+
+    let feature_spec = FeatureSelectionSpec {
+        engine: search_accounting::SearchEngine::BehaviorBank,
+        freeze_epoch: 1,
+        decay_per_mille: 900,
+        interactions: true,
+        max_interaction_width: 2,
+        max_program_size: 3,
+        max_programs: 512,
+        max_feature_width: 2,
+        feature_pool_limit: 16,
+        execution_fuel: 100_000,
+        complexity_cost: 10,
+        execution_cost: 1,
+    };
+    let invented = invent_features(
+        &feature_training,
+        &feature_calibration,
+        &candidates,
+        &feature_spec,
+    );
+    let projection_spec = RepresentationSpec {
+        engine: search_accounting::SearchEngine::BehaviorBank,
+        freeze_epoch: 1,
+        decay_per_mille: 900,
+        interactions: true,
+        max_interaction_width: 2,
+        max_projection_width: 2,
+    };
+    let engineered = learn_representation(
+        &projection_training,
+        &projection_calibration,
+        &candidates,
+        &projection_spec,
+    );
+    let mut feature_history = feature_training;
+    feature_history.extend(feature_calibration);
+    let mut projection_history = projection_training;
+    projection_history.extend(projection_calibration);
+    let mut global_ledger = ContextualLedger::default();
+    for evidence in contextual_training.into_iter().chain(contextual_calibration) {
+        global_ledger.record(evidence);
+    }
+
+    let holdouts = [
+        (
+            load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_TRAIN_IDS[0]),
+            mirror.clone(),
+        ),
+        (
+            load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_TRAIN_IDS[1]),
+            vflip.clone(),
+        ),
+        (
+            load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_CALIBRATION_ID),
+            pair.clone(),
+        ),
+        (
+            load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_HOLDOUT_ID),
+            pair.clone(),
+        ),
+    ];
+    let mut conditions = FeatureArcConditions {
+        invented: Vec::new(),
+        engineered_projection: Vec::new(),
+        global: Vec::new(),
+        uniform: Vec::new(),
+        oracle: Vec::new(),
+        interaction_disabled: Vec::new(),
+    };
+    for (task, expected) in &holdouts {
+        let invented_policy = freeze_feature_policy(
+            &invented.encoder,
+            &feature_history,
+            &feature_arc_task(task),
+            &candidates,
+            &feature_spec,
+        )
+        .expect("invented feature replay on ARC");
+        let engineered_policy = supsearch::learned_context::freeze_policy(
+            &engineered.encoder,
+            &projection_history,
+            &raw_arc_observation(task),
+            &candidates,
+            &projection_spec,
+        )
+        .expect("engineered projection replay on ARC");
+        let global_policy = global_ledger.learn(
+            &candidates,
+            &FreezeSpec {
+                target: hand_arc_context(task),
+                engine: search_accounting::SearchEngine::BehaviorBank,
+                freeze_epoch: 1,
+                decay_per_mille: 900,
+                contextual: false,
+                interactions: true,
+                max_interaction_width: 2,
+            },
+        );
+        let mut no_interaction_spec = feature_spec.clone();
+        no_interaction_spec.interactions = false;
+        let no_interaction_policy = freeze_feature_policy(
+            &invented.encoder,
+            &feature_history,
+            &feature_arc_task(task),
+            &candidates,
+            &no_interaction_spec,
+        )
+        .expect("interaction ablation replay");
+        conditions.invented.push(run_arc_condition(
+            "invented-feature",
+            task,
+            &[top_arc_set(&invented_policy)],
+            &concepts,
+            &opts,
+        ));
+        conditions.engineered_projection.push(run_arc_condition(
+            "engineered-projection",
+            task,
+            &[top_arc_set(&engineered_policy)],
+            &concepts,
+            &opts,
+        ));
+        conditions.global.push(run_arc_condition(
+            "global",
+            task,
+            &[top_arc_set(&global_policy)],
+            &concepts,
+            &opts,
+        ));
+        conditions.uniform.push(run_arc_condition(
+            "uniform",
+            task,
+            &[mirror.clone(), vflip.clone(), pair.clone()],
+            &concepts,
+            &opts,
+        ));
+        conditions.oracle.push(run_arc_condition(
+            "oracle",
+            task,
+            std::slice::from_ref(expected),
+            &concepts,
+            &opts,
+        ));
+        conditions.interaction_disabled.push(run_arc_condition(
+            "interaction-disabled",
+            task,
+            &[top_arc_set(&no_interaction_policy)],
+            &concepts,
+            &opts,
+        ));
+    }
+    FeatureArcReport {
+        invented,
+        engineered,
+        feature_evidence_accounting,
+        feature_history,
+        feature_spec,
+        candidates: candidates.to_vec(),
+        conditions,
+        holdout_ids: holdouts.iter().map(|(task, _)| task.id.clone()).collect(),
+    }
+}
+
+fn feature_arc() {
+    let report = run_feature_arc();
+    println!("\n── invented executable context features: multi-holdout ARC ──");
+    println!("holdouts={:?} (test outputs verification-only)", report.holdout_ids);
+    println!(
+        "phi={:?} regret={} primitive_projection_regret={} collapsed_regret={} programs={} sets={} executions={} steps={}",
+        report.invented.encoder.programs,
+        report.invented.encoder.calibration_regret,
+        report.invented.primitive_projection_regret,
+        report.invented.encoder.collapsed_regret,
+        report.invented.accounting.programs_enumerated,
+        report.invented.accounting.feature_sets_evaluated,
+        report.invented.accounting.task_executions,
+        report.invented.accounting.execution_steps,
+    );
+    println!(
+        "engineered_projection={:?} evidence_built={}",
+        report.engineered.encoder.kind,
+        report.feature_evidence_accounting.work.comparable_primary_work(),
+    );
+    println!(
+        "record,engine=feature-programs,condition=invented,regret={},primitive_regret={},collapsed_regret={},programs={},sets={},executions={},steps={}",
+        report.invented.encoder.calibration_regret,
+        report.invented.primitive_projection_regret,
+        report.invented.encoder.collapsed_regret,
+        report.invented.accounting.programs_enumerated,
+        report.invented.accounting.feature_sets_evaluated,
+        report.invented.accounting.task_executions,
+        report.invented.accounting.execution_steps,
+    );
+    for conditions in [
+        &report.conditions.invented,
+        &report.conditions.engineered_projection,
+        &report.conditions.global,
+        &report.conditions.uniform,
+        &report.conditions.oracle,
+        &report.conditions.interaction_disabled,
+    ] {
+        println!(
+            "{:<24} solved={}/{} built={} universal=false",
+            conditions[0].name,
+            FeatureArcConditions::solved(conditions),
+            conditions.len(),
+            FeatureArcConditions::built(conditions),
+        );
+        println!(
+            "record,engine=behavior-bank,condition={},solved={},tasks={},built={},universal=false",
+            conditions[0].name,
+            FeatureArcConditions::solved(conditions),
+            conditions.len(),
+            FeatureArcConditions::built(conditions),
+        );
     }
 }
 
@@ -3474,6 +3884,99 @@ mod tests {
                 assert!(replay.hidden_test_verified);
                 let raw_replay = run_arc_raw_condition(&holdout, &replay_opts);
                 assert_eq!(raw_replay.accounting, report.raw_bounded.accounting);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn invented_features_generalize_to_multiple_frozen_arc_holdouts() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let report = run_feature_arc();
+                assert!(report.invented.encoder.retained);
+                assert_eq!(report.invented.encoder.calibration_regret, 0);
+                assert!(report.invented.primitive_projection_regret > 0);
+                assert!(report.invented.encoder.collapsed_regret > 0);
+                assert_eq!(report.invented.encoder.programs.len(), 2);
+                assert!(report
+                    .invented
+                    .encoder
+                    .programs
+                    .iter()
+                    .all(|program| program.is_compositional()));
+                assert_eq!(
+                    report.engineered.encoder.kind,
+                    supsearch::learned_context::EncoderKind::Projection(vec!["raw-0".into()])
+                );
+                assert_eq!(
+                    report.feature_evidence_accounting.work.comparable_primary_work(),
+                    43
+                );
+                assert_eq!(FeatureArcConditions::solved(&report.conditions.invented), 4);
+                assert_eq!(FeatureArcConditions::built(&report.conditions.invented), 12);
+                assert_eq!(FeatureArcConditions::solved(&report.conditions.oracle), 4);
+                assert_eq!(FeatureArcConditions::built(&report.conditions.oracle), 12);
+                assert_eq!(
+                    FeatureArcConditions::built(&report.conditions.engineered_projection),
+                    12
+                );
+                assert_eq!(FeatureArcConditions::built(&report.conditions.global), 13);
+                assert_eq!(FeatureArcConditions::built(&report.conditions.uniform), 27);
+                assert_eq!(
+                    FeatureArcConditions::solved(&report.conditions.interaction_disabled),
+                    2
+                );
+                assert!(report
+                    .conditions
+                    .invented
+                    .iter()
+                    .all(|condition| !condition.universal_coverage));
+
+                for id in &report.holdout_ids {
+                    let original = load_arc_task_by_id(ARC_DATA_DIR, id);
+                    let before = feature_arc_task(&original);
+                    let mut mutated = original;
+                    for example in &mut mutated.test {
+                        example.output.rows = vec![vec![9]];
+                    }
+                    let after = feature_arc_task(&mutated);
+                    assert_eq!(after, before);
+                    let before_encoding = report
+                        .invented
+                        .encoder
+                        .encode(&before, report.feature_spec.execution_fuel)
+                        .unwrap();
+                    let after_encoding = report
+                        .invented
+                        .encoder
+                        .encode(&after, report.feature_spec.execution_fuel)
+                        .unwrap();
+                    assert_eq!(after_encoding, before_encoding);
+                    let before_policy = freeze_feature_policy(
+                        &report.invented.encoder,
+                        &report.feature_history,
+                        &before,
+                        &report.candidates,
+                        &report.feature_spec,
+                    )
+                    .unwrap();
+                    let after_policy = freeze_feature_policy(
+                        &report.invented.encoder,
+                        &report.feature_history,
+                        &after,
+                        &report.candidates,
+                        &report.feature_spec,
+                    )
+                    .unwrap();
+                    assert_eq!(after_policy, before_policy);
+                    assert_eq!(
+                        supsearch::contextual_allocation::allocate_budget(&after_policy, 3, 100),
+                        supsearch::contextual_allocation::allocate_budget(&before_policy, 3, 100)
+                    );
+                }
             })
             .unwrap()
             .join()
