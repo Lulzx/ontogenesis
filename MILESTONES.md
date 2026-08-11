@@ -55,11 +55,64 @@ The inducer rejects laws that are constant, ignore the head, ignore the recursiv
 result, change context by depth, use a lookup-like exceptional unrolling, or merely
 insert a beta-redex that happens to be observationally equivalent.
 
-Boundary: this is exact first-order structural right-recurrence induction. The
-equation compiler targets the existing Church-list representation. It is not evidence
-for arbitrary Y-combinator synthesis, unknown constructors, mutual recursion, or
-recurrences whose previous computation is not an exact embedded subterm after
-normalization.
+This finite-unrolling route remains the efficient B2 path for structural laws. B2 now
+also has a universal path for laws outside that fragment.
+
+### B2-general — arbitrary recursion invention
+
+Question: can the system propose and execute recursive laws without assuming a fold,
+a particular data encoding, a single recursive function, or structural descent?
+
+Mechanism and evidence:
+
+1. `universal::terms_exact` enumerates the full well-scoped untyped de Bruijn lambda
+   grammar, with an optional finite ontology alphabet, in finite exact-size classes.
+   `Dovetail` schedules every positive `(syntax size, evaluation fuel)` pair. There is
+   no candidate, size, depth, or fuel cap in the proposal stream.
+2. `recursion_search` treats each generated closed term as an unknown functional `F`,
+   constructs `fix F` using only lambda and application, and independently checks
+   discovery behavior, the extensional equation `fix F = F(fix F)`, and unseen
+   extrapolation behavior. Recursive-parameter and neutral-ablation controls
+   reject both nonrecursive shortcuts and syntactically present but dead recursion.
+   A complete finite size class actually rediscovers `λr.λvalue.value r` from
+   depth-0..3 anonymous chain behaviors and extrapolates at depths 5, 7, and 9;
+   this is not only a membership argument for a hand-supplied target.
+3. `fixpoint::synthesize` constructs the fixed point directly; `Y`, `fold`, and a
+   runtime recursion primitive are not ontology atoms. The same construction executes
+   a nested Ackermann recurrence, demonstrating non-structural recursion.
+4. `fixpoint::synthesize_mutual` takes a functional over an anonymous Church tuple and
+   ties every component simultaneously. Independently projected component equations
+   and even/odd behavior through depth 9 validate mutual recursion.
+5. `recurrence::infer_semantic` discovers one invariant law even when an eta-expanded
+   previous computation is not an exact normalized subtree. Discovery probes and
+   independent holdout probes are checked separately.
+6. `representation::invent` receives only an anonymous vector of constructor field
+   counts and constructs new closed constructors plus their eliminator. It is validated
+   against independent handler/field probes, then a synthesized recursive program
+   traverses an invented binary-tree representation at unseen depths.
+7. The invented Ackermann executable produces a measured counterfactual frontier gain:
+   it is unreachable in the bounded future reasoner without the concept and reachable
+   after installation as a two-argument primitive.
+
+Controls reject open functionals, zero-component mutual recursion, nonrecursive
+identity shortcuts, dead recursive references, constant-output families when that
+control is enabled, incomplete semantic probe assignments, empty signatures, wrong
+constructor arities, wrong branches/fields under representation-law probes, and
+divergent candidates through finite fuel plus a process-safe evaluator stack guard.
+
+The proposal-completeness claim is precise and limited. Every representable finite
+closed lambda functional over the declared finite atom alphabet is proposed at a finite
+syntax size; if its required observations terminate within representable finite fuel,
+the diagonal schedule tests it with enough fuel after finitely many stages. There is no
+configured experimental cap; the implementation resource model uses `u32` syntax sizes,
+`i64` evaluator fuel, available memory, and the evaluator's explicit stack guard. This
+is relative semidecision completeness for that universal language and observer. It is
+not decidable program equivalence, finite-time proof that no solution exists, literal
+infinite hardware, or a claim that practical enumeration avoids combinatorial growth.
+
+The invented representation result covers arbitrary finite sum-of-products signatures
+whose constructor arities are supplied anonymously. It does not yet infer the signature
+itself from raw bytes or prove a unique latent encoding.
 
 ## B3 — recursive law to reasoning vocabulary
 
@@ -105,4 +158,14 @@ cargo run -p arc1 -- b1
 cargo run -p arc1 -- b2
 cargo run -p arc1 -- b3
 cargo test --workspace
+```
+
+Focused B2-general checks:
+
+```sh
+cargo test -p supsearch universal --lib
+cargo test -p supsearch fixpoint --lib
+cargo test -p supsearch recurrence --lib
+cargo test -p supsearch representation --lib
+cargo test -p supsearch recursion_search --lib
 ```

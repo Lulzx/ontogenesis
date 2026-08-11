@@ -16,6 +16,7 @@ use crate::{
     nbe,
     term::{self, Term},
 };
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 /// Input atoms in an observed unrolling are `Free(0)..Free(depth - 1)`.
@@ -31,6 +32,10 @@ pub struct Unrolling {
     pub depth: usize,
     pub body: Rc<Term>,
 }
+
+/// One concrete interpretation of the symbolic `Free` atoms in an unrolling.
+/// All assigned values must be closed.
+pub type SemanticProbe = HashMap<u32, Rc<Term>>;
 
 /// Execute a discovered `depth`-ary program on fresh symbolic inputs, normalize
 /// it, and open the result's leading lambdas onto stable observation constants.
@@ -233,6 +238,126 @@ pub fn infer(unrollings: &[Unrolling]) -> Option<RecurrenceLaw> {
     } else {
         None
     }
+}
+
+/// Infer a recurrence when the embedded previous computation need only be
+/// extensionally equivalent on a probe universe, rather than an exact syntax
+/// subtree. Candidate contexts are still required to be invariant across every
+/// observed depth, and the resulting law must semantically reconstruct every
+/// observed unrolling.
+pub fn infer_semantic(
+    unrollings: &[Unrolling],
+    probes: &[SemanticProbe],
+    fuel: i64,
+) -> Option<RecurrenceLaw> {
+    if unrollings.len() < 2 || probes.is_empty() {
+        return None;
+    }
+    for (i, u) in unrollings.iter().enumerate() {
+        if u.depth != i + 1 {
+            return None;
+        }
+    }
+
+    let mut invariant_contexts: Option<Vec<Rc<Term>>> = None;
+    for pair in unrollings.windows(2) {
+        let prev = &pair[0];
+        let next = &pair[1];
+        let shifted_prev = shift_input_ids(&prev.body, prev.depth, 1);
+        let mut contexts = Vec::new();
+        let mut seen = HashSet::new();
+        for candidate in crate::transform::subterms(&next.body) {
+            if count_occurrences(&next.body, &candidate) != 1
+                || !semantic_equivalent(&candidate, &shifted_prev, probes, fuel)
+            {
+                continue;
+            }
+            let with_recur =
+                replace_exact(&next.body, &candidate, &Rc::new(Term::Free(RECUR_HOLE)));
+            let context = replace_free(&with_recur, 0, HEAD_HOLE);
+            if contains_free(&context, HEAD_HOLE)
+                && contains_free(&context, RECUR_HOLE)
+                && seen.insert(context.clone())
+            {
+                contexts.push(context);
+            }
+        }
+        match &mut invariant_contexts {
+            None => invariant_contexts = Some(contexts),
+            Some(invariants) => invariants.retain(|c| contexts.contains(c)),
+        }
+        if invariant_contexts.as_ref().is_some_and(Vec::is_empty) {
+            return None;
+        }
+    }
+
+    invariant_contexts?.into_iter().find_map(|step_context| {
+        let base = match_base(&step_context, &unrollings[0].body)?;
+        let law = RecurrenceLaw { base, step_context };
+        validates_semantically(&law, unrollings, probes, fuel).then_some(law)
+    })
+}
+
+/// Independent semantic validation for an induced law. Discovery probes and
+/// adversarial holdout probes should be passed in separate calls.
+pub fn validates_semantically(
+    law: &RecurrenceLaw,
+    unrollings: &[Unrolling],
+    probes: &[SemanticProbe],
+    fuel: i64,
+) -> bool {
+    !probes.is_empty()
+        && unrollings
+            .iter()
+            .all(|u| semantic_equivalent(&law.unroll(u.depth), &u.body, probes, fuel))
+}
+
+/// Extensional equality of two open terms on a finite interpretation universe.
+pub fn semantic_equivalent(
+    a: &Rc<Term>,
+    b: &Rc<Term>,
+    probes: &[SemanticProbe],
+    fuel: i64,
+) -> bool {
+    !probes.is_empty()
+        && probes.iter().all(|probe| {
+            let concrete_a = substitute_frees(a, probe);
+            let concrete_b = substitute_frees(b, probe);
+            probe.values().all(crate::transform::is_closed)
+                && all_frees_assigned(a, probe)
+                && all_frees_assigned(b, probe)
+                && crate::transform::is_closed(&concrete_a)
+                && crate::transform::is_closed(&concrete_b)
+                && normalize_closed(&concrete_a, fuel)
+                    .zip(normalize_closed(&concrete_b, fuel))
+                    .is_some_and(|(x, y)| x == y)
+        })
+}
+
+pub fn substitute_frees(t: &Rc<Term>, assignments: &SemanticProbe) -> Rc<Term> {
+    match t.as_ref() {
+        Term::Free(i) => assignments.get(i).cloned().unwrap_or_else(|| t.clone()),
+        Term::Var(_) | Term::Prim(_) => t.clone(),
+        Term::Lam(body) => term::lam(substitute_frees(body, assignments)),
+        Term::App(f, a) => term::app(
+            substitute_frees(f, assignments),
+            substitute_frees(a, assignments),
+        ),
+    }
+}
+
+fn all_frees_assigned(t: &Rc<Term>, assignments: &SemanticProbe) -> bool {
+    match t.as_ref() {
+        Term::Free(i) => assignments.contains_key(i),
+        Term::Var(_) | Term::Prim(_) => true,
+        Term::Lam(body) => all_frees_assigned(body, assignments),
+        Term::App(f, a) => all_frees_assigned(f, assignments) && all_frees_assigned(a, assignments),
+    }
+}
+
+fn normalize_closed(t: &Rc<Term>, fuel: i64) -> Option<Rc<Term>> {
+    let env: nbe::Env = Rc::new(Vec::new());
+    nbe::normalize(&env, t, &mut nbe::Fuel(fuel)).ok()
 }
 
 fn shift_input_ids(t: &Rc<Term>, depth: usize, amount: u32) -> Rc<Term> {
@@ -461,5 +586,80 @@ mod tests {
         let executable = law.compile_church();
         assert!(crate::transform::is_closed(&executable));
         assert!(!matches!(executable.as_ref(), Term::Prim(_)));
+    }
+
+    fn church_zero() -> Rc<Term> {
+        term::lam(term::lam(term::var(0)))
+    }
+
+    fn church_succ() -> Rc<Term> {
+        // λn.λf.λx.f (n f x)
+        term::lam(term::lam(term::lam(term::app(
+            term::var(1),
+            term::app(term::app(term::var(2), term::var(1)), term::var(0)),
+        ))))
+    }
+
+    fn church_double() -> Rc<Term> {
+        // λn.λf.λx.n f (n f x)
+        term::lam(term::lam(term::lam(term::app(
+            term::app(term::var(2), term::var(1)),
+            term::app(term::app(term::var(2), term::var(1)), term::var(0)),
+        ))))
+    }
+
+    fn semantic_probe(functions: &[Rc<Term>], base: Rc<Term>) -> SemanticProbe {
+        let mut probe = SemanticProbe::new();
+        for (i, function) in functions.iter().enumerate() {
+            probe.insert(i as u32, function.clone());
+        }
+        probe.insert(101, base);
+        probe
+    }
+
+    #[test]
+    fn semantic_induction_crosses_nonidentical_normalized_embedding() {
+        let z = free(101);
+        let q1 = term::app(free(0), z.clone());
+        let q2 = term::app(free(0), term::app(free(1), z.clone()));
+        let shifted_q2 = term::app(free(1), term::app(free(2), z));
+        // η-expand the previous computation. NBE intentionally does no η
+        // reduction, so this is not the exact shifted q2 syntax subtree.
+        let eta_shifted_q2 = term::lam(term::app(shifted_q2, term::var(0)));
+        let family = vec![
+            Unrolling { depth: 1, body: q1 },
+            Unrolling { depth: 2, body: q2 },
+            Unrolling {
+                depth: 3,
+                body: term::app(free(0), eta_shifted_q2),
+            },
+        ];
+        assert!(infer(&family).is_none(), "exact embedding must fail");
+
+        let discovery = vec![
+            semantic_probe(
+                &[church_succ(), church_double(), church_succ()],
+                church_zero(),
+            ),
+            semantic_probe(
+                &[church_double(), church_succ(), church_double()],
+                term::app(church_succ(), church_zero()),
+            ),
+        ];
+        let law = infer_semantic(&family, &discovery, 2_000_000)
+            .expect("semantic embedding should recover the invariant context");
+        assert!(validates_semantically(&law, &family, &discovery, 2_000_000));
+
+        let holdout = vec![semantic_probe(
+            &[church_succ(), church_succ(), church_double()],
+            term::app(church_succ(), term::app(church_succ(), church_zero())),
+        )];
+        assert!(validates_semantically(&law, &family, &holdout, 2_000_000));
+    }
+
+    #[test]
+    fn semantic_equivalence_requires_total_closed_probe_assignments() {
+        let probe = SemanticProbe::new();
+        assert!(!semantic_equivalent(&free(0), &free(0), &[probe], 10_000));
     }
 }

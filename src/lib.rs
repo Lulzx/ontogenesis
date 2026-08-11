@@ -16,14 +16,22 @@
 //!   + composition) — the machinery that invents primitives by restructuring code.
 //! - [`recurrence`]: generic invariant-context induction across finite unrollings.
 //! - [`typed`]: operation-blind simply-typed beta-normal proposal enumeration.
+//! - [`fixpoint`]: pure-lambda fixed-point and mutual-recursion synthesis.
+//! - [`recursion_search`]: fair universal search for recursive functionals.
+//! - [`representation`]: invention of anonymous data encodings and eliminators.
+//! - [`universal`]: uncapped lambda-term enumeration with resource dovetailing.
 
 pub mod acquire;
 pub mod bank;
 pub mod bootstrap;
 pub mod canon;
+pub mod fixpoint;
 pub mod nbe;
 pub mod parse;
 pub mod recurrence;
+pub mod recursion_search;
+pub mod representation;
 pub mod term;
 pub mod transform;
 pub mod typed;
+pub mod universal;

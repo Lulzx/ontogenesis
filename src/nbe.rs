@@ -127,8 +127,9 @@ fn meter_quote() {
     }
 }
 
-/// Abort before the recursion blows the worker's 1GB stack: measure stack
-/// growth from the first eval on this thread and bail past ~700MB.
+/// Abort before evaluator recursion can exhaust an ordinary Rust worker stack.
+/// Search deliberately encounters divergent terms, so fuel alone cannot be
+/// allowed to turn a large budget into a process-level stack overflow.
 #[inline]
 fn stack_guard() -> Result<(), Abort> {
     let here = {
@@ -140,7 +141,7 @@ fn stack_guard() -> Result<(), Abort> {
         if base == 0 {
             b.set(here);
             Ok(())
-        } else if base.saturating_sub(here) > 700_000_000 {
+        } else if base.saturating_sub(here) > 1_000_000 {
             Err(Abort)
         } else {
             Ok(())
