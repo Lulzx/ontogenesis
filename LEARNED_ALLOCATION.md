@@ -139,6 +139,11 @@ train/holdout IDs, and a separately scheduled universal lane. The existing real-
 geometry tests remain evidence about ontology transfer, not evidence for learned
 universal resource allocation.
 
+Subsequent work added that labeled adapter and a preregistered one-task contextual ARC
+transfer without retroactively changing this milestone's claim. See
+`CONTEXTUAL_ALLOCATION.md`; ARC behavior-bank `built` remains distinct from universal
+lambda proposals.
+
 ## Limits
 
 This experiment learns among four already acquired concepts from two synthetic

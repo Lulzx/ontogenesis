@@ -153,6 +153,18 @@ alternate with the unchanged universal dovetail, so the bias cannot starve unive
 coverage. See [`LEARNED_ALLOCATION.md`](LEARNED_ALLOCATION.md) for the exact protocol,
 controls, ARC-interface boundary, and reproduction commands.
 
+**B2-contextual — cognitive attention depends on the task.** Utility is now learned as
+`U(concept set | observable context, ontology, history)` under an auditable freeze.
+Across two executable held-out recursive representations, contextual allocation swaps
+`not` and `parity`, solves 2/2 in 670 proposals, and exactly matches the oracle;
+global utility solves 1/2 and uniform allocation costs 1,318. Bounded pair credit also
+unlocks a recursive law neither singleton can reach. On a preregistered real ARC-1
+split, the frozen contextual policy selects `{mirror,vflip}` and verifies the final
+rotation in 5 bounded-bank constructions versus 11 for uniform; global, shuffled,
+interaction-disabled, irrelevant, misleading, and raw controls fail. ARC `built` and
+universal proposals remain distinct labeled units. See
+[`CONTEXTUAL_ALLOCATION.md`](CONTEXTUAL_ALLOCATION.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

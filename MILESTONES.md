@@ -165,6 +165,32 @@ claim. The ablated learned-only schedule also solves this target but correctly l
 universal coverage. Protocol, exact counts, controls, ARC-interface assessment, and
 limitations are in `LEARNED_ALLOCATION.md`.
 
+### B2-contextual — task-conditioned attention and bounded interaction
+
+The global ledger is generalized to frozen contextual utility over canonical concept
+sets. Observable task features determine which historical evidence transfers; age
+decay handles shift, and width-2 residual credit separates synergy from redundant or
+antagonistic pairs. Held-out task/duplicate IDs, protected outputs, target programs,
+candidate ancestry, post-freeze evidence, mixed engine units, and oversized sets are
+rejected with audited counters.
+
+On two disjoint reversed-protocol recursive holdouts, contextual utility selects
+`not` for a single-chain representation and recursive `parity` for a nested-chain
+representation. It solves 2/2 in 670 proposals, matching the oracle with zero regret;
+global utility solves 1/2, uniform costs 1,318, and shuffled context labels solve 0/2.
+A separate two-concept interaction unlocks a held-out recursive law while either
+singleton and the interaction-disabled policy fail.
+
+Shared accounting retains separate `UniversalLambda` and `BehaviorBank` variants and
+rejects mixed aggregation. Labeled property tests prove that arbitrary learned
+schedules project to the exact original universal dovetail. On a preregistered real
+ARC-1 split, contextual `{mirror,vflip}` solves and independently test-verifies the
+final rotation in 5 bounded-bank constructions versus 11 for uniform and 5 for the
+oracle; global, shuffled, interaction-disabled, irrelevant, misleading, and raw-bank
+controls fail. This is a one-task existence result, not an ARC population estimate,
+and no ARC `built` count is called universal. Full protocol and limits are in
+`CONTEXTUAL_ALLOCATION.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are
@@ -226,6 +252,16 @@ Ontology-guidance experiment:
 ```sh
 cargo run --release --example ontology_guided
 cargo test -p supsearch ontology_guidance --lib
+```
+
+Contextual allocation and controlled ARC transfer:
+
+```sh
+cargo run --release --example contextual_allocation
+cargo run --release -p arc1 -- contextual
+cargo test -p supsearch contextual_allocation --lib
+cargo test -p supsearch contextual_guidance --lib
+cargo test -p arc1 contextual_arc_transfer_is_frozen_verified_and_deterministic
 ```
 
 Learned-allocation experiment:
