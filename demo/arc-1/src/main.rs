@@ -1228,9 +1228,14 @@ fn contextual_arc() {
             _ => unreachable!(),
         };
         println!(
-            "{:<18} built={:<7} train={} hidden-test={} universal={} order={}",
+            "{:<18} built={:<7} rank={:<5} train={} hidden-test={} universal={} order={}",
             condition.name,
             built,
+            if condition.hidden_test_verified {
+                built.to_string()
+            } else {
+                "none".into()
+            },
             condition.training_solved,
             condition.hidden_test_verified,
             condition.universal_coverage,
@@ -1242,8 +1247,16 @@ fn contextual_arc() {
                 .join(" -> ")
         );
         println!(
-            "record,engine=behavior-bank,condition={},built={},train_solved={},hidden_test_verified={},universal=false",
-            condition.name, built, condition.training_solved, condition.hidden_test_verified
+            "record,engine=behavior-bank,condition={},built={},solution_rank={},train_solved={},hidden_test_verified={},universal=false",
+            condition.name,
+            built,
+            if condition.hidden_test_verified {
+                built.to_string()
+            } else {
+                "none".into()
+            },
+            condition.training_solved,
+            condition.hidden_test_verified
         );
     }
     println!("ARC `built` is a bounded-bank unit and is never combined with universal proposals.");

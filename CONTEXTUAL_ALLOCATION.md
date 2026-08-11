@@ -158,6 +158,10 @@ evidence-count confidence proxy is 500/1000. Paired held-out solve rate is 1/1. 
 single final task is a deterministic existence demonstration, not an estimate of ARC
 population performance and not a statistical confidence interval.
 
+Because every condition stops at its first independently verified solution, `built`
+is also the reported allocation-level solution rank for the successful rows:
+contextual/oracle rank 5 and uniform rank 11; failed rows report no rank.
+
 The ARC result is deliberately **not called universal**. Every ARC row has
 `universal=false`; `built` is never added to lambda proposals. The universal theorem is
 preserved and tested in the synthetic recursive engine, while ARC demonstrates that
