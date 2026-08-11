@@ -185,9 +185,11 @@ rows.
 
 ## Boundaries
 
-The feature vocabulary, similarity function, decay rate, confidence proxy,
-interaction width, candidate-set pool, and ARC split are fixed by the experiment; the
-system does not learn them. The ARC slice contains only one final task and one
+This file records the earlier hand-feature milestone. `LEARNED_CONTEXT.md` supersedes
+the primary condition with a regret-selected projection `z`; the hand-feature row is
+retained as an ablation. The raw vocabulary, similarity function, decay rate,
+confidence proxy, projection grammar, interaction width, candidate-set pool, and ARC
+split remain fixed. The ARC slice contains only one final task and one
 geometric context, so it does not establish broad heterogeneous ARC performance.
 Concept-set enumeration is width-bounded. Distribution-shift evidence is controlled
 and synthetic. Universal search remains combinatorial and semidecidable, with the same

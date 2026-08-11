@@ -47,6 +47,8 @@ command but not guarded by any assertion.
 | B2-general: anonymous representation invention, law probes, recursive tree traversal, and malformed controls | confirmed, asserted | `src/representation.rs` |
 | B2-general: Ackermann counterfactual frontier gain and divergent-candidate rejection | confirmed, asserted | `src/recursion_search.rs`; `src/nbe.rs` |
 | B2-guided: relevant ontology yields 122× then 230× recursive-discovery proposal gains while matched irrelevant/misleading controls fail | confirmed, asserted | `src/ontology_guidance.rs`; `ONTOLOGY_GUIDANCE.md` |
+| B2-context-learned: raw observations → regret-selected `z` → oracle-matching held-out allocation, with leakage and universal-lane controls | confirmed, asserted, executable | `src/learned_context.rs`; `src/contextual_guidance.rs`; `LEARNED_CONTEXT.md` |
+| B2-context-learned ARC existence result: learned `z` rank 5, uniform rank 11, protected test verification only | confirmed, asserted, executable | `demo/arc-1/src/main.rs`; `LEARNED_CONTEXT.md` |
 | B3: invented recursion expands proposals to map/append/reverse | confirmed, asserted | `src/typed.rs`; `b3_invented_recursion_expands_proposals_and_recovers_vocabulary` |
 | B3 transfer: invented map(reverse) mirrors unseen 5×4 grid | confirmed, asserted | same B3 regression test |
 

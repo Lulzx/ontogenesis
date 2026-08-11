@@ -165,6 +165,16 @@ interaction-disabled, irrelevant, misleading, and raw controls fail. ARC `built`
 universal proposals remain distinct labeled units. See
 [`CONTEXTUAL_ALLOCATION.md`](CONTEXTUAL_ALLOCATION.md).
 
+**B2-context-learned — the situational basis becomes developmental.** A bounded
+meta-search learns frozen context `z` from raw pre-search measurements by minimizing
+downstream allocation regret. On the recursive holdouts it selects `not`/`parity`,
+solves 2/2 in the oracle's 670 proposals, and rejects collapse (regret 1,237). On the
+preregistered ARC existence task it learns an unnamed numeric relation coordinate
+before protected evaluation and reaches `{mirror,vflip}` at rank 5 versus uniform
+rank 11. Encoder, universal-lambda, and behavior-bank work remain separate; arbitrary
+learned schedules preserve the exact universal lane. See
+[`LEARNED_CONTEXT.md`](LEARNED_CONTEXT.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

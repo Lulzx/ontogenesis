@@ -191,6 +191,28 @@ controls fail. This is a one-task existence result, not an ARC population estima
 and no ARC `built` count is called universal. Full protocol and limits are in
 `CONTEXTUAL_ALLOCATION.md`.
 
+### B2-context-learned — task representation earns its place by regret
+
+The hand-authored context key is no longer the primary condition. A finite meta-search
+enumerates safe projections of raw measurements, freezes each candidate, and retains
+the smallest representation minimizing downstream allocation regret on disjoint
+calibration groups. Protected outputs, identity, solution provenance, ancestry,
+post-freeze fields, duplicate groups, and injected target-derived evidence are
+excluded or rejected.
+
+On the recursive holdouts, learned `z` chooses the oracle's `not` and `parity`: 2/2
+solved in 670 proposals with zero regret, versus uniform 1,318, global 1/2, and
+collapsed-encoder regret 1,237. Interaction, decay/shift adaptation, and unchanged
+universal interleaving remain load-bearing and tested.
+
+On the frozen ARC slice, an encoder selected only from six disjoint generated grid
+tasks chooses an unnamed numeric relation coordinate before seeing real ARC. After rotation calibration
+evidence is admitted, it selects `{mirror,vflip}` for protected `6150a2bd`, matching
+oracle and the old hand-feature ablation at rank 5; uniform takes rank 11 and negative
+controls fail. Encoder selection (16 candidates), evidence acquisition (22 bank
+constructions), and final search are separately reported. This remains a one-task
+existence result. Full protocol and boundaries are in `LEARNED_CONTEXT.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are
@@ -262,6 +284,14 @@ cargo run --release -p arc1 -- contextual
 cargo test -p supsearch contextual_allocation --lib
 cargo test -p supsearch contextual_guidance --lib
 cargo test -p arc1 contextual_arc_transfer_is_frozen_verified_and_deterministic
+```
+
+Learned context representation:
+
+```sh
+cargo test -p supsearch learned_context --lib
+cargo run --release --example contextual_allocation
+cargo run --release -p arc1 -- contextual
 ```
 
 Learned-allocation experiment:
