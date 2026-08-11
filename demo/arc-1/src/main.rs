@@ -23,6 +23,11 @@ use supsearch::{
         ConceptSet, ContextualEvidence, ContextualLedger, EvidenceDerivation, FreezeSpec,
         FrozenPolicy, TaskContext,
     },
+    learned_context::{
+        freeze_policy as freeze_learned_policy, learn_representation,
+        LearnedRepresentation, RawField, RawTaskObservation, RawUtilityEvidence,
+        RepresentationSpec,
+    },
     nbe, parse, recurrence,
     search_accounting::{
         self, AccountingSummary, EvidencePhase, RunAccounting, RunProvenance,
@@ -835,40 +840,7 @@ const CONTEXT_ARC_TRAIN_IDS: [&str; 2] = ["67a3c6ac", "68b16354"];
 const CONTEXT_ARC_CALIBRATION_ID: &str = "3c9b0459";
 const CONTEXT_ARC_HOLDOUT_ID: &str = "6150a2bd";
 
-fn grid_hflip(rows: &[Vec<u32>]) -> Vec<Vec<u32>> {
-    rows.iter()
-        .map(|row| row.iter().rev().copied().collect())
-        .collect()
-}
-
-fn grid_vflip(rows: &[Vec<u32>]) -> Vec<Vec<u32>> {
-    rows.iter().rev().cloned().collect()
-}
-
-fn grid_rot180(rows: &[Vec<u32>]) -> Vec<Vec<u32>> {
-    grid_hflip(&grid_vflip(rows))
-}
-
-/// Generic observable relation over the task's published training pairs. This
-/// uses no test output and names no learned concept or target program.
-fn observable_geometry_relation(task: &ArcTask) -> String {
-    let candidates: [(&str, fn(&[Vec<u32>]) -> Vec<Vec<u32>>); 3] = [
-        ("d4-horizontal", grid_hflip),
-        ("d4-vertical", grid_vflip),
-        ("d4-half-turn", grid_rot180),
-    ];
-    candidates
-        .iter()
-        .find(|(_, transform)| {
-            task.train
-                .iter()
-                .all(|example| transform(&example.input.rows) == example.output.rows)
-        })
-        .map(|(name, _)| (*name).to_string())
-        .unwrap_or_else(|| "non-d4-or-mixed".into())
-}
-
-fn arc_context(task: &ArcTask) -> TaskContext {
+fn hand_arc_context(task: &ArcTask) -> TaskContext {
     let same_shape = task.train.iter().all(|example| {
         example.input.rows.len() == example.output.rows.len()
             && example.input.rows.first().map(Vec::len)
@@ -879,8 +851,70 @@ fn arc_context(task: &ArcTask) -> TaskContext {
         family_id: "arc-d4-geometry".into(),
         duplicate_group_id: task.id.clone(),
         features: std::collections::BTreeMap::from([
-            ("observable-relation".into(), observable_geometry_relation(task)),
+            (
+                "observable-relation".into(),
+                raw_arc_observation(task).fields["raw-0"].value.to_string(),
+            ),
             ("shape-preserving".into(), same_shape.to_string()),
+        ]),
+    }
+}
+
+/// Numeric observations of published training pairs. `raw-0` is a bitset over
+/// four generic rectangular coordinate involutions in a fixed order; no bit is
+/// named after an ARC task, target program, or ontology concept. Other fields
+/// are deliberately plausible but often irrelevant surface measurements.
+fn raw_arc_observation(task: &ArcTask) -> RawTaskObservation {
+    let mut relation_bits = 0i64;
+    for relation in 0..4 {
+        let matches = task.train.iter().all(|example| {
+            let input = &example.input.rows;
+            let output = &example.output.rows;
+            let height = input.len();
+            let width = input.first().map(Vec::len).unwrap_or(0);
+            height == output.len()
+                && output.first().map(Vec::len).unwrap_or(0) == width
+                && (0..height).all(|row| {
+                    (0..width).all(|column| {
+                        let source_row = if relation & 2 == 0 { row } else { height - 1 - row };
+                        let source_column = if relation & 1 == 0 {
+                            column
+                        } else {
+                            width - 1 - column
+                        };
+                        output[row][column] == input[source_row][source_column]
+                    })
+                })
+        });
+        if matches {
+            relation_bits |= 1 << relation;
+        }
+    }
+    let total_cells = task
+        .train
+        .iter()
+        .map(|example| example.input.rows.iter().map(Vec::len).sum::<usize>())
+        .sum::<usize>() as i64;
+    let distinct_colors = task
+        .train
+        .iter()
+        .flat_map(|example| example.input.rows.iter().flatten().copied())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len() as i64;
+    let same_shape = task.train.iter().all(|example| {
+        example.input.rows.len() == example.output.rows.len()
+            && example.input.rows.first().map(Vec::len)
+                == example.output.rows.first().map(Vec::len)
+    });
+    RawTaskObservation {
+        task_id: task.id.clone(),
+        duplicate_group_id: task.id.clone(),
+        fields: std::collections::BTreeMap::from([
+            ("raw-0".into(), RawField::observable(relation_bits, 1)),
+            ("raw-1".into(), RawField::observable(i64::from(same_shape), 1)),
+            ("raw-2".into(), RawField::observable(task.train.len() as i64, 1)),
+            ("raw-3".into(), RawField::observable(total_cells, 1)),
+            ("raw-4".into(), RawField::observable(distinct_colors, 1)),
         ]),
     }
 }
@@ -929,6 +963,35 @@ fn arc_evidence(
     }
 }
 
+fn raw_arc_evidence(
+    task: &ArcTask,
+    concept_ids: &[&str],
+    without: &bank::Outcome,
+    with: &bank::Outcome,
+    opts: &bank::Options,
+    phase: EvidencePhase,
+) -> RawUtilityEvidence {
+    let context = hand_arc_context(task);
+    let ids = concept_ids.iter().map(|id| (*id).to_string()).collect::<Vec<_>>();
+    RawUtilityEvidence {
+        observation: raw_arc_observation(task),
+        without: RunAccounting::from_bank(
+            without,
+            opts,
+            arc_provenance(&context, &[], phase),
+        ),
+        with: RunAccounting::from_bank(
+            with,
+            opts,
+            arc_provenance(&context, &ids, phase),
+        ),
+        concept_ids: ids,
+        age: 0,
+        recorded_epoch: 1,
+        derivation: EvidenceDerivation::default(),
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ArcAllocationCondition {
     name: &'static str,
@@ -941,9 +1004,13 @@ struct ArcAllocationCondition {
 
 #[derive(Clone, Debug)]
 struct ContextualArcReport {
+    learned_representation: LearnedRepresentation,
+    encoder_evidence_accounting: AccountingSummary,
     contextual_policy: FrozenPolicy,
+    hand_policy: FrozenPolicy,
     global_policy: FrozenPolicy,
     contextual: ArcAllocationCondition,
+    hand_features: ArcAllocationCondition,
     global: ArcAllocationCondition,
     uniform: ArcAllocationCondition,
     oracle: ArcAllocationCondition,
@@ -975,7 +1042,7 @@ fn run_arc_condition(
 ) -> ArcAllocationCondition {
     let train = arc_task_to_parse(task).expect("representable ARC training pairs");
     let hidden_test = arc_task_test_to_parse(task).expect("representable ARC test pairs");
-    let context = arc_context(task);
+    let context = hand_arc_context(task);
     let mut runs = Vec::new();
     let mut training_solved = false;
     let mut hidden_test_verified = false;
@@ -1026,7 +1093,7 @@ fn run_arc_raw_condition(
         .solution
         .as_ref()
         .is_some_and(|solution| direct_solves(&hidden_test, solution));
-    let context = arc_context(task);
+    let context = hand_arc_context(task);
     let accounting = search_accounting::aggregate(&[RunAccounting::from_bank(
         &outcome,
         &raw_opts,
@@ -1058,6 +1125,7 @@ fn run_contextual_arc() -> ContextualArcReport {
     let mirror = ConceptSet::singleton("mirror");
     let vflip = ConceptSet::singleton("vflip");
     let pair = ConceptSet::new(["mirror".into(), "vflip".into()]);
+    let candidates = [mirror.clone(), vflip.clone(), pair.clone()];
 
     let measure = |task: &ArcTask, set: &ConceptSet| {
         let parsed = arc_task_to_parse(task).unwrap();
@@ -1073,9 +1141,136 @@ fn run_contextual_arc() -> ContextualArcReport {
     let (mirror_without, mirror_with) = measure(&mirror_task, &mirror);
     let (vflip_without, vflip_with) = measure(&vflip_task, &vflip);
     let (pair_without, pair_with) = measure(&calibration, &pair);
+
+    // Encoder selection gets generated, disjoint pretraining/calibration task
+    // groups. It never sees any real ARC task, protected output, task identity,
+    // or solution trace. Different sizes/seeds prevent exact-example leakage.
+    let generated = |id: &str, relation: usize, seed: u32, dimensions: &[(usize, usize)]| {
+        let train = dimensions
+            .iter()
+            .enumerate()
+            .map(|(example_index, &(height, width))| {
+                let input = (0..height)
+                    .map(|row| {
+                        (0..width)
+                            .map(|column| {
+                                (seed + row as u32 * 3 + column as u32 * 5
+                                    + example_index as u32 * 7)
+                                    % 10
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                let output = (0..height)
+                    .map(|row| {
+                        (0..width)
+                            .map(|column| {
+                                let source_row = if relation & 2 == 0 {
+                                    row
+                                } else {
+                                    height - 1 - row
+                                };
+                                let source_column = if relation & 1 == 0 {
+                                    column
+                                } else {
+                                    width - 1 - column
+                                };
+                                input[source_row][source_column]
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                ArcExample {
+                    input: ArcGrid { rows: input },
+                    output: ArcGrid { rows: output },
+                }
+            })
+            .collect();
+        ArcTask { id: id.into(), train, test: Vec::new() }
+    };
+    let encoder_train_tasks = [
+        generated("generated-mirror-a", 1, 1, &[(2, 3), (3, 5)]),
+        generated("generated-mirror-b", 1, 2, &[(4, 3), (2, 7)]),
+        generated("generated-vflip-a", 2, 3, &[(3, 4), (5, 2)]),
+        generated("generated-vflip-b", 2, 4, &[(4, 5), (6, 3)]),
+    ];
+    let encoder_calibration_tasks = [
+        generated("generated-mirror-cal", 1, 5, &[(3, 7), (5, 4)]),
+        generated("generated-vflip-cal", 2, 6, &[(7, 3), (4, 6)]),
+    ];
+    let build_encoder_records = |task: &ArcTask| {
+        [mirror.clone(), vflip.clone()]
+            .iter()
+            .map(|set| {
+                let (without, with) = measure(task, set);
+                raw_arc_evidence(
+                    task,
+                    &set.0.iter().map(String::as_str).collect::<Vec<_>>(),
+                    &without,
+                    &with,
+                    &opts,
+                    EvidencePhase::Calibration,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let encoder_training = encoder_train_tasks
+        .iter()
+        .flat_map(build_encoder_records)
+        .collect::<Vec<_>>();
+    let encoder_calibration = encoder_calibration_tasks
+        .iter()
+        .flat_map(build_encoder_records)
+        .collect::<Vec<_>>();
+    let encoder_evidence_runs = encoder_training
+        .iter()
+        .chain(&encoder_calibration)
+        .flat_map(|record| [record.without.clone(), record.with.clone()])
+        .collect::<Vec<_>>();
+    let encoder_evidence_accounting = search_accounting::aggregate(&encoder_evidence_runs)
+        .expect("encoder evidence uses only behavior-bank units");
+    let representation_spec = RepresentationSpec {
+        engine: search_accounting::SearchEngine::BehaviorBank,
+        freeze_epoch: 1,
+        decay_per_mille: 900,
+        interactions: true,
+        max_interaction_width: 2,
+        max_projection_width: 2,
+    };
+    let learned_representation = learn_representation(
+        &encoder_training,
+        &encoder_calibration,
+        &candidates,
+        &representation_spec,
+    );
+
+    let raw_utility = vec![
+        raw_arc_evidence(
+            &mirror_task, &["mirror"], &mirror_without, &mirror_with, &opts,
+            EvidencePhase::Training,
+        ),
+        raw_arc_evidence(
+            &vflip_task, &["vflip"], &vflip_without, &vflip_with, &opts,
+            EvidencePhase::Training,
+        ),
+        raw_arc_evidence(
+            &calibration, &["mirror", "vflip"], &pair_without, &pair_with, &opts,
+            EvidencePhase::Calibration,
+        ),
+    ];
+    let contextual_policy = freeze_learned_policy(
+        &learned_representation.encoder,
+        &raw_utility,
+        &raw_arc_observation(&holdout),
+        &candidates,
+        &representation_spec,
+    )
+    .expect("frozen ARC raw observations");
+
+    // The old named-feature condition remains strictly as an ablation.
     let mut ledger = ContextualLedger::default();
     ledger.record(arc_evidence(
-        arc_context(&mirror_task),
+        hand_arc_context(&mirror_task),
         &["mirror"],
         &mirror_without,
         &mirror_with,
@@ -1083,7 +1278,7 @@ fn run_contextual_arc() -> ContextualArcReport {
         EvidencePhase::Training,
     ));
     ledger.record(arc_evidence(
-        arc_context(&vflip_task),
+        hand_arc_context(&vflip_task),
         &["vflip"],
         &vflip_without,
         &vflip_with,
@@ -1091,16 +1286,15 @@ fn run_contextual_arc() -> ContextualArcReport {
         EvidencePhase::Training,
     ));
     ledger.record(arc_evidence(
-        arc_context(&calibration),
+        hand_arc_context(&calibration),
         &["mirror", "vflip"],
         &pair_without,
         &pair_with,
         &opts,
         EvidencePhase::Calibration,
     ));
-    let candidates = [mirror.clone(), vflip.clone(), pair.clone()];
-    let target = arc_context(&holdout);
-    let contextual_policy = ledger.learn(
+    let target = hand_arc_context(&holdout);
+    let hand_policy = ledger.learn(
         &candidates,
         &FreezeSpec {
             target: target.clone(),
@@ -1124,20 +1318,18 @@ fn run_contextual_arc() -> ContextualArcReport {
             max_interaction_width: 2,
         },
     );
-    let interaction_disabled_policy = ledger.learn(
+    let mut no_interaction_spec = representation_spec.clone();
+    no_interaction_spec.interactions = false;
+    let interaction_disabled_policy = freeze_learned_policy(
+        &learned_representation.encoder,
+        &raw_utility,
+        &raw_arc_observation(&holdout),
         &candidates,
-        &FreezeSpec {
-            target: target.clone(),
-            engine: search_accounting::SearchEngine::BehaviorBank,
-            freeze_epoch: 1,
-            decay_per_mille: 900,
-            contextual: true,
-            interactions: false,
-            max_interaction_width: 2,
-        },
-    );
+        &no_interaction_spec,
+    )
+    .expect("interaction ablation");
     let mut shuffled_target = target;
-    shuffled_target.features = arc_context(&mirror_task).features;
+    shuffled_target.features = hand_arc_context(&mirror_task).features;
     let shuffled_policy = ledger.learn(
         &candidates,
         &FreezeSpec {
@@ -1151,6 +1343,7 @@ fn run_contextual_arc() -> ContextualArcReport {
         },
     );
     let contextual_top = [top_arc_set(&contextual_policy)];
+    let hand_top = [top_arc_set(&hand_policy)];
     let global_top = [top_arc_set(&global_policy)];
     let shuffled_top = [top_arc_set(&shuffled_policy)];
     let interaction_disabled_top = [top_arc_set(&interaction_disabled_policy)];
@@ -1159,12 +1352,17 @@ fn run_contextual_arc() -> ContextualArcReport {
     let irrelevant_order = [ConceptSet::singleton("irrelevant-identity")];
     let misleading_order = [ConceptSet::singleton("misleading-projection")];
     ContextualArcReport {
+        learned_representation,
+        encoder_evidence_accounting,
         contextual: run_arc_condition(
-            "contextual",
+            "learned-context",
             &holdout,
             &contextual_top,
             &concepts,
             &opts,
+        ),
+        hand_features: run_arc_condition(
+            "hand-features", &holdout, &hand_top, &concepts, &opts,
         ),
         global: run_arc_condition("global", &holdout, &global_top, &concepts, &opts),
         uniform: run_arc_condition("uniform", &holdout, &uniform_order, &concepts, &opts),
@@ -1193,6 +1391,7 @@ fn run_contextual_arc() -> ContextualArcReport {
         ),
         raw_bounded: run_arc_raw_condition(&holdout, &opts),
         contextual_policy,
+        hand_policy,
         global_policy,
     }
 }
@@ -1205,12 +1404,34 @@ fn contextual_arc() {
         CONTEXT_ARC_TRAIN_IDS, CONTEXT_ARC_CALIBRATION_ID, CONTEXT_ARC_HOLDOUT_ID
     );
     println!(
-        "contextual top={} global top={}",
+        "learned encoder={:?} regret={} collapsed_regret={} candidates={}",
+        report.learned_representation.encoder.kind,
+        report.learned_representation.encoder.calibration_regret,
+        report.learned_representation.encoder.collapsed_regret,
+        report.learned_representation.accounting.candidates_evaluated,
+    );
+    println!(
+        "learned top={} hand-feature top={} global top={}",
         top_arc_set(&report.contextual_policy).0.join("+"),
+        top_arc_set(&report.hand_policy).0.join("+"),
         top_arc_set(&report.global_policy).0.join("+")
+    );
+    println!(
+        "record,engine=context-encoder,condition=learned-z,kind={:?},regret={},collapsed_regret={},candidates={},predictions={},fields_inspected={}",
+        report.learned_representation.encoder.kind,
+        report.learned_representation.encoder.calibration_regret,
+        report.learned_representation.encoder.collapsed_regret,
+        report.learned_representation.accounting.candidates_evaluated,
+        report.learned_representation.accounting.validation_predictions,
+        report.learned_representation.accounting.raw_fields_inspected,
+    );
+    println!(
+        "record,engine=behavior-bank,condition=encoder-evidence,built={},solution_rank=none,universal=false",
+        report.encoder_evidence_accounting.work.comparable_primary_work(),
     );
     for condition in [
         &report.contextual,
+        &report.hand_features,
         &report.global,
         &report.uniform,
         &report.oracle,
@@ -3179,6 +3400,19 @@ mod tests {
             .stack_size(1 << 30)
             .spawn(|| {
                 let report = run_contextual_arc();
+                assert!(report.learned_representation.encoder.retained);
+                assert_eq!(report.learned_representation.encoder.calibration_regret, 0);
+                assert_eq!(report.learned_representation.encoder.collapsed_regret, 4);
+                assert_eq!(report.learned_representation.accounting.candidates_evaluated, 16);
+                assert_eq!(report.learned_representation.accounting.validation_predictions, 32);
+                assert_eq!(
+                    report.encoder_evidence_accounting.work.comparable_primary_work(),
+                    22
+                );
+                assert_eq!(
+                    report.learned_representation.encoder.kind,
+                    supsearch::learned_context::EncoderKind::Projection(vec!["raw-0".into()])
+                );
                 assert_eq!(
                     top_arc_set(&report.contextual_policy),
                     ConceptSet::new(["mirror".into(), "vflip".into()])
@@ -3189,6 +3423,11 @@ mod tests {
                 );
                 assert!(report.contextual.training_solved);
                 assert!(report.contextual.hidden_test_verified);
+                assert!(report.hand_features.hidden_test_verified);
+                assert_eq!(
+                    top_arc_set(&report.hand_policy),
+                    ConceptSet::new(["mirror".into(), "vflip".into()])
+                );
                 assert!(report.oracle.hidden_test_verified);
                 assert!(!report.global.hidden_test_verified);
                 assert!(!report.shuffled.hidden_test_verified);
@@ -3214,12 +3453,12 @@ mod tests {
                 // Replay the frozen winner on the final task. Non-time ARC
                 // counters and independent hidden-test verification are exact.
                 let holdout = load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_HOLDOUT_ID);
-                let original_context = arc_context(&holdout);
+                let original_context = raw_arc_observation(&holdout);
                 let mut hidden_outputs_changed = holdout.clone();
                 for example in &mut hidden_outputs_changed.test {
                     example.output.rows = vec![vec![9]];
                 }
-                assert_eq!(arc_context(&hidden_outputs_changed), original_context);
+                assert_eq!(raw_arc_observation(&hidden_outputs_changed), original_context);
                 let concepts = arc_concept_map();
                 let mut replay_opts = bank_opts(4, 14);
                 replay_opts.fuel = 1_000_000;

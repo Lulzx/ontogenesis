@@ -345,6 +345,10 @@ fn counterfactual_score(evidence: &ContextualEvidence) -> i128 {
     score
 }
 
+pub fn evidence_utility(evidence: &ContextualEvidence) -> i64 {
+    clamp_i64(counterfactual_score(evidence))
+}
+
 fn clamp_i64(value: i128) -> i64 {
     value.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
 }

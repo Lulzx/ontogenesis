@@ -9,6 +9,10 @@ use crate::{
         ConceptSet, ContextualEvidence, ContextualLedger, EvidenceDerivation, FreezeSpec,
         FrozenPolicy, TaskContext,
     },
+    learned_context::{
+        freeze_policy as freeze_learned_policy, learn_representation, LearnedRepresentation,
+        RawField, RawTaskObservation, RawUtilityEvidence, RepresentationSpec,
+    },
     ontology_guidance::{
         self, boolean_identity, boolean_not, heldout_problem, irrelevant_pair_constructor,
         nested_problem, parity_problem, run_developmental_guidance, EXPERIMENT_FUEL,
@@ -55,6 +59,11 @@ impl ContextCondition {
 
 #[derive(Clone, Debug)]
 pub struct ContextualGuidanceReport {
+    pub learned_representation: LearnedRepresentation,
+    pub encoder_evidence_accounting: AccountingSummary,
+    pub learned_single_policy: FrozenPolicy,
+    pub learned_nested_policy: FrozenPolicy,
+    pub learned: ContextCondition,
     pub single_policy: FrozenPolicy,
     pub nested_policy: FrozenPolicy,
     pub global_policy: FrozenPolicy,
@@ -88,6 +97,113 @@ fn context(task: &str, family: &str, representation: &str) -> TaskContext {
         family_id: family.into(),
         duplicate_group_id: task.into(),
         features: BTreeMap::from([("input-representation".into(), representation.into())]),
+    }
+}
+
+#[derive(Default)]
+struct StructuralStats {
+    nodes: i64,
+    lambdas: i64,
+    applications: i64,
+    max_app_spine: i64,
+    max_lambda_prefix: i64,
+}
+
+fn collect_stats(term: &Term, stats: &mut StructuralStats) {
+    stats.nodes += 1;
+    let mut prefix = 0;
+    let mut cursor = term;
+    while let Term::Lam(body) = cursor {
+        prefix += 1;
+        cursor = body;
+    }
+    stats.max_lambda_prefix = stats.max_lambda_prefix.max(prefix);
+    let mut spine = 0;
+    let mut cursor = term;
+    while let Term::App(function, _) = cursor {
+        spine += 1;
+        cursor = function;
+    }
+    stats.max_app_spine = stats.max_app_spine.max(spine);
+    match term {
+        Term::Lam(body) | Term::Prim(body) => {
+            if matches!(term, Term::Lam(_)) {
+                stats.lambdas += 1;
+            }
+            collect_stats(body, stats);
+        }
+        Term::App(function, argument) => {
+            stats.applications += 1;
+            collect_stats(function, stats);
+            collect_stats(argument, stats);
+        }
+        Term::Var(_) | Term::Free(_) => {}
+    }
+}
+
+/// Generic input-only measurements. No field names a task family, target law,
+/// useful concept, expected output, or held-out identity.
+fn raw_problem_observation(
+    task_id: &str,
+    duplicate_group_id: &str,
+    problem: &SearchProblem,
+) -> RawTaskObservation {
+    let mut stats = StructuralStats::default();
+    for example in problem.discovery.iter().chain(&problem.extrapolation) {
+        for argument in &example.arguments {
+            collect_stats(argument, &mut stats);
+        }
+    }
+    RawTaskObservation {
+        task_id: task_id.into(),
+        duplicate_group_id: duplicate_group_id.into(),
+        fields: BTreeMap::from([
+            ("raw-0".into(), RawField::observable(stats.max_app_spine, 1)),
+            (
+                "raw-1".into(),
+                RawField::observable(stats.max_lambda_prefix, 1),
+            ),
+            ("raw-2".into(), RawField::observable(stats.nodes, 1)),
+            ("raw-3".into(), RawField::observable(stats.lambdas, 1)),
+            ("raw-4".into(), RawField::observable(stats.applications, 1)),
+            (
+                "raw-5".into(),
+                RawField::observable(problem.discovery.len() as i64, 1),
+            ),
+        ]),
+    }
+}
+
+fn raw_evidence(
+    observation: RawTaskObservation,
+    concepts: &[&str],
+    without: &SearchOutcome,
+    with: &SearchOutcome,
+) -> RawUtilityEvidence {
+    let context = TaskContext {
+        task_id: observation.task_id.clone(),
+        family_id: "raw-observation".into(),
+        duplicate_group_id: observation.duplicate_group_id.clone(),
+        features: BTreeMap::new(),
+    };
+    let ids = concepts
+        .iter()
+        .map(|id| (*id).to_string())
+        .collect::<Vec<_>>();
+    RawUtilityEvidence {
+        without: RunAccounting::from_universal(
+            without,
+            provenance(&context, &[], EvidencePhase::Training),
+        ),
+        with: RunAccounting::from_universal(
+            with,
+            provenance(&context, &ids, EvidencePhase::Training),
+        ),
+        observation,
+        concept_ids: ids,
+        age: 0,
+        recorded_epoch: 1,
+        derivation: Default::default(),
     }
 }
 
@@ -467,6 +583,99 @@ pub fn run_contextual_guidance() -> ContextualGuidanceReport {
         7,
         EXPERIMENT_FUEL,
     );
+
+    // Learn z from generic syntax measurements. Training and calibration IDs
+    // are disjoint; the reversed-protocol heldouts are not observed until the
+    // encoder and utility ledger have both frozen.
+    let single_raw = raw_problem_observation(
+        "raw-train-single",
+        "raw-train-single",
+        &parity_problem(Vec::new()),
+    );
+    let nested_raw = raw_problem_observation(
+        "raw-train-nested",
+        "raw-train-nested",
+        &nested_problem(Vec::new()),
+    );
+    let mut raw_training = vec![
+        raw_evidence(single_raw.clone(), &["not"], &single_base, &single_not),
+        raw_evidence(
+            single_raw.clone(),
+            &["parity"],
+            &single_base,
+            &single_parity,
+        ),
+        raw_evidence(nested_raw.clone(), &["not"], &nested_base, &nested_not),
+        raw_evidence(nested_raw.clone(), &["parity"], &nested_not, &nested_both),
+    ];
+    let mut single_cal = single_raw;
+    single_cal.task_id = "raw-calibration-single".into();
+    single_cal.duplicate_group_id = "raw-calibration-single".into();
+    let mut nested_cal = nested_raw;
+    nested_cal.task_id = "raw-calibration-nested".into();
+    nested_cal.duplicate_group_id = "raw-calibration-nested".into();
+    let raw_calibration = vec![
+        raw_evidence(single_cal.clone(), &["not"], &single_base, &single_not),
+        raw_evidence(single_cal, &["parity"], &single_base, &single_parity),
+        raw_evidence(nested_cal.clone(), &["not"], &nested_base, &nested_not),
+        raw_evidence(nested_cal.clone(), &["parity"], &nested_not, &nested_both),
+    ];
+    let learned_candidates = [
+        ConceptSet::singleton("not"),
+        ConceptSet::singleton("parity"),
+        ConceptSet::singleton("irrelevant"),
+        ConceptSet::singleton("misleading"),
+    ];
+    let representation_spec = RepresentationSpec {
+        engine: search_accounting::SearchEngine::UniversalLambda,
+        freeze_epoch: 1,
+        decay_per_mille: 850,
+        interactions: false,
+        max_interaction_width: 1,
+        max_projection_width: 2,
+    };
+    let learned_representation = learn_representation(
+        &raw_training,
+        &raw_calibration,
+        &learned_candidates,
+        &representation_spec,
+    );
+    let encoder_evidence_runs = raw_training
+        .iter()
+        .chain(&raw_calibration)
+        .flat_map(|record| [record.without.clone(), record.with.clone()])
+        .collect::<Vec<_>>();
+    let encoder_evidence_accounting = search_accounting::aggregate(&encoder_evidence_runs)
+        .expect("encoder evidence uses only universal-lambda units");
+    // Calibration becomes legitimate historical utility evidence only after
+    // encoder selection; protected heldouts remain absent from both stages.
+    raw_training.extend(raw_calibration);
+    let learned_single_target = raw_problem_observation(
+        "heldout-reversed-single",
+        "heldout-reversed-single",
+        &reversed_parity_problem(Vec::new()),
+    );
+    let learned_nested_target = raw_problem_observation(
+        "heldout-reversed-nested",
+        "heldout-reversed-nested",
+        &heldout_problem(Vec::new()),
+    );
+    let learned_single_policy = freeze_learned_policy(
+        &learned_representation.encoder,
+        &raw_training,
+        &learned_single_target,
+        &learned_candidates,
+        &representation_spec,
+    )
+    .expect("safe frozen single context");
+    let learned_nested_policy = freeze_learned_policy(
+        &learned_representation.encoder,
+        &raw_training,
+        &learned_nested_target,
+        &learned_candidates,
+        &representation_spec,
+    )
+    .expect("safe frozen nested context");
     let mut ledger = ContextualLedger::default();
     ledger.record(evidence(
         single_ctx.clone(),
@@ -530,6 +739,14 @@ pub fn run_contextual_guidance() -> ContextualGuidanceReport {
         &concepts,
         true,
     );
+    let learned_single_order = [top_singleton(&learned_single_policy)];
+    let learned_nested_order = [top_singleton(&learned_nested_policy)];
+    let learned = condition(
+        "learned-context",
+        [&learned_single_order, &learned_nested_order],
+        &concepts,
+        true,
+    );
     let global = condition("global", [&global_top, &global_top], &concepts, true);
     let uniform = condition("uniform", [&uniform_order, &uniform_order], &concepts, true);
     let oracle = condition("oracle", [&oracle_single, &oracle_nested], &concepts, true);
@@ -561,6 +778,11 @@ pub fn run_contextual_guidance() -> ContextualGuidanceReport {
     let contextual_regret_vs_oracle = contextual.proposals().saturating_sub(oracle.proposals());
 
     ContextualGuidanceReport {
+        learned_representation,
+        encoder_evidence_accounting,
+        learned_single_policy,
+        learned_nested_policy,
+        learned,
         single_policy,
         nested_policy,
         global_policy,
@@ -674,6 +896,18 @@ mod tests {
     #[test]
     fn contextual_utility_swaps_concepts_and_matches_oracle_on_disjoint_holdouts() {
         let report = run_contextual_guidance();
+        assert!(report.learned_representation.encoder.retained);
+        assert_eq!(report.learned_representation.encoder.calibration_regret, 0);
+        assert_eq!(
+            top_singleton(&report.learned_single_policy),
+            ConceptSet::singleton("not")
+        );
+        assert_eq!(
+            top_singleton(&report.learned_nested_policy),
+            ConceptSet::singleton("parity")
+        );
+        assert_eq!(report.learned.solved_tasks(), 2);
+        assert_eq!(report.learned.proposals(), report.oracle.proposals());
         assert_eq!(
             top_singleton(&report.single_policy),
             ConceptSet::singleton("not")

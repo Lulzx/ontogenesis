@@ -30,6 +30,8 @@
 //!   policies with explicit leakage rejection.
 //! - [`contextual_guidance`]: heterogeneous recursive holdouts that measure
 //!   contextual allocation against global, uniform, oracle, and controls.
+//! - [`learned_context`]: regret-selected representations of raw observable
+//!   task structure, frozen before they condition contextual allocation.
 
 pub mod acquire;
 pub mod bank;
@@ -39,6 +41,7 @@ pub mod contextual_allocation;
 pub mod contextual_guidance;
 pub mod fixpoint;
 pub mod learned_allocation;
+pub mod learned_context;
 pub mod nbe;
 pub mod ontology_guidance;
 pub mod parse;

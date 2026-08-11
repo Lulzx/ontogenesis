@@ -38,12 +38,41 @@ fn main() {
     let report = run_contextual_guidance();
     println!("Contextual utility over heterogeneous recursive representations");
     println!(
-        "single context top={} | nested context top={} | global top={}",
+        "learned encoder={:?} regret={} collapsed_regret={} encoder_candidates={}",
+        report.learned_representation.encoder.kind,
+        report.learned_representation.encoder.calibration_regret,
+        report.learned_representation.encoder.collapsed_regret,
+        report
+            .learned_representation
+            .accounting
+            .candidates_evaluated,
+    );
+    println!(
+        "learned single top={} | learned nested top={} | hand single={} | hand nested={} | global={}",
+        report.learned_single_policy.ranked[0].concepts.0.join("+"),
+        report.learned_nested_policy.ranked[0].concepts.0.join("+"),
         report.single_policy.ranked[0].concepts.0.join("+"),
         report.nested_policy.ranked[0].concepts.0.join("+"),
         report.global_policy.ranked[0].concepts.0.join("+"),
     );
+    println!(
+        "record,condition=encoder,kind={:?},regret={},collapsed_regret={},candidates={},predictions={},fields_inspected={}",
+        report.learned_representation.encoder.kind,
+        report.learned_representation.encoder.calibration_regret,
+        report.learned_representation.encoder.collapsed_regret,
+        report.learned_representation.accounting.candidates_evaluated,
+        report.learned_representation.accounting.validation_predictions,
+        report.learned_representation.accounting.raw_fields_inspected,
+    );
+    println!(
+        "record,engine=universal-lambda,condition=encoder-evidence,primary_work={},universal=false",
+        report
+            .encoder_evidence_accounting
+            .work
+            .comparable_primary_work(),
+    );
     for condition in [
+        &report.learned,
         &report.contextual,
         &report.global,
         &report.uniform,
