@@ -141,6 +141,30 @@ practical reachability without weakening B2-general's completeness floor. Full
 protocol, measurements, limitations, and reproduction commands are in
 `ONTOLOGY_GUIDANCE.md`.
 
+### B2-learned — prior utility allocates future universal search
+
+The hand-selected ontology prefix is now replaced by a deterministic utility ledger.
+Paired training measurements record proposals, evaluated candidates, solution rank,
+syntax/fuel frontiers, widening cost, age/decay, and provenance. Held-out and
+target-derived evidence is excluded. Learned scores allocate proposal order, syntax
+classes, and fuel; useful concepts receive more, stale concepts less, and harmful
+matched controls less again.
+
+On a held-out anonymous recursive protocol with reversed interpreter/payload order,
+the learned policy discovers the law in 335 proposals, exactly matching the
+hand-designed parity-first oracle. Uniform allocation takes 2,310 proposals. The
+pure universal prefix remains unsolved after 41,272 proposals, giving a proposal-count
+separation of at least 123x. Irrelevant and misleading one-atom controls remain
+unsolved at their matched bound. A deliberately injected held-out utility record is
+skipped and leaves the ranking unchanged.
+
+Every finite learned point is alternated with a point from the unchanged universal
+dovetail; after learned work ends, that dovetail continues forever. Thus learned
+weights change practical allocation but not B2-general's exact qualified completeness
+claim. The ablated learned-only schedule also solves this target but correctly loses
+universal coverage. Protocol, exact counts, controls, ARC-interface assessment, and
+limitations are in `LEARNED_ALLOCATION.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are
@@ -201,5 +225,13 @@ Ontology-guidance experiment:
 
 ```sh
 cargo run --release --example ontology_guided
+cargo test -p supsearch ontology_guidance --lib
+```
+
+Learned-allocation experiment:
+
+```sh
+cargo run --release --example learned_allocation
+cargo test -p supsearch learned_allocation --lib
 cargo test -p supsearch ontology_guidance --lib
 ```

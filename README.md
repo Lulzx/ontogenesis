@@ -142,6 +142,17 @@ control is explicitly falsified, and the finite priority prefix resumes the unch
 fair dovetail. See [`ONTOLOGY_GUIDANCE.md`](ONTOLOGY_GUIDANCE.md) for the protocol and
 reproduction command.
 
+**B2-learned — measured utility becomes search allocation.** Counterfactual costs from
+the earlier `not -> parity -> nested recursion` history populate a decayed utility
+ledger. Without seeing the held-out task, it ranks the acquired parity concept first
+and solves a structurally changed recursive law in 335 proposals: exactly the
+hand-designed oracle cost, versus 2,310 under uniform ontology allocation and an
+unsolved 41,272-proposal pure universal prefix (at least 123x). Irrelevant and
+misleading matched atoms receive negative utility and smaller lanes. Learned points
+alternate with the unchanged universal dovetail, so the bias cannot starve universal
+coverage. See [`LEARNED_ALLOCATION.md`](LEARNED_ALLOCATION.md) for the exact protocol,
+controls, ARC-interface boundary, and reproduction commands.
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.
