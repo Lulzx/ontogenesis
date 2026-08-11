@@ -304,6 +304,16 @@ mod tests {
     }
 
     #[test]
+    fn rejects_divergent_recursive_candidates_with_finite_fuel() {
+        // λr. Ω r mentions the recursive binder but must never hang search.
+        let half = term::lam(term::app(term::var(0), term::var(0)));
+        let omega = term::app(half.clone(), half);
+        let divergent = term::lam(term::app(omega, term::var(0)));
+        assert!(uses_recursive_parameter(&divergent));
+        assert!(validate_functional(&divergent, &problem(), 10_000).is_none());
+    }
+
+    #[test]
     fn rejects_constant_output_training_families_when_controlled() {
         // λr.λn. n zero r recursively descends, but every result is zero.
         let constant_recursive = term::lam(term::lam(term::app(

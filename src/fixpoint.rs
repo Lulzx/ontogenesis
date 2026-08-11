@@ -41,6 +41,9 @@ pub fn unfold(functional: &Rc<Term>) -> Option<Rc<Term>> {
 /// Every probe is a vector because the invented recursive function may have any
 /// finite arity.
 pub fn equation_holds(functional: &Rc<Term>, probes: &[Vec<Rc<Term>>], fuel: i64) -> bool {
+    if probes.is_empty() {
+        return false;
+    }
     let Some(fixed) = synthesize(functional) else {
         return false;
     };
@@ -94,7 +97,7 @@ pub fn mutual_equations_hold(
     component_probes: &[Vec<Vec<Rc<Term>>>],
     fuel: i64,
 ) -> bool {
-    if component_probes.len() != arity {
+    if component_probes.len() != arity || component_probes.iter().any(Vec::is_empty) {
         return false;
     }
     let Some(tuple) = synthesize(functional) else {
@@ -177,6 +180,19 @@ mod tests {
     #[test]
     fn rejects_open_functionals() {
         assert!(synthesize(&term::var(0)).is_none());
+    }
+
+    #[test]
+    fn rejects_incomplete_fixed_point_probe_suites() {
+        let functional = recursive_scott_copy_functional();
+        assert!(synthesize_mutual(&functional, 0).is_none());
+        assert!(!equation_holds(&functional, &[], 10_000));
+        assert!(!mutual_equations_hold(
+            &mutual_parity_functional(),
+            2,
+            &[vec![vec![scott(0)]], vec![]],
+            100_000,
+        ));
     }
 
     fn church_true() -> Rc<Term> {

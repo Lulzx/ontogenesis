@@ -136,14 +136,18 @@ impl Iterator for Dovetail {
     type Item = (u32, u64);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let fuel = self.diagonal - self.size;
-        let out = (u32::try_from(self.size).ok()?, fuel);
-        self.size += 1;
-        if self.size >= self.diagonal {
-            self.diagonal = self.diagonal.checked_add(1)?;
-            self.size = 1;
+        loop {
+            if self.size >= self.diagonal || self.size > u64::from(u32::MAX) {
+                self.diagonal = self.diagonal.checked_add(1)?;
+                self.size = 1;
+            }
+
+            let fuel = self.diagonal - self.size;
+            let size = u32::try_from(self.size)
+                .expect("unrepresentable sizes are skipped before conversion");
+            self.size += 1;
+            return Some((size, fuel));
         }
-        Some(out)
     }
 }
 
@@ -205,5 +209,19 @@ mod tests {
         let target = (14, 50);
         let observed = Dovetail::default().take(5_000).find(|pair| *pair == target);
         assert_eq!(observed, Some(target));
+    }
+
+    #[test]
+    fn diagonal_schedule_crosses_the_u32_size_boundary_without_ending() {
+        let mut schedule = Dovetail {
+            diagonal: u64::from(u32::MAX) + 2,
+            size: u64::from(u32::MAX),
+        };
+        assert_eq!(schedule.next(), Some((u32::MAX, 2)));
+        // The rest of that diagonal has no representable syntax size. Skipping
+        // it must advance to the next diagonal, not end the iterator and lose
+        // all later fuel allocations for small representable terms.
+        assert_eq!(schedule.next(), Some((1, u64::from(u32::MAX) + 2)));
+        assert!(scheduled_stage(1, i64::MAX as u64).is_some());
     }
 }

@@ -141,7 +141,7 @@ fn stack_guard() -> Result<(), Abort> {
         if base == 0 {
             b.set(here);
             Ok(())
-        } else if base.saturating_sub(here) > 1_000_000 {
+        } else if base.abs_diff(here) > 1_000_000 {
             Err(Abort)
         } else {
             Ok(())
@@ -187,6 +187,7 @@ pub fn apply(fv: Rc<Val>, arg: Thunk, fuel: &mut Fuel) -> Result<Rc<Val>, Abort>
 /// Read a value back into a β-normal term. `depth` counts λ-binders entered
 /// during quoting; `Head::Bound(l)` becomes de Bruijn index `depth - 1 - l`.
 pub fn quote(v: &Val, depth: u32, fuel: &mut Fuel) -> Result<Rc<Term>, Abort> {
+    stack_guard()?;
     // Charge fuel per node read back, so normal-form *size* is bounded even
     // when it was cheap to compute (e.g. shared numeral exponentiation).
     fuel.spend()?;
@@ -226,6 +227,7 @@ pub fn quote_hash<H: std::hash::Hasher>(
     fuel: &mut Fuel,
     h: &mut H,
 ) -> Result<(), Abort> {
+    stack_guard()?;
     fuel.spend()?;
     meter_quote();
     match v {
@@ -262,6 +264,7 @@ pub fn quote_hash<H: std::hash::Hasher>(
 /// Structurally compare a value's normal form against a target term while
 /// quoting, without materializing the normal form.
 pub fn quote_eq(v: &Val, t: &Term, depth: u32, fuel: &mut Fuel) -> Result<bool, Abort> {
+    stack_guard()?;
     fuel.spend()?;
     match (v, t) {
         (Val::Lam(env, body), Term::Lam(tb)) => {
@@ -300,5 +303,23 @@ pub fn quote_eq(v: &Val, t: &Term, depth: u32, fuel: &mut Fuel) -> Result<bool, 
             Ok(true)
         }
         _ => Ok(false),
+    }
+}
+
+#[cfg(test)]
+mod stack_tests {
+    use super::*;
+
+    #[test]
+    fn stack_guard_rejects_displacement_in_either_stack_direction() {
+        let here = {
+            let probe = 0u8;
+            &probe as *const u8 as usize
+        };
+        STACK_BASE.with(|base| base.set(here.saturating_sub(2_000_000)));
+        assert_eq!(stack_guard(), Err(Abort));
+        STACK_BASE.with(|base| base.set(here.saturating_add(2_000_000)));
+        assert_eq!(stack_guard(), Err(Abort));
+        STACK_BASE.with(|base| base.set(0));
     }
 }

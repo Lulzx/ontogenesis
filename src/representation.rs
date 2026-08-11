@@ -32,10 +32,18 @@ pub struct RepresentationProbe {
 /// Invent a closed Scott encoding for a nonempty finite sum-of-products
 /// signature. Constructor names and an existing representation are unnecessary.
 pub fn invent(arities: &[usize]) -> Option<Representation> {
-    if arities.is_empty() {
+    let variants = arities.len();
+    if arities.is_empty()
+        || u32::try_from(variants).is_err()
+        || arities.iter().any(|&fields| {
+            u32::try_from(fields).is_err()
+                || variants
+                    .checked_add(fields)
+                    .is_none_or(|binders| u32::try_from(binders).is_err())
+        })
+    {
         return None;
     }
-    let variants = arities.len();
     let constructors = arities
         .iter()
         .enumerate()
@@ -77,12 +85,11 @@ pub fn construct(
     if representation.arities.get(variant).copied()? != fields.len() {
         return None;
     }
+    let constructor = representation.constructors.get(variant)?.clone();
     Some(
         fields
             .iter()
-            .fold(representation.constructors[variant].clone(), |f, x| {
-                term::app(f, x.clone())
-            }),
+            .fold(constructor, |f, x| term::app(f, x.clone())),
     )
 }
 
@@ -95,17 +102,26 @@ pub fn laws_hold(
     probes: &[RepresentationProbe],
     fuel: i64,
 ) -> bool {
-    if !representation
-        .constructors
-        .iter()
-        .chain(std::iter::once(&representation.eliminator))
-        .all(transform::is_closed)
+    if probes.is_empty()
+        || representation.arities.is_empty()
+        || representation.constructors.len() != representation.arities.len()
+        || !representation
+            .constructors
+            .iter()
+            .chain(std::iter::once(&representation.eliminator))
+            .all(transform::is_closed)
     {
         return false;
     }
     probes.iter().all(|probe| {
         probe.fields_by_variant.len() == representation.arities.len()
             && probe.handlers.len() == representation.arities.len()
+            && probe.handlers.iter().all(transform::is_closed)
+            && probe
+                .fields_by_variant
+                .iter()
+                .flatten()
+                .all(transform::is_closed)
             && probe
                 .fields_by_variant
                 .iter()
@@ -187,7 +203,19 @@ mod tests {
 
         let mut drops_fields = rep.clone();
         drops_fields.constructors[2] = drops_fields.constructors[0].clone();
-        assert!(!laws_hold(&drops_fields, &[discovery, held_out], 100_000));
+        assert!(!laws_hold(
+            &drops_fields,
+            &[discovery.clone(), held_out.clone()],
+            100_000
+        ));
+
+        let mut selects_wrong_branch = rep.clone();
+        selects_wrong_branch.constructors.swap(0, 1);
+        assert!(!laws_hold(
+            &selects_wrong_branch,
+            &[discovery, held_out],
+            100_000
+        ));
     }
 
     #[test]
@@ -229,5 +257,29 @@ mod tests {
         assert!(invent(&[]).is_none());
         let rep = invent(&[0, 2]).unwrap();
         assert!(construct(&rep, 1, &[church_bool(true)]).is_none());
+    }
+
+    #[test]
+    fn rejects_malformed_representations_and_incomplete_or_open_probes() {
+        let rep = invent(&[0, 1]).unwrap();
+        assert!(!laws_hold(&rep, &[], 10_000));
+
+        let valid_probe = RepresentationProbe {
+            fields_by_variant: vec![vec![], vec![church_bool(true)]],
+            handlers: vec![church_bool(false), term::lam(term::var(0))],
+        };
+        let mut missing_constructor = rep.clone();
+        missing_constructor.constructors.pop();
+        assert!(!laws_hold(
+            &missing_constructor,
+            &[valid_probe.clone()],
+            10_000
+        ));
+
+        let open_probe = RepresentationProbe {
+            fields_by_variant: vec![vec![], vec![term::var(0)]],
+            handlers: valid_probe.handlers,
+        };
+        assert!(!laws_hold(&rep, &[open_probe], 10_000));
     }
 }
