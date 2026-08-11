@@ -788,9 +788,16 @@ fn classify_task(
     vocab: &[bank::Concept],
     cands: &[(String, Rc<term::Term>)],
     opts: &bank::Options,
+    ho: bool,
 ) -> (Bucket, Option<String>, u64) {
-    // Search gate first: is a program reachable through the vocabulary?
-    let (out, _m) = bank::concept_solve_abl(task, vocab, opts, true);
+    // Search gate first: is a program reachable through the vocabulary? With
+    // `ho` (C8), the pool holds the concept functions too, so higher-order
+    // compositions (map(rev), map(dup), rev(mirror)) are reachable.
+    let (out, _m) = if ho {
+        bank::concept_solve_ho_abl(task, vocab, opts, true)
+    } else {
+        bank::concept_solve_abl(task, vocab, opts, true)
+    };
     if out.solution.is_some() {
         return (Bucket::Solved, None, out.stats.built);
     }
@@ -810,6 +817,7 @@ fn arcdiag(args: &[String]) {
     let mut id_filter: Option<String> = None;
     let mut depth = 3u32;
     let mut budget = 10u64;
+    let mut ho = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -833,6 +841,10 @@ fn arcdiag(args: &[String]) {
                 budget = args[i + 1].parse().unwrap();
                 i += 2;
             }
+            "--ho" => {
+                ho = true;
+                i += 1;
+            }
             other => {
                 if i == 0 {
                     dir = other.to_string();
@@ -855,7 +867,7 @@ fn arcdiag(args: &[String]) {
     let vocab = vocab_concepts(&schemas);
     let cands = expressibility_candidates(&schemas, depth);
     println!(
-        "[arcdiag] installed {} vocab concepts; {} expressibility candidates at depth {depth}",
+        "[arcdiag] installed {} vocab concepts; {} expressibility candidates at depth {depth}; ho={ho}",
         vocab.len(),
         cands.len()
     );
@@ -883,7 +895,7 @@ fn arcdiag(args: &[String]) {
             (Bucket::NotRepresentable, None, 0)
         } else {
             let opts2 = bank_opts(budget, 14);
-            classify_task(&pt.unwrap(), &vocab, &cands, &opts2)
+            classify_task(&pt.unwrap(), &vocab, &cands, &opts2, ho)
         };
         counts[match &bucket {
             Bucket::Solved => 0,
@@ -2001,6 +2013,34 @@ mod tests {
         }
     }
 
+    /// Does `t` contain a subterm `Prim(b)` with `**b == **body`? The C8 claim is
+    /// that a composed solution references a concept through its quotient atom
+    /// (`Prim(reverse)`), so the function argument must appear as a `Prim`.
+    fn term_has_prim(t: &term::Term, body: &Rc<term::Term>) -> bool {
+        match t {
+            term::Term::Prim(b) => **b == **body,
+            term::Term::App(f, a) => term_has_prim(f, body) || term_has_prim(a, body),
+            term::Term::Lam(b) => term_has_prim(b, body),
+            _ => false,
+        }
+    }
+
+    /// Does `t` contain `body` as a *bare* subterm outside any `Prim` wrapper?
+    /// This is the failure mode C8 forbids: embedding reverse's λ-body inline
+    /// (e.g. `Prim(map);(λreverse-body);grid`) instead of `Prim(map);Prim(reverse);grid`.
+    /// A `Prim` is treated as opaque — its inner only expands under evaluation,
+    /// so the body appearing *inside* a `Prim` is exactly the correct atom.
+    fn term_has_raw_subterm(t: &term::Term, body: &Rc<term::Term>) -> bool {
+        match t {
+            term::Term::Prim(_) => false,
+            term::Term::App(f, a) => {
+                term_has_raw_subterm(f, body) || term_has_raw_subterm(a, body)
+            }
+            term::Term::Lam(b) => term_has_raw_subterm(b, body),
+            _ => t == body.as_ref(),
+        }
+    }
+
     /// The closed mirror fold-term must genuinely reflect, not be identity in
     /// disguise. Grounds the probe before it measures value cost.
     #[test]
@@ -2496,7 +2536,7 @@ mod tests {
                 let cands = expressibility_candidates(&s, 2);
                 for (fname, target, sizes) in gridmeta_families() {
                     let fam = transform_family(sizes, target);
-                    let (bucket, comp, _built) = classify_task(&fam, &vocab, &cands, &o);
+                    let (bucket, comp, _built) = classify_task(&fam, &vocab, &cands, &o, false);
                     assert!(
                         matches!(bucket, Bucket::Expressible | Bucket::Solved),
                         "family {fname} must be captured by the vocabulary (got {} comp={comp:?})",
@@ -2536,7 +2576,7 @@ mod tests {
                 let vocab = vocab_concepts(&s);
                 let cands = expressibility_candidates(&s, 2);
                 let fam = transform_family(&[(3, 3), (4, 4)], &mirrored_term);
-                let (bucket, comp, _built) = classify_task(&fam, &vocab, &cands, &o);
+                let (bucket, comp, _built) = classify_task(&fam, &vocab, &cands, &o, false);
                 assert!(
                     matches!(bucket, Bucket::Expressible),
                     "mirror must be EXPRESSIBLE (direct gate) — got {}",
@@ -2570,7 +2610,7 @@ mod tests {
 
                 // vflip: reverse applied directly to the grid → SOLVED, tiny cost.
                 let vflip = arc_task_to_parse(&load_arc_task_by_id(dir, "68b16354")).unwrap();
-                let (b, _c, built) = classify_task(&vflip, &vocab, &cands, &o);
+                let (b, _c, built) = classify_task(&vflip, &vocab, &cands, &o, false);
                 assert!(
                     matches!(b, Bucket::Solved),
                     "real vflip (68b16354) must be SOLVED, got {}",
@@ -2580,7 +2620,7 @@ mod tests {
 
                 // mirror: needs map(rev) — EXPRESSIBLE, not SOLVED (higher-order).
                 let mirror = arc_task_to_parse(&load_arc_task_by_id(dir, "67a3c6ac")).unwrap();
-                let (b, comp, _built) = classify_task(&mirror, &vocab, &cands, &o);
+                let (b, comp, _built) = classify_task(&mirror, &vocab, &cands, &o, false);
                 assert!(
                     matches!(b, Bucket::Expressible),
                     "real mirror (67a3c6ac) must be EXPRESSIBLE, got {}",
@@ -2590,7 +2630,7 @@ mod tests {
 
                 // v-tile: needs map(dup) — EXPRESSIBLE, not SOLVED.
                 let vtile = arc_task_to_parse(&load_arc_task_by_id(dir, "a416b8f3")).unwrap();
-                let (b, comp, _built) = classify_task(&vtile, &vocab, &cands, &o);
+                let (b, comp, _built) = classify_task(&vtile, &vocab, &cands, &o, false);
                 assert!(
                     matches!(b, Bucket::Expressible),
                     "real v-tile (a416b8f3) must be EXPRESSIBLE, got {}",
@@ -2618,11 +2658,115 @@ mod tests {
                 // 2dc579da extracts a non-background sub-region — needs
                 // color/object analysis, well beyond the list-transform vocab.
                 let hard = arc_task_to_parse(&load_arc_task_by_id(ARC_DATA_DIR, "2dc579da")).unwrap();
-                let (b, _c, _built) = classify_task(&hard, &vocab, &cands, &o);
+                let (b, _c, _built) = classify_task(&hard, &vocab, &cands, &o, false);
                 assert!(
                     matches!(b, Bucket::RequiresNew),
                     "region-extraction (2dc579da) must be REQUIRES_NEW, got {}",
                     bucket_label(&b)
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// C8 — the decisive causal claim, pinned on real ARC tasks: the 4 EXPRESSIBLE
+    /// tasks (mirror `67a3c6ac`, v-tile `a416b8f3`, rotation `3c9b0459`/`6150a2bd`)
+    /// are expressible as compositions of the discovered vocabulary, yet the
+    /// baseline search gate cannot reach them (ho=false → EXPRESSIBLE). Upgrading
+    /// the search to hold first-class concept values (ho=true) moves them into
+    /// SOLVED — WITHOUT adding any new concepts or schemas. The ontology is frozen;
+    /// only the reasoner's composition power changed. That is the whole claim: the
+    /// ontology already contained the solutions; the baseline search simply could
+    /// not compose higher-order concepts.
+    #[test]
+    fn c8_higher_order_moves_real_expressible_to_solved() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = opts();
+                let s = discover_schemas(&o).expect("vocabulary must be discovered");
+                let vocab = vocab_concepts(&s);
+                let cands = expressibility_candidates(&s, 2);
+                for id in ["67a3c6ac", "a416b8f3", "3c9b0459", "6150a2bd"] {
+                    let t = arc_task_to_parse(&load_arc_task_by_id(ARC_DATA_DIR, id)).unwrap();
+                    let (b_base, _c, _built) = classify_task(&t, &vocab, &cands, &o, false);
+                    assert!(
+                        matches!(b_base, Bucket::Expressible),
+                        "baseline {id} must be EXPRESSIBLE, got {}",
+                        bucket_label(&b_base)
+                    );
+                    let (b_ho, _c, _built) = classify_task(&t, &vocab, &cands, &o, true);
+                    assert!(
+                        matches!(b_ho, Bucket::Solved),
+                        "higher-order {id} must move to SOLVED, got {}",
+                        bucket_label(&b_ho)
+                    );
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// C8 on the synthetic families: mirror, rotation, and v-tile (all higher-order
+    /// compositions — map(rev), rev∘map(rev), map(dup)) were EXPRESSIBLE-but-not-
+    /// SOLVED under the baseline search; under first-class concept values they
+    /// must be SOLVED. Mirrors the real-task claim on tasks whose composition is
+    /// known exactly.
+    #[test]
+    fn c8_synthetic_mirror_higher_order_solved() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = opts();
+                let s = discover_schemas(&o).expect("vocabulary must be discovered");
+                let vocab = vocab_concepts(&s);
+                let cands = expressibility_candidates(&s, 2);
+                let families: [(&str, &dyn Fn(usize, usize) -> Rc<term::Term>); 3] = [
+                    ("mirror", &mirrored_term),
+                    ("rotation", &rotated_term),
+                    ("v-tile", &vtiled_term),
+                ];
+                for (fname, target) in families {
+                    let fam = transform_family(&[(3, 3), (5, 5)], target);
+                    let (b, _c, _built) = classify_task(&fam, &vocab, &cands, &o, true);
+                    assert!(
+                        matches!(b, Bucket::Solved),
+                        "synthetic {fname} must be SOLVED under higher-order search, got {}",
+                        bucket_label(&b)
+                    );
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// C8 — the load-bearing representation detail. When the search composes map
+    /// over the concept `reverse`, the returned solution must reference reverse as
+    /// the quotient atom `Prim(reverse)`, NOT embed reverse's λ-body inline. The
+    /// emitted program is `Prim(map);Prim(reverse);grid`, so the concept appears
+    /// as an atom and is only expanded under evaluation. Asserting this pins that
+    /// first-class concept values stay quotient atoms through composition.
+    #[test]
+    fn c8_solution_uses_prim_for_function_argument() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = opts();
+                let s = discover_schemas(&o).expect("vocabulary must be discovered");
+                let vocab = vocab_concepts(&s);
+                let mirror = transform_family(&[(3, 3), (5, 5)], &mirrored_term);
+                let (out, _m) = bank::concept_solve_ho_abl(&mirror, &vocab, &o, true);
+                let sol = out.solution.expect("mirror must be solved under ho");
+                assert!(
+                    term_has_prim(&sol, &s.reverse),
+                    "mirror solution must contain Prim(reverse), got: {sol:?}"
+                );
+                assert!(
+                    !term_has_raw_subterm(&sol, &s.reverse),
+                    "mirror solution must NOT embed reverse's λ-body inline, got: {sol:?}"
                 );
             })
             .unwrap()

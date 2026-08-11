@@ -562,6 +562,29 @@ fn val_hash(v: &Val, fuel: &mut Fuel) -> Option<u64> {
     Some(h.finish())
 }
 
+/// The single identity-key abstraction for a value, used uniformly for the task
+/// arguments, the (optionally seeded) concept-value pool entries, the generated
+/// candidates, and the target. Keeping every site on this one function guarantees
+/// concept seeds enter `seen` through exactly the same structural/canonical mode
+/// as ordinary generated entries — otherwise the initial and generated pool states
+/// could diverge in dedup semantics.
+///
+/// Canonical mode bounds the canonicalizer by `opts.fuel` (the same budget the
+/// engine uses); the structural fallback is bounded by `struct_fuel`, which callers
+/// set per site to preserve historical budgets (targets got a near-unbounded
+/// budget, generated candidates got 2048, seeds got `opts.fuel`).
+fn value_key(v: &Val, use_canon: bool, struct_fuel: i64, opts: &Options) -> Option<u64> {
+    if use_canon {
+        let mut fuel = Fuel(opts.fuel);
+        let mut h = DefaultHasher::new();
+        crate::canon::canonicalize(v, &mut fuel, &mut h)
+            .ok()
+            .map(|cv| cv.key())
+    } else {
+        val_hash(v, &mut Fuel(struct_fuel))
+    }
+}
+
 /// Condition C — a search that *thinks through* its concepts.
 ///
 /// The raw bank (`solve`) re-derives a concept's expansion from scratch, and
@@ -830,6 +853,43 @@ pub fn concept_solve_abl(
     opts: &Options,
     use_canon: bool,
 ) -> (Outcome, Meters) {
+    concept_solve_internal(task, concepts, opts, use_canon, false)
+}
+
+/// Higher-order quotient search (C8): identical to [`concept_solve_abl`] except
+/// the pool is additionally seeded with each installed concept's body as a
+/// function-valued entry, so higher-order concepts (`map`, `compose`) can take
+/// other concepts as arguments — e.g. `map` applied to `(reverse, grid)` yields
+/// the mirror. No new concepts are added; the ontology is frozen. Only the
+/// search language changes: it can now hold function-typed intermediates.
+///
+/// The decisive diagnostic test: rerun the 400-task arcdiag with this engine and
+/// the 4 EXPRESSIBLE tasks (mirror/v-tile/rotation) should move into SOLVED
+/// without any ontology growth — SOLVED 4→8, EXPRESSIBLE 4→0.
+///
+/// This is a lib-only API entry point consumed by the arc1 crate. The main
+/// binary compiles its own private copy of this module (which does not call it),
+/// so keep it in the public API without a dead-code warning from that copy.
+#[allow(dead_code)]
+pub fn concept_solve_ho_abl(
+    task: &Task,
+    concepts: &[Concept],
+    opts: &Options,
+    use_canon: bool,
+) -> (Outcome, Meters) {
+    concept_solve_internal(task, concepts, opts, use_canon, true)
+}
+
+/// Shared body of the canonical-keying quotient search (condition C). When
+/// `seed_concepts`, each concept's body (arity ≥ 1) is also seeded into the pool
+/// as a function-valued entry (its closure), alongside the task-argument values.
+fn concept_solve_internal(
+    task: &Task,
+    concepts: &[Concept],
+    opts: &Options,
+    use_canon: bool,
+    seed_concepts: bool,
+) -> (Outcome, Meters) {
     let start = Instant::now();
     let k = task.arity as u32;
     let n_tests = task.tests.len();
@@ -851,6 +911,8 @@ pub fn concept_solve_abl(
         }
     }
     // Target identity: canonical keys if `use_canon`, else structural hashes.
+    // The near-unbounded structural budget (i64::MAX/2) preserves the historical
+    // target path.
     let mut target_keys: Vec<u64> = Vec::with_capacity(n_tests);
     for nf in &target {
         let mut fuel = Fuel(opts.fuel);
@@ -858,16 +920,7 @@ pub fn concept_solve_abl(
             Ok(v) => v,
             Err(_) => return (Outcome { solution: None, stats: Stats::default() }, m),
         };
-        let key = if use_canon {
-            let mut h = DefaultHasher::new();
-            match crate::canon::canonicalize(&v, &mut fuel, &mut h) {
-                Ok(cv) => Some(cv.key()),
-                Err(_) => return (Outcome { solution: None, stats: Stats::default() }, m),
-            }
-        } else {
-            val_hash(&v, &mut Fuel(i64::MAX / 2))
-        };
-        match key {
+        match value_key(&v, use_canon, i64::MAX / 2, opts) {
             Some(k) => target_keys.push(k),
             None => return (Outcome { solution: None, stats: Stats::default() }, m),
         }
@@ -891,10 +944,44 @@ pub fn concept_solve_abl(
         });
     }
 
+    // C8 higher-order search: seed each concept's body as a function-valued pool
+    // entry (its closure), so higher-order concepts (map, compose) can receive
+    // other concepts as arguments — e.g. map applied to (reverse, grid) → mirror.
+    // Function-valued entries hash fine (quote_hash/canonicalize handle Val::Lam)
+    // and never equal a grid target, so they enable composition without false
+    // solves. `c.body` is the closed λ-term; its eval'd value is the closure.
+    //
+    // Load-bearing: the entry's TERM is `Prim(c.body)` — the quotient atom — not
+    // `c.body` itself. When the search composes (map, reverse, grid) it must emit
+    // `Prim(map);Prim(reverse);grid`, so the returned program references the
+    // concept as an atom and only ever expands it under evaluation, rather than
+    // embedding reverse's λ-body inline. The runtime value is still the evaluated
+    // closure; only the emitted term differs.
+    if seed_concepts {
+        for c in concepts {
+            if c.arity == 0 {
+                continue;
+            }
+            // A closed concept body evaluates to the same closure in the empty
+            // env across tests, so eval once and replicate the Rc across tests.
+            let mut fuel = Fuel(opts.fuel);
+            match eval(&empty, &c.body, &mut fuel) {
+                Ok(v) => {
+                    let vals = std::iter::repeat(v).take(n_tests).collect();
+                    pool.push(PoolEntry {
+                        term: Rc::new(Term::Prim(c.body.clone())),
+                        vals,
+                    });
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+
     let mut seen: HashSet<Vec<u64>> = HashSet::new();
     for e in &pool {
         let hashes: Vec<u64> = (0..n_tests)
-            .map(|j| val_hash(&e.vals[j], &mut Fuel(opts.fuel)).unwrap_or(0))
+            .map(|j| value_key(&e.vals[j], use_canon, opts.fuel, opts).unwrap_or(0))
             .collect();
         if hashes == target_keys {
             let mut sol = e.term.clone();
@@ -967,27 +1054,19 @@ pub fn concept_solve_abl(
                     for &ti in &tuple {
                         term = app(term, pool[ti].term.clone());
                     }
-                    // Identity of the tuple's values: canonical keys (full eval
-                    // budget, O(1) for numerals) OR structural hash (2048 cap).
+                    // Identity of the tuple's values: same unified key abstraction
+                    // as the seeds and target (canonical keys OR structural hash),
+                    // with the historical 2048 structural budget for candidates.
                     let mut keys = Vec::with_capacity(n_tests);
                     let mut ok_key = true;
                     for j in 0..n_tests {
-                        let key = if use_canon {
-                            let mut fuel = Fuel(opts.fuel);
-                            let mut h = DefaultHasher::new();
-                            match crate::canon::canonicalize(&vs[j], &mut fuel, &mut h) {
-                                Ok(cv) => Some(cv.key()),
-                                Err(_) => {
-                                    m.canon_aborts += 1;
-                                    None
-                                }
-                            }
-                        } else {
-                            val_hash(&vs[j], &mut Fuel(2048))
-                        };
+                        let key = value_key(&vs[j], use_canon, 2048, opts);
                         match key {
                             Some(k) => keys.push(k),
                             None => {
+                                if use_canon {
+                                    m.canon_aborts += 1;
+                                }
                                 ok_key = false;
                                 break;
                             }
@@ -1009,7 +1088,10 @@ pub fn concept_solve_abl(
                             },
                             m,
                         );
-                    } else if seen.insert(keys.clone()) && additions.len() < pool_cap {
+                    } else if seen.insert(keys.clone())
+                        && additions.len() < pool_cap
+                        && (!seed_concepts || pool.len() + additions.len() < pool_cap)
+                    {
                         additions.push(PoolEntry { term, vals: vs });
                     }
                 }
@@ -1031,7 +1113,15 @@ pub fn concept_solve_abl(
             break;
         }
         pool.extend(additions);
-        if pool.len() >= pool_cap || pool.len() == before {
+        // Baseline keeps its historical single-round bound: stop as soon as the
+        // pool hits the cap (its pool starts at just the task args, so this fires
+        // after round 1). The higher-order path (seed_concepts) instead keeps
+        // composing until no new distinct value appears — round 2 is what applies
+        // `reverse` to the round-1 mirror grid to reach rotation. Both paths stay
+        // memory-bounded at `pool_cap`: the additions guard above refuses to grow
+        // the pool beyond it, so the seeded loop stops adding once the pool fills
+        // and only continues enumeration, which the time budget bounds.
+        if !seed_concepts && (pool.len() >= pool_cap || pool.len() == before) {
             break;
         }
     }
