@@ -20,6 +20,8 @@
 //! - [`recursion_search`]: fair universal search for recursive functionals.
 //! - [`representation`]: invention of anonymous data encodings and eliminators.
 //! - [`universal`]: uncapped lambda-term enumeration with resource dovetailing.
+//! - [`ontology_guidance`]: measured ontology-biased recursive discovery with
+//!   the fair universal schedule retained as a fallback.
 
 pub mod acquire;
 pub mod bank;
@@ -27,6 +29,7 @@ pub mod bootstrap;
 pub mod canon;
 pub mod fixpoint;
 pub mod nbe;
+pub mod ontology_guidance;
 pub mod parse;
 pub mod recurrence;
 pub mod recursion_search;

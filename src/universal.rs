@@ -14,6 +14,7 @@
 
 use crate::term::{self, Term};
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::rc::Rc;
 
 /// All well-scoped terms of one exact size at the given binder depth.
@@ -162,6 +163,38 @@ pub fn scheduled_stage(syntax_size: u32, evaluation_fuel: u64) -> Option<u64> {
     }
 }
 
+/// A finite ontology-biased prefix followed by the ordinary fair diagonal.
+///
+/// The prefix may spend early work on promising syntax sizes at useful fuel,
+/// but cannot remove any universal resource point: after finitely many calls,
+/// iteration is byte-for-byte [`Dovetail`]. Thus learned search bias changes
+/// time-to-first-test without weakening the completeness floor.
+#[derive(Debug, Clone)]
+pub struct PrioritizedDovetail {
+    priority: VecDeque<(u32, u64)>,
+    fallback: Dovetail,
+}
+
+impl PrioritizedDovetail {
+    pub fn new(priority: impl IntoIterator<Item = (u32, u64)>) -> Self {
+        Self {
+            priority: priority
+                .into_iter()
+                .filter(|(size, fuel)| *size > 0 && *fuel > 0)
+                .collect(),
+            fallback: Dovetail::default(),
+        }
+    }
+}
+
+impl Iterator for PrioritizedDovetail {
+    type Item = (u32, u64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.priority.pop_front().or_else(|| self.fallback.next())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,5 +256,13 @@ mod tests {
         // all later fuel allocations for small representable terms.
         assert_eq!(schedule.next(), Some((1, u64::from(u32::MAX) + 2)));
         assert!(scheduled_stage(1, i64::MAX as u64).is_some());
+    }
+
+    #[test]
+    fn finite_priority_prefix_preserves_the_exact_universal_fallback() {
+        let prefix = [(7, 10_000), (8, 10_000)];
+        let got: Vec<_> = PrioritizedDovetail::new(prefix).take(10).collect();
+        assert_eq!(&got[..2], &prefix);
+        assert_eq!(&got[2..], &Dovetail::default().take(8).collect::<Vec<_>>());
     }
 }

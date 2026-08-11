@@ -84,7 +84,13 @@ pub fn force(th: &Thunk, fuel: &mut Fuel) -> Result<Rc<Val>, Abort> {
 
 thread_local! {
     static STACK_BASE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static STACK_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
+
+// Rust's test harness and embedders may use stacks much smaller than the
+// command-line worker's explicit 1 GiB stack. Leave enough headroom for
+// unwinding, destructors, and callers outside the evaluator.
+const STACK_LIMIT_BYTES: usize = 512_000;
 
 // Ablation metering: coarse counters for where the "materializing semantic
 // values" wall physically sits. Off by default (near-zero overhead when off);
@@ -131,26 +137,41 @@ fn meter_quote() {
 /// Search deliberately encounters divergent terms, so fuel alone cannot be
 /// allowed to turn a large budget into a process-level stack overflow.
 #[inline]
-fn stack_guard() -> Result<(), Abort> {
+fn stack_guard() -> Result<StackFrame, Abort> {
     let here = {
         let probe = 0u8;
         &probe as *const u8 as usize
     };
-    STACK_BASE.with(|b| {
-        let base = b.get();
-        if base == 0 {
-            b.set(here);
-            Ok(())
-        } else if base.abs_diff(here) > 1_000_000 {
-            Err(Abort)
-        } else {
-            Ok(())
-        }
+    STACK_DEPTH.with(|depth| {
+        let active = depth.get();
+        STACK_BASE.with(|base| {
+            if active == 0 {
+                base.set(here);
+            } else if base.get().abs_diff(here) > STACK_LIMIT_BYTES {
+                return Err(Abort);
+            }
+            depth.set(active + 1);
+            Ok(StackFrame)
+        })
     })
 }
 
+struct StackFrame;
+
+impl Drop for StackFrame {
+    fn drop(&mut self) {
+        STACK_DEPTH.with(|depth| {
+            let remaining = depth.get() - 1;
+            depth.set(remaining);
+            if remaining == 0 {
+                STACK_BASE.with(|base| base.set(0));
+            }
+        });
+    }
+}
+
 pub fn eval(env: &Env, t: &Rc<Term>, fuel: &mut Fuel) -> Result<Rc<Val>, Abort> {
-    stack_guard()?;
+    let _stack = stack_guard()?;
     match t.as_ref() {
         Term::Var(i) => {
             let idx = env.len() - 1 - *i as usize;
@@ -187,7 +208,7 @@ pub fn apply(fv: Rc<Val>, arg: Thunk, fuel: &mut Fuel) -> Result<Rc<Val>, Abort>
 /// Read a value back into a β-normal term. `depth` counts λ-binders entered
 /// during quoting; `Head::Bound(l)` becomes de Bruijn index `depth - 1 - l`.
 pub fn quote(v: &Val, depth: u32, fuel: &mut Fuel) -> Result<Rc<Term>, Abort> {
-    stack_guard()?;
+    let _stack = stack_guard()?;
     // Charge fuel per node read back, so normal-form *size* is bounded even
     // when it was cheap to compute (e.g. shared numeral exponentiation).
     fuel.spend()?;
@@ -227,7 +248,7 @@ pub fn quote_hash<H: std::hash::Hasher>(
     fuel: &mut Fuel,
     h: &mut H,
 ) -> Result<(), Abort> {
-    stack_guard()?;
+    let _stack = stack_guard()?;
     fuel.spend()?;
     meter_quote();
     match v {
@@ -264,7 +285,7 @@ pub fn quote_hash<H: std::hash::Hasher>(
 /// Structurally compare a value's normal form against a target term while
 /// quoting, without materializing the normal form.
 pub fn quote_eq(v: &Val, t: &Term, depth: u32, fuel: &mut Fuel) -> Result<bool, Abort> {
-    stack_guard()?;
+    let _stack = stack_guard()?;
     fuel.spend()?;
     match (v, t) {
         (Val::Lam(env, body), Term::Lam(tb)) => {
@@ -316,10 +337,23 @@ mod stack_tests {
             let probe = 0u8;
             &probe as *const u8 as usize
         };
-        STACK_BASE.with(|base| base.set(here.saturating_sub(2_000_000)));
-        assert_eq!(stack_guard(), Err(Abort));
-        STACK_BASE.with(|base| base.set(here.saturating_add(2_000_000)));
-        assert_eq!(stack_guard(), Err(Abort));
+        STACK_DEPTH.with(|depth| depth.set(1));
+        STACK_BASE.with(|base| base.set(here.saturating_sub(STACK_LIMIT_BYTES * 2)));
+        assert!(matches!(stack_guard(), Err(Abort)));
+        STACK_BASE.with(|base| base.set(here.saturating_add(STACK_LIMIT_BYTES * 2)));
+        assert!(matches!(stack_guard(), Err(Abort)));
+        STACK_DEPTH.with(|depth| depth.set(0));
         STACK_BASE.with(|base| base.set(0));
+    }
+
+    #[test]
+    fn stack_guard_resets_after_each_top_level_call_chain() {
+        let outer = stack_guard().unwrap();
+        let inner = stack_guard().unwrap();
+        STACK_DEPTH.with(|depth| assert_eq!(depth.get(), 2));
+        drop(inner);
+        drop(outer);
+        STACK_DEPTH.with(|depth| assert_eq!(depth.get(), 0));
+        STACK_BASE.with(|base| assert_eq!(base.get(), 0));
     }
 }

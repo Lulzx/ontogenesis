@@ -19,6 +19,7 @@ use crate::{
 };
 use std::collections::HashSet;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
 pub struct Example {
@@ -52,6 +53,87 @@ pub struct RecursiveCandidate {
     pub fuel: u64,
 }
 
+/// Reproducible work counters for a finite, ontology-prioritized search prefix.
+/// Wall time is reported for experiments but deliberately excluded from tests.
+#[derive(Clone, Debug, Default)]
+pub struct SearchMetrics {
+    pub resource_points: u64,
+    pub proposals: u64,
+    pub evaluated_candidates: u64,
+    pub max_syntax_size: u32,
+    pub evaluation_fuel: u64,
+    pub wall_time: Duration,
+}
+
+#[derive(Clone, Debug)]
+pub struct SearchOutcome {
+    pub candidate: Option<RecursiveCandidate>,
+    pub metrics: SearchMetrics,
+}
+
+/// Exhaustively search sizes `1..=max_syntax_size` at one diagnostic fuel,
+/// stopping at the first admitted functional in deterministic grammar order.
+///
+/// This is the finite priority prefix used to measure learned search bias. A
+/// complete policy follows it with [`universal::PrioritizedDovetail`], whose
+/// finite-prefix theorem preserves every point of the universal schedule.
+pub fn search_priority_prefix(
+    problem: &SearchProblem,
+    max_syntax_size: u32,
+    fuel: u64,
+) -> SearchOutcome {
+    let start = Instant::now();
+    let mut metrics = SearchMetrics {
+        max_syntax_size,
+        evaluation_fuel: fuel,
+        ..SearchMetrics::default()
+    };
+    let Ok(fuel_i64) = i64::try_from(fuel) else {
+        metrics.wall_time = start.elapsed();
+        return SearchOutcome {
+            candidate: None,
+            metrics,
+        };
+    };
+    if !problem_is_valid(problem, fuel_i64) {
+        metrics.wall_time = start.elapsed();
+        return SearchOutcome {
+            candidate: None,
+            metrics,
+        };
+    }
+
+    for syntax_size in 1..=max_syntax_size {
+        metrics.resource_points += 1;
+        for functional in universal::terms_exact(syntax_size, 0, &problem.atoms) {
+            metrics.proposals += 1;
+            if problem.require_recursive_reference && !uses_recursive_parameter(&functional) {
+                continue;
+            }
+            metrics.evaluated_candidates += 1;
+            if let Some(executable) =
+                validate_functional_for_valid_problem(&functional, problem, fuel_i64)
+            {
+                metrics.wall_time = start.elapsed();
+                return SearchOutcome {
+                    candidate: Some(RecursiveCandidate {
+                        functional,
+                        executable,
+                        syntax_size,
+                        fuel,
+                    }),
+                    metrics,
+                };
+            }
+        }
+    }
+    metrics.wall_time = start.elapsed();
+    SearchOutcome {
+        candidate: None,
+        metrics,
+    }
+}
+
 /// Test one proposed functional with three independent gates:
 ///
 /// 1. it reproduces discovery behaviors;
@@ -62,9 +144,17 @@ pub fn validate_functional(
     problem: &SearchProblem,
     fuel: i64,
 ) -> Option<Rc<Term>> {
-    if problem.discovery.is_empty()
-        || problem.extrapolation.is_empty()
+    if !problem_is_valid(problem, fuel)
         || (problem.require_recursive_reference && !uses_recursive_parameter(functional))
+    {
+        return None;
+    }
+    validate_functional_for_valid_problem(functional, problem, fuel)
+}
+
+fn problem_is_valid(problem: &SearchProblem, fuel: i64) -> bool {
+    !(problem.discovery.is_empty()
+        || problem.extrapolation.is_empty()
         || (problem.require_distinct_outputs && !targets_vary(problem, fuel))
         || problem
             .atoms
@@ -76,10 +166,14 @@ pub fn validate_functional(
                     .chain(&problem.extrapolation)
                     .flat_map(|e| e.arguments.iter().chain(std::iter::once(&e.expected))),
             )
-            .any(|t| !crate::transform::is_closed(t))
-    {
-        return None;
-    }
+            .any(|t| !crate::transform::is_closed(t)))
+}
+
+fn validate_functional_for_valid_problem(
+    functional: &Rc<Term>,
+    problem: &SearchProblem,
+    fuel: i64,
+) -> Option<Rc<Term>> {
     let executable = fixpoint::synthesize(functional)?;
     if !examples_hold(&executable, &problem.discovery, fuel)
         || !fixpoint::equation_holds(
@@ -117,10 +211,16 @@ pub fn search_stage(
     let Ok(fuel_i64) = i64::try_from(fuel) else {
         return Vec::new();
     };
+    if !problem_is_valid(problem, fuel_i64) {
+        return Vec::new();
+    }
     universal::terms_exact(syntax_size, 0, &problem.atoms)
         .into_iter()
         .filter_map(|functional| {
-            let executable = validate_functional(&functional, problem, fuel_i64)?;
+            if problem.require_recursive_reference && !uses_recursive_parameter(&functional) {
+                return None;
+            }
+            let executable = validate_functional_for_valid_problem(&functional, problem, fuel_i64)?;
             Some(RecursiveCandidate {
                 functional,
                 executable,
