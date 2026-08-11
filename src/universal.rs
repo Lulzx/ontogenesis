@@ -175,6 +175,46 @@ pub struct PrioritizedDovetail {
     fallback: Dovetail,
 }
 
+/// Alternate every finite learned-priority point with one unchanged universal
+/// point, then continue the universal diagonal forever. Unlike a prefix-only
+/// policy, the universal lane receives a permanently nonzero allocation even
+/// while learned work remains.
+#[derive(Debug, Clone)]
+pub struct InterleavedDovetail {
+    priority: VecDeque<(u32, u64)>,
+    fallback: Dovetail,
+    universal_turn: bool,
+}
+
+impl InterleavedDovetail {
+    pub fn new(priority: impl IntoIterator<Item = (u32, u64)>) -> Self {
+        Self {
+            priority: priority
+                .into_iter()
+                .filter(|(size, fuel)| *size > 0 && *fuel > 0)
+                .collect(),
+            fallback: Dovetail::default(),
+            universal_turn: false,
+        }
+    }
+}
+
+impl Iterator for InterleavedDovetail {
+    type Item = (u32, u64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.priority.is_empty() {
+            return self.fallback.next();
+        }
+        self.universal_turn = !self.universal_turn;
+        if self.universal_turn {
+            self.priority.pop_front()
+        } else {
+            self.fallback.next()
+        }
+    }
+}
+
 impl PrioritizedDovetail {
     pub fn new(priority: impl IntoIterator<Item = (u32, u64)>) -> Self {
         Self {
@@ -264,5 +304,19 @@ mod tests {
         let got: Vec<_> = PrioritizedDovetail::new(prefix).take(10).collect();
         assert_eq!(&got[..2], &prefix);
         assert_eq!(&got[2..], &Dovetail::default().take(8).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn learned_priority_cannot_starve_the_interleaved_universal_lane() {
+        let priority = [(7, 100_000), (6, 50_000), (5, 10_000)];
+        let got: Vec<_> = InterleavedDovetail::new(priority).take(10).collect();
+        assert_eq!(got[0], priority[0]);
+        assert_eq!(got[2], priority[1]);
+        assert_eq!(got[4], priority[2]);
+        let universal = Dovetail::default().take(7).collect::<Vec<_>>();
+        assert_eq!(
+            vec![got[1], got[3], got[5], got[6], got[7], got[8], got[9]],
+            universal
+        );
     }
 }

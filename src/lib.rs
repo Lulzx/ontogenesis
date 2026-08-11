@@ -22,12 +22,15 @@
 //! - [`universal`]: uncapped lambda-term enumeration with resource dovetailing.
 //! - [`ontology_guidance`]: measured ontology-biased recursive discovery with
 //!   the fair universal schedule retained as a fallback.
+//! - [`learned_allocation`]: utility-ledger learning and deterministic resource
+//!   allocation over ontology concepts.
 
 pub mod acquire;
 pub mod bank;
 pub mod bootstrap;
 pub mod canon;
 pub mod fixpoint;
+pub mod learned_allocation;
 pub mod nbe;
 pub mod ontology_guidance;
 pub mod parse;

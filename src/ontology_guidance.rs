@@ -5,10 +5,16 @@
 //! follows every such prefix with the unchanged fair schedule.
 
 use crate::{
+    learned_allocation::{
+        self, AllocationDecision, ConceptCandidate, LearnedWeights, UtilityEvidence, UtilityLedger,
+        WorkSample,
+    },
     nbe,
-    recursion_search::{self, Example, SearchOutcome, SearchProblem},
+    recursion_search::{self, Example, SearchMetrics, SearchOutcome, SearchProblem},
     term::{self, Term},
+    universal,
 };
+use std::collections::HashMap;
 use std::rc::Rc;
 
 pub const EXPERIMENT_FUEL: u64 = 100_000;
@@ -69,6 +75,35 @@ pub struct DevelopmentalReport {
     pub parity: ParityGuidanceReport,
     /// `O1 -> c2 -> O2 -> c3(nested recursive parity aggregation)`.
     pub nested: NestedGuidanceReport,
+}
+
+#[derive(Clone, Debug)]
+pub struct AllocationConditionReport {
+    pub name: &'static str,
+    pub outcome: SearchOutcome,
+    pub lane_order: Vec<String>,
+    pub coverage_preserved: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct LearnedAllocationReport {
+    pub training: DevelopmentalReport,
+    pub heldout_expanded_target_size: u32,
+    pub heldout_compressed_target_size: u32,
+    pub weights: LearnedWeights,
+    pub decisions: Vec<AllocationDecision>,
+    pub universal_only: AllocationConditionReport,
+    pub uniform: AllocationConditionReport,
+    pub hand_designed: AllocationConditionReport,
+    pub learned: AllocationConditionReport,
+    pub irrelevant: AllocationConditionReport,
+    pub misleading: AllocationConditionReport,
+    pub learned_without_universal: AllocationConditionReport,
+    pub leakage_ranking_unchanged: bool,
+    pub leakage_evidence_skipped: usize,
+    pub calibration_margin: i64,
+    pub proposal_regret_vs_hand: u64,
+    pub widening_saved_vs_uniform: u64,
 }
 
 pub fn church_bool(value: bool) -> Rc<Term> {
@@ -159,6 +194,57 @@ fn nested_expected(payload_depths: &[u32]) -> Rc<Term> {
     )
 }
 
+/// Held-out protocol: unlike the training task, each value receives the outer
+/// recursive interpreter *before* the payload concept. The desired functional
+/// is therefore `λr.λv. v r parity`, not the training law `v parity r`.
+fn heldout_chain(payload_depths: &[u32]) -> Rc<Term> {
+    payload_depths.iter().rev().fold(
+        term::lam(term::lam(church_bool(false))),
+        |tail, &payload_depth| {
+            let payload = parity_chain(payload_depth);
+            term::lam(term::lam(term::app(
+                term::app(boolean_xor(), term::app(term::var(0), payload)),
+                term::app(term::var(1), tail),
+            )))
+        },
+    )
+}
+
+fn heldout_problem(atoms: Vec<Rc<Term>>) -> SearchProblem {
+    let example = |depths: &[u32]| Example {
+        arguments: vec![heldout_chain(depths)],
+        expected: nested_expected(depths),
+    };
+    SearchProblem {
+        atoms,
+        discovery: [vec![], vec![0], vec![1], vec![1, 2], vec![2, 3, 5]]
+            .iter()
+            .map(|depths| example(depths))
+            .collect(),
+        extrapolation: [
+            vec![2],
+            vec![3],
+            vec![1, 3],
+            vec![0, 1, 2, 3, 4],
+            vec![1, 2, 3, 4, 5, 6, 7],
+        ]
+        .iter()
+        .map(|depths| example(depths))
+        .collect(),
+        require_recursive_reference: true,
+        require_load_bearing_recursion: true,
+        require_distinct_outputs: true,
+    }
+}
+
+fn heldout_functional(payload_concept: Rc<Term>) -> Rc<Term> {
+    // λrecursive.λvalue. value recursive payload_concept
+    term::lam(term::lam(term::app(
+        term::app(term::var(0), term::var(1)),
+        payload_concept,
+    )))
+}
+
 fn nested_problem(atoms: Vec<Rc<Term>>) -> SearchProblem {
     let example = |depths: &[u32]| Example {
         arguments: vec![nested_chain(depths)],
@@ -240,6 +326,99 @@ fn parity_functional(step: Rc<Term>) -> Rc<Term> {
 
 fn primitive(body: Rc<Term>) -> Rc<Term> {
     Rc::new(Term::Prim(body))
+}
+
+fn add_metrics(total: &mut SearchMetrics, part: &SearchMetrics) {
+    total.resource_points += part.resource_points;
+    total.proposals += part.proposals;
+    total.evaluated_candidates += part.evaluated_candidates;
+    total.max_syntax_size = total.max_syntax_size.max(part.max_syntax_size);
+    total.evaluation_fuel = total.evaluation_fuel.max(part.evaluation_fuel);
+    total.wall_time += part.wall_time;
+}
+
+fn run_allocated_lanes(
+    name: &'static str,
+    decisions: &[AllocationDecision],
+    concepts: &HashMap<String, Rc<Term>>,
+    preserve_universal: bool,
+) -> AllocationConditionReport {
+    let learned_points = decisions
+        .iter()
+        .flat_map(|decision| {
+            (1..=decision.max_syntax_size)
+                .map(move |size| (decision.concept_id.clone(), size, decision.evaluation_fuel))
+        })
+        .collect::<Vec<_>>();
+    let mut lane_order = Vec::new();
+    let mut metrics = SearchMetrics::default();
+    let mut candidate = None;
+
+    if preserve_universal {
+        let priority_resources = learned_points
+            .iter()
+            .map(|(_, size, fuel)| (*size, *fuel))
+            .collect::<Vec<_>>();
+        let mut schedule = universal::InterleavedDovetail::new(priority_resources);
+        for index in 0..learned_points.len() * 2 {
+            let (size, fuel) = schedule.next().expect("interleaved schedule is infinite");
+            let (lane, problem) = if index % 2 == 0 {
+                let concept_id = &learned_points[index / 2].0;
+                if lane_order.last() != Some(concept_id) {
+                    lane_order.push(concept_id.clone());
+                }
+                let body = concepts
+                    .get(concept_id)
+                    .expect("allocation refers to a declared concept")
+                    .clone();
+                (concept_id.clone(), heldout_problem(vec![body]))
+            } else {
+                ("universal".to_string(), heldout_problem(vec![]))
+            };
+            let outcome = recursion_search::search_resource_point_first(&problem, size, fuel);
+            add_metrics(&mut metrics, &outcome.metrics);
+            if outcome.candidate.is_some() {
+                candidate = outcome.candidate;
+                if lane == "universal" && lane_order.last().map(String::as_str) != Some("universal")
+                {
+                    lane_order.push(lane);
+                }
+                break;
+            }
+        }
+    } else {
+        for (concept_id, size, fuel) in &learned_points {
+            if lane_order.last() != Some(concept_id) {
+                lane_order.push(concept_id.clone());
+            }
+            let problem = heldout_problem(vec![concepts
+                .get(concept_id)
+                .expect("allocation refers to a declared concept")
+                .clone()]);
+            let outcome = recursion_search::search_resource_point_first(&problem, *size, *fuel);
+            add_metrics(&mut metrics, &outcome.metrics);
+            if outcome.candidate.is_some() {
+                candidate = outcome.candidate;
+                break;
+            }
+        }
+    }
+
+    AllocationConditionReport {
+        name,
+        outcome: SearchOutcome { candidate, metrics },
+        lane_order,
+        coverage_preserved: preserve_universal,
+    }
+}
+
+fn condition_from_outcome(name: &'static str, outcome: SearchOutcome) -> AllocationConditionReport {
+    AllocationConditionReport {
+        name,
+        outcome,
+        lane_order: vec!["universal".into()],
+        coverage_preserved: true,
+    }
 }
 
 /// Run the first ontology-guidance experiment. The empty baseline is
@@ -381,6 +560,229 @@ pub fn run_developmental_guidance(
     }
 }
 
+fn utility_evidence(
+    task: &str,
+    concept: &str,
+    without: &SearchOutcome,
+    with: &SearchOutcome,
+    age: u32,
+) -> UtilityEvidence {
+    UtilityEvidence {
+        training_task_id: task.into(),
+        concept_id: concept.into(),
+        without: WorkSample::from_outcome(without),
+        with: WorkSample::from_outcome(with),
+        widening_penalty: learned_allocation::widening_penalty(&without.metrics, &with.metrics),
+        age,
+        target_derived: false,
+    }
+}
+
+/// Learn allocation only from the two earlier developmental tasks, then apply
+/// it to a held-out law with reversed argument order and disjoint examples.
+pub fn run_learned_allocation(
+    parity_training_max_size: u32,
+    nested_training_max_size: u32,
+    heldout_baseline_max_size: u32,
+) -> LearnedAllocationReport {
+    const HELD_OUT_ID: &str = "heldout-reversed-nested";
+    let training = run_developmental_guidance(parity_training_max_size, nested_training_max_size);
+    let parity_executable = training
+        .parity
+        .relevant
+        .outcome
+        .candidate
+        .as_ref()
+        .expect("training discovers parity")
+        .executable
+        .clone();
+    let candidates = vec![
+        ConceptCandidate {
+            id: "not".into(),
+            body: boolean_not(),
+        },
+        ConceptCandidate {
+            id: "parity".into(),
+            body: parity_executable.clone(),
+        },
+        ConceptCandidate {
+            id: "irrelevant-pair".into(),
+            body: irrelevant_pair_constructor(),
+        },
+        ConceptCandidate {
+            id: "misleading-identity".into(),
+            body: boolean_identity(),
+        },
+    ];
+    let concepts = candidates
+        .iter()
+        .map(|candidate| (candidate.id.clone(), candidate.body.clone()))
+        .collect::<HashMap<_, _>>();
+
+    // Matched finite controls isolate grammar widening from semantic utility.
+    let parity_matched_empty = recursion_search::search_priority_prefix(
+        &parity_problem(vec![]),
+        training.parity.compressed_target_size,
+        EXPERIMENT_FUEL,
+    );
+    let nested_matched_prior = recursion_search::search_priority_prefix(
+        &nested_problem(vec![boolean_not()]),
+        training.nested.compressed_target_size,
+        EXPERIMENT_FUEL,
+    );
+
+    let mut ledger = UtilityLedger::default();
+    ledger.record(utility_evidence(
+        "train-parity",
+        "not",
+        &training.parity.empty.outcome,
+        &training.parity.relevant.outcome,
+        1,
+    ));
+    ledger.record(utility_evidence(
+        "train-parity",
+        "irrelevant-pair",
+        &parity_matched_empty,
+        &training.parity.irrelevant.outcome,
+        1,
+    ));
+    ledger.record(utility_evidence(
+        "train-parity",
+        "misleading-identity",
+        &parity_matched_empty,
+        &training.parity.misleading.outcome,
+        1,
+    ));
+    ledger.record(utility_evidence(
+        "train-nested",
+        "parity",
+        &training.nested.prior_ontology.outcome,
+        &training.nested.acquired_recursive.outcome,
+        0,
+    ));
+    ledger.record(utility_evidence(
+        "train-nested",
+        "irrelevant-pair",
+        &nested_matched_prior,
+        &training.nested.irrelevant_recursive.outcome,
+        0,
+    ));
+    ledger.record(utility_evidence(
+        "train-nested",
+        "misleading-identity",
+        &nested_matched_prior,
+        &training.nested.misleading_recursive.outcome,
+        0,
+    ));
+
+    let weights = ledger.learn(&candidates, HELD_OUT_ID, 850);
+    let decisions = learned_allocation::allocate(&weights, 7, EXPERIMENT_FUEL);
+    let universal_only = condition_from_outcome(
+        "universal-only",
+        recursion_search::search_priority_prefix(
+            &heldout_problem(vec![]),
+            heldout_baseline_max_size,
+            EXPERIMENT_FUEL,
+        ),
+    );
+
+    let hand_decisions = vec![AllocationDecision {
+        concept_id: "parity".into(),
+        learned_score: 0,
+        max_syntax_size: 7,
+        evaluation_fuel: EXPERIMENT_FUEL,
+    }];
+    let hand_designed = run_allocated_lanes("hand-parity-first", &hand_decisions, &concepts, true);
+    let learned = run_allocated_lanes("learned", &decisions, &concepts, true);
+    let learned_without_universal =
+        run_allocated_lanes("learned-no-universal", &decisions, &concepts, false);
+
+    let uniform_ids = ["irrelevant-pair", "misleading-identity", "not", "parity"];
+    let uniform_decisions = uniform_ids
+        .iter()
+        .map(|id| AllocationDecision {
+            concept_id: (*id).into(),
+            learned_score: 0,
+            max_syntax_size: 7,
+            evaluation_fuel: EXPERIMENT_FUEL,
+        })
+        .collect::<Vec<_>>();
+    let uniform = run_allocated_lanes("uniform", &uniform_decisions, &concepts, true);
+    let irrelevant = run_allocated_lanes(
+        "irrelevant-only",
+        &[uniform_decisions[0].clone()],
+        &concepts,
+        true,
+    );
+    let misleading = run_allocated_lanes(
+        "misleading-only",
+        &[uniform_decisions[1].clone()],
+        &concepts,
+        true,
+    );
+
+    // Attempted held-out evidence is recorded only to prove that relearning
+    // excludes it; it cannot influence the decisions above or below.
+    let ranking_before_leak = weights.ranked.clone();
+    ledger.record(utility_evidence(
+        HELD_OUT_ID,
+        "parity",
+        &universal_only.outcome,
+        &hand_designed.outcome,
+        0,
+    ));
+    let weights_after_leak_attempt = ledger.learn(&candidates, HELD_OUT_ID, 850);
+    let leakage_ranking_unchanged = ranking_before_leak == weights_after_leak_attempt.ranked
+        && weights_after_leak_attempt.skipped_target_leakage == 1;
+
+    let parity_score = weights
+        .ranked
+        .iter()
+        .find(|weight| weight.concept_id == "parity")
+        .map(|weight| weight.score)
+        .unwrap_or(0);
+    let best_control_score = weights
+        .ranked
+        .iter()
+        .filter(|weight| {
+            weight.concept_id == "irrelevant-pair" || weight.concept_id == "misleading-identity"
+        })
+        .map(|weight| weight.score)
+        .max()
+        .unwrap_or(0);
+    let calibration_margin = parity_score.saturating_sub(best_control_score);
+    let proposal_regret_vs_hand = learned
+        .outcome
+        .metrics
+        .proposals
+        .saturating_sub(hand_designed.outcome.metrics.proposals);
+    let widening_saved_vs_uniform = uniform
+        .outcome
+        .metrics
+        .proposals
+        .saturating_sub(learned.outcome.metrics.proposals);
+
+    LearnedAllocationReport {
+        heldout_expanded_target_size: heldout_functional(parity_executable.clone()).size(),
+        heldout_compressed_target_size: heldout_functional(primitive(parity_executable)).size(),
+        training,
+        weights,
+        decisions,
+        universal_only,
+        uniform,
+        hand_designed,
+        learned,
+        irrelevant,
+        misleading,
+        learned_without_universal,
+        leakage_ranking_unchanged,
+        leakage_evidence_skipped: weights_after_leak_attempt.skipped_target_leakage,
+        calibration_margin,
+        proposal_regret_vs_hand,
+        widening_saved_vs_uniform,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -494,5 +896,64 @@ mod tests {
             EXPERIMENT_FUEL as i64,
         )
         .is_none());
+    }
+
+    #[test]
+    fn learned_utility_prioritizes_a_heldout_recursive_law_without_leakage() {
+        let report = run_learned_allocation(8, 9, 9);
+        let parity_weight = report
+            .weights
+            .ranked
+            .iter()
+            .find(|weight| weight.concept_id == "parity")
+            .unwrap();
+        let best_control = report
+            .weights
+            .ranked
+            .iter()
+            .filter(|weight| {
+                weight.concept_id == "irrelevant-pair" || weight.concept_id == "misleading-identity"
+            })
+            .map(|weight| weight.score)
+            .max()
+            .unwrap();
+
+        assert_eq!(report.weights.ranked[0].concept_id, "parity");
+        assert!(parity_weight.score > 0);
+        assert!(parity_weight.score > best_control);
+        assert!(report.calibration_margin > 0);
+        assert!(report.leakage_ranking_unchanged);
+        assert_eq!(report.leakage_evidence_skipped, 1);
+        assert!(report.learned.outcome.candidate.is_some());
+        assert!(report.hand_designed.outcome.candidate.is_some());
+        assert!(report.learned_without_universal.outcome.candidate.is_some());
+        assert!(report.universal_only.outcome.candidate.is_none());
+        assert!(report.irrelevant.outcome.candidate.is_none());
+        assert!(report.misleading.outcome.candidate.is_none());
+        assert!(report.learned.coverage_preserved);
+        assert!(!report.learned_without_universal.coverage_preserved);
+        assert!(report.widening_saved_vs_uniform > 0);
+        assert_eq!(report.learned.outcome.metrics.proposals, 335);
+        assert_eq!(report.hand_designed.outcome.metrics.proposals, 335);
+        assert_eq!(report.uniform.outcome.metrics.proposals, 2_310);
+        assert!(report.heldout_expanded_target_size > report.heldout_compressed_target_size);
+        assert!(contains_primitive(
+            &report
+                .learned
+                .outcome
+                .candidate
+                .as_ref()
+                .unwrap()
+                .functional,
+            &report
+                .training
+                .parity
+                .relevant
+                .outcome
+                .candidate
+                .as_ref()
+                .unwrap()
+                .executable
+        ));
     }
 }

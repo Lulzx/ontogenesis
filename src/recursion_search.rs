@@ -71,6 +71,63 @@ pub struct SearchOutcome {
     pub metrics: SearchMetrics,
 }
 
+/// Exhaustively search one exact `(syntax size, fuel)` resource point and stop
+/// at the first admitted functional. This is the metered primitive used by
+/// learned schedules that interleave ontology lanes with universal work.
+pub fn search_resource_point_first(
+    problem: &SearchProblem,
+    syntax_size: u32,
+    fuel: u64,
+) -> SearchOutcome {
+    let start = Instant::now();
+    let mut metrics = SearchMetrics {
+        resource_points: 1,
+        max_syntax_size: syntax_size,
+        evaluation_fuel: fuel,
+        ..SearchMetrics::default()
+    };
+    let Ok(fuel_i64) = i64::try_from(fuel) else {
+        metrics.wall_time = start.elapsed();
+        return SearchOutcome {
+            candidate: None,
+            metrics,
+        };
+    };
+    if !problem_is_valid(problem, fuel_i64) {
+        metrics.wall_time = start.elapsed();
+        return SearchOutcome {
+            candidate: None,
+            metrics,
+        };
+    }
+    for functional in universal::terms_exact(syntax_size, 0, &problem.atoms) {
+        metrics.proposals += 1;
+        if problem.require_recursive_reference && !uses_recursive_parameter(&functional) {
+            continue;
+        }
+        metrics.evaluated_candidates += 1;
+        if let Some(executable) =
+            validate_functional_for_valid_problem(&functional, problem, fuel_i64)
+        {
+            metrics.wall_time = start.elapsed();
+            return SearchOutcome {
+                candidate: Some(RecursiveCandidate {
+                    functional,
+                    executable,
+                    syntax_size,
+                    fuel,
+                }),
+                metrics,
+            };
+        }
+    }
+    metrics.wall_time = start.elapsed();
+    SearchOutcome {
+        candidate: None,
+        metrics,
+    }
+}
+
 /// Exhaustively search sizes `1..=max_syntax_size` at one diagnostic fuel,
 /// stopping at the first admitted functional in deterministic grammar order.
 ///
