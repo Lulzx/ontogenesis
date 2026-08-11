@@ -234,6 +234,17 @@ fn main() {
                 .join()
                 .unwrap();
         }
+        Some("arcdiag") => {
+            // Real-ARC diagnostic: grid NBE recurses deep on the fold structure
+            // and the probe hashes large grids, so run on a large stack.
+            let a = args[1..].to_vec();
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(move || arcdiag(&a))
+                .unwrap()
+                .join()
+                .unwrap();
+        }
         _ => bridge(&args),
     }
 }
@@ -607,6 +618,294 @@ fn cand_concept(body: &Rc<term::Term>) -> bank::Concept {
         name: "cand".into(),
         arity: 1,
     }
+}
+
+/// A candidate body installed as a concept of the given composition arity.
+/// (`cand_concept` is hardcoded to arity 1; the vocabulary contains multi-arity
+/// combinators like map(2), compose(3), append(2).)
+fn arity_concept(body: &Rc<term::Term>, arity: u32) -> bank::Concept {
+    bank::Concept { body: body.clone(), name: "vocab".into(), arity }
+}
+
+/// The discovered cross-domain ontology installed as concepts for the search
+/// gate. `dup` is derived (λx. append x x). The substrate {cons,nil} are raw
+/// primitives — the building blocks, not the installed concept set.
+fn vocab_concepts(s: &Schemas) -> Vec<bank::Concept> {
+    let dup = term::lam(term::app(term::app(s.append.clone(), term::var(0)), term::var(0)));
+    vec![
+        arity_concept(&s.reverse, 1),
+        arity_concept(&s.map, 2),
+        arity_concept(&s.compose, 3),
+        arity_concept(&dup, 1),
+        arity_concept(&s.append, 2),
+    ]
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ARC-AGI-1 data + the four-bucket diagnostic (arcdiag).
+//
+// Real ARC training tasks (MIT-licensed, in data/*.json): each is
+// {"train":[{input,output},..], "test":[{input,output},..]} with grids as lists
+// of rows of color numerals 0-9 — directly encodable on the Church-list
+// substrate. We do NOT ask "how many can we solve?" but "for which real tasks is
+// the currently discovered structural ontology already sufficient?" The four
+// buckets keep the two gates separate forever (candidate usefulness = search
+// gate, expressibility = direct gate):
+//   SOLVED            — the search gate finds a program through the vocabulary.
+//   EXPRESSIBLE       — a composition of the building blocks directly maps
+//                       inputs→outputs, but the search didn't reach it.
+//   REQUIRES NEW      — not expressible up to the enumeration depth.
+//   NOT REPRESENTABLE — the grids can't be encoded on the substrate.
+// All bounds (depth, search budget) are reported honestly.
+// ────────────────────────────────────────────────────────────────────────────
+
+/// The real ARC-AGI-1 training set lives in the crate's data/ dir. Anchored to
+/// the manifest so both the `arcdiag` subcommand (run from the workspace root)
+/// and the tests (run from the crate dir) resolve it regardless of CWD.
+const ARC_DATA_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/data");
+
+/// A single ARC-AGI-1 grid: a list of rows of color numerals 0-9.
+#[derive(Debug, Clone)]
+struct ArcGrid {
+    rows: Vec<Vec<u32>>,
+}
+
+/// A train/test pair: an input grid and its expected output grid.
+#[derive(Debug, Clone)]
+struct ArcExample {
+    input: ArcGrid,
+    output: ArcGrid,
+}
+
+/// One ARC-AGI-1 task file, identified by its filename stem.
+#[derive(Debug, Clone)]
+struct ArcTask {
+    id: String,
+    train: Vec<ArcExample>,
+    test: Vec<ArcExample>,
+}
+
+/// Parse one ARC-AGI-1 JSON task via serde_json.
+fn parse_arc_json(txt: &str) -> Option<(Vec<ArcExample>, Vec<ArcExample>)> {
+    let v: serde_json::Value = serde_json::from_str(txt).ok()?;
+    let grid_of = |j: &serde_json::Value| -> Option<ArcGrid> {
+        let rows = j
+            .as_array()?
+            .iter()
+            .map(|r| {
+                r.as_array()
+                    .map(|cells| cells.iter().map(|c| c.as_u64().unwrap_or(0) as u32).collect())
+            })
+            .collect::<Option<Vec<Vec<u32>>>>()?;
+        Some(ArcGrid { rows })
+    };
+    let ex_of = |o: &serde_json::Value| -> Option<ArcExample> {
+        Some(ArcExample { input: grid_of(o.get("input")?)?, output: grid_of(o.get("output")?)? })
+    };
+    let train = v.get("train")?.as_array()?.iter().filter_map(ex_of).collect();
+    let test = v.get("test")?.as_array()?.iter().filter_map(ex_of).collect();
+    Some((train, test))
+}
+
+/// Load all ARC-AGI-1 training-task JSON files in `dir`, sorted by filename.
+fn load_arc_tasks(dir: &str) -> Vec<ArcTask> {
+    let mut paths: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("arc data dir {dir}: {e}"))
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().map_or(false, |x| x == "json"))
+        .collect();
+    paths.sort();
+    let mut out = Vec::new();
+    for p in paths {
+        let id = p.file_stem().unwrap().to_string_lossy().to_string();
+        let txt = std::fs::read_to_string(&p).expect("read arc task");
+        match parse_arc_json(&txt) {
+            Some((train, test)) => out.push(ArcTask { id, train, test }),
+            None => eprintln!("[arcdiag] skip unparseable task {id}"),
+        }
+    }
+    out
+}
+
+/// Load one ARC task by id (targeted probes / tests; `load_arc_tasks` bulk-loads).
+#[cfg(test)]
+fn load_arc_task_by_id(dir: &str, id: &str) -> ArcTask {
+    let txt = std::fs::read_to_string(format!("{dir}/{id}.json")).expect("arc task file");
+    let (train, test) = parse_arc_json(&txt).expect("parse arc task");
+    ArcTask { id: id.to_string(), train, test }
+}
+
+/// Is this grid rectangular with all cells in 0-9 (i.e. encodable on the
+/// substrate)? Ragged rows or out-of-range cells make it NOT REPRESENTABLE.
+fn grid_representable(g: &ArcGrid) -> bool {
+    let w = g.rows.first().map(|r| r.len()).unwrap_or(0);
+    g.rows.iter().all(|r| r.len() == w && r.iter().all(|&c| c < 10))
+}
+
+/// Encode an ARC grid as a Church list of rows of Church numerals.
+fn arc_grid_to_term(g: &ArcGrid) -> Rc<term::Term> {
+    let rows: Vec<Rc<term::Term>> = g.rows.iter().map(|r| church_list(r)).collect();
+    rc_list(&rows)
+}
+
+/// Build an arity-1 `parse::Task` whose tests are the train pairs.
+fn arc_task_to_parse(t: &ArcTask) -> Option<parse::Task> {
+    let tests = t
+        .train
+        .iter()
+        .map(|ex| parse::Test {
+            args: vec![arc_grid_to_term(&ex.input)],
+            want: arc_grid_to_term(&ex.output),
+            outer: 0,
+        })
+        .collect();
+    Some(parse::Task { tests, arity: 1 })
+}
+
+/// The four-bucket diagnostic outcome.
+enum Bucket {
+    Solved,
+    Expressible,
+    RequiresNew,
+    NotRepresentable,
+}
+
+fn bucket_label(b: &Bucket) -> &'static str {
+    match b {
+        Bucket::Solved => "SOLVED",
+        Bucket::Expressible => "EXPRESSIBLE",
+        Bucket::RequiresNew => "REQUIRES_NEW",
+        Bucket::NotRepresentable => "NOT_REPRESENTABLE",
+    }
+}
+
+/// Classify one parseable task. Honest bounds: SOLVED is bounded by the search
+/// budget; EXPRESSIBLE/REQUIRES_NEW are bounded by the expressibility depth.
+/// Returns `(bucket, expressible-composition-if-any, built-cost-if-solved)`.
+fn classify_task(
+    task: &parse::Task,
+    vocab: &[bank::Concept],
+    cands: &[(String, Rc<term::Term>)],
+    opts: &bank::Options,
+) -> (Bucket, Option<String>, u64) {
+    // Search gate first: is a program reachable through the vocabulary?
+    let (out, _m) = bank::concept_solve_abl(task, vocab, opts, true);
+    if out.solution.is_some() {
+        return (Bucket::Solved, None, out.stats.built);
+    }
+    // Expressibility gate: does any composition directly map inputs→outputs?
+    for (name, body) in cands {
+        if direct_solves(task, body) {
+            return (Bucket::Expressible, Some(name.clone()), 0);
+        }
+    }
+    (Bucket::RequiresNew, None, 0)
+}
+
+/// The arcdiag driver: run the four-bucket diagnostic over real ARC tasks.
+fn arcdiag(args: &[String]) {
+    let mut dir = ARC_DATA_DIR.to_string();
+    let mut max_tasks = usize::MAX;
+    let mut id_filter: Option<String> = None;
+    let mut depth = 3u32;
+    let mut budget = 10u64;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dir" => {
+                dir = args[i + 1].clone();
+                i += 2;
+            }
+            "--max" => {
+                max_tasks = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--id" => {
+                id_filter = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--depth" => {
+                depth = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            other => {
+                if i == 0 {
+                    dir = other.to_string();
+                }
+                i += 1;
+            }
+        }
+    }
+
+    // Discover the vocabulary once, or fail honestly (the whole diagnostic rests
+    // on the claim that it is genuinely derived).
+    let dopts = bank_opts(60, 14);
+    let schemas = match discover_schemas(&dopts) {
+        Some(s) => s,
+        None => {
+            eprintln!("[arcdiag] vocabulary discovery FAILED — nothing to install");
+            return;
+        }
+    };
+    let vocab = vocab_concepts(&schemas);
+    let cands = expressibility_candidates(&schemas, depth);
+    println!(
+        "[arcdiag] installed {} vocab concepts; {} expressibility candidates at depth {depth}",
+        vocab.len(),
+        cands.len()
+    );
+
+    let tasks = load_arc_tasks(&dir);
+    let mut counts = [0usize; 4];
+    let mut done = 0usize;
+    for at in &tasks {
+        if let Some(f) = &id_filter {
+            if &at.id != f {
+                continue;
+            }
+        } else if done >= max_tasks {
+            break;
+        }
+        done += 1;
+
+        let rep = at
+            .train
+            .iter()
+            .chain(at.test.iter())
+            .all(|e| grid_representable(&e.input) && grid_representable(&e.output));
+        let pt = arc_task_to_parse(at);
+        let (bucket, comp, built) = if !rep || pt.is_none() {
+            (Bucket::NotRepresentable, None, 0)
+        } else {
+            let opts2 = bank_opts(budget, 14);
+            classify_task(&pt.unwrap(), &vocab, &cands, &opts2)
+        };
+        counts[match &bucket {
+            Bucket::Solved => 0,
+            Bucket::Expressible => 1,
+            Bucket::RequiresNew => 2,
+            Bucket::NotRepresentable => 3,
+        }] += 1;
+
+        let comp = comp.unwrap_or_default();
+        println!(
+            "[arcdiag] {:>12}  {:14}  comp={comp:<24}  built={built}",
+            at.id,
+            bucket_label(&bucket)
+        );
+    }
+
+    println!();
+    println!("=== arcdiag summary (depth={depth}, budget={budget}s) ===");
+    println!("SOLVED:            {}", counts[0]);
+    println!("EXPRESSIBLE:       {}", counts[1]);
+    println!("REQUIRES_NEW:      {}", counts[2]);
+    println!("NOT_REPRESENTABLE: {}", counts[3]);
 }
 
 /// The Propose stage: which candidates from the generic schema meta-space solve
@@ -1502,7 +1801,15 @@ fn discover_compose(reverse: &Rc<term::Term>, singleton: &Rc<term::Term>) -> Opt
 /// discovered schemas and the type discipline (grid = List(List N), row = List N)
 /// — NOT the specific transforms (mirror, vflip, rotation, tiling). The system
 /// searches compositions and discovers which solve which families.
-fn gridmeta_candidates(s: &Schemas) -> Vec<(String, Rc<term::Term>)> {
+/// The grid-transform composition space over the DISCOVERED building blocks
+/// {rev, dup, map, compose} (all proposed by the C7 meta-space from {cons,nil},
+/// none hand-written). Depth-1 grid ops {rev, dup, map(rev), map(dup), map(id)}
+/// are GENERATED by applying map to each row-op; deeper levels compose shallower
+/// pairs. This is the expressibility enumeration for the real-ARC diagnostic: a
+/// task is expressible iff some composition directly maps its train inputs to
+/// outputs. `max_depth` bounds the search (reported honestly — "REQUIRES new
+/// concept" means not expressible up to this depth).
+fn expressibility_candidates(s: &Schemas, max_depth: u32) -> Vec<(String, Rc<term::Term>)> {
     let rev = s.reverse.clone();
     let dup = term::lam(term::app(term::app(s.append.clone(), term::var(0)), term::var(0)));
     let id = term::lam(term::var(0));
@@ -1512,23 +1819,41 @@ fn gridmeta_candidates(s: &Schemas) -> Vec<(String, Rc<term::Term>)> {
     let compose = |f: &Rc<term::Term>, g: &Rc<term::Term>| -> Rc<term::Term> {
         term::app(term::app(s.compose.clone(), f.clone()), g.clone())
     };
-    // Depth-1 grid ops: the grid-level building blocks, plus map of each row-op.
-    // These are GENERATED (map applied to each row-op), not hand-picked.
-    let depth1: Vec<(String, Rc<term::Term>)> = vec![
+    // Level 0 (depth 1): the base grid ops.
+    let base: Vec<(String, Rc<term::Term>)> = vec![
         ("rev".into(), rev.clone()),       // reverse the grid
         ("dup".into(), dup.clone()),       // duplicate the grid
         ("map(rev)".into(), map(&rev)),    // reverse each row
         ("map(dup)".into(), map(&dup)),    // duplicate each row
         ("map(id)".into(), map(&id)),      // identity
     ];
-    // Depth-2: compose any two depth-1 grid ops.
-    let mut out = depth1.clone();
-    for (fn_, f) in &depth1 {
-        for (gn, g) in &depth1 {
-            out.push((format!("({fn_}∘{gn})"), compose(f, g)));
+    // levels[i] holds terms of depth i+1; compose(f,g) lands at depth
+    // max(df,dg)+1, i.e. level index max(i,j)+1.
+    let mut levels: Vec<Vec<(String, Rc<term::Term>)>> = vec![base];
+    let mut out: Vec<(String, Rc<term::Term>)> = levels[0].clone();
+    for depth in 2..=max_depth {
+        let mut level: Vec<(String, Rc<term::Term>)> = Vec::new();
+        for i in 0..levels.len() {
+            for j in 0..levels.len() {
+                if (i as u32).max(j as u32) == depth - 2 {
+                    for (fn_, f) in &levels[i] {
+                        for (gn, g) in &levels[j] {
+                            level.push((format!("({fn_}∘{gn})"), compose(f, g)));
+                        }
+                    }
+                }
+            }
         }
+        out.extend(level.iter().cloned());
+        levels.push(level);
     }
     out
+}
+
+/// The depth-2 slice of [`expressibility_candidates`] — the gridmeta composition
+/// space (the 6 synthetic families are all expressible at depth ≤ 2).
+fn gridmeta_candidates(s: &Schemas) -> Vec<(String, Rc<term::Term>)> {
+    expressibility_candidates(s, 2)
 }
 
 /// The transform families (targets), all generable from the discovered vocabulary.
@@ -2151,9 +2476,161 @@ mod tests {
             .unwrap();
     }
 
+    /// The four-bucket diagnostic: the 6 synthetic transform families (which the
+    /// discovered vocabulary genuinely expresses) must classify as EXPRESSIBLE
+    /// through the direct gate — the vocabulary's composition space contains each
+    /// transform. This validates the pipeline on known-expressible tasks before
+    /// trusting it on real ARC. (They land EXPRESSIBLE, not SOLVED, because the
+    /// search gate's pool holds only grid values, never function-typed
+    /// intermediates like `reverse`, so it cannot re-compose map(reverse) from
+    /// the flat {reverse,map,compose,dup,append} concept set — see the
+    /// gate-separation test.)
+    #[test]
+    fn arcdiag_synthetic_captured() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = opts();
+                let s = discover_schemas(&o).expect("vocabulary must be discovered");
+                let vocab = vocab_concepts(&s);
+                let cands = expressibility_candidates(&s, 2);
+                for (fname, target, sizes) in gridmeta_families() {
+                    let fam = transform_family(sizes, target);
+                    let (bucket, comp, _built) = classify_task(&fam, &vocab, &cands, &o);
+                    assert!(
+                        matches!(bucket, Bucket::Expressible | Bucket::Solved),
+                        "family {fname} must be captured by the vocabulary (got {} comp={comp:?})",
+                        bucket_label(&bucket)
+                    );
+                    // Arity-1 building blocks (vflip=reverse, v-tile=dup) are
+                    // directly SOLVED; map-compositions (mirror=map(rev), etc.)
+                    // are only EXPRESSIBLE — both are captured.
+                    if matches!(bucket, Bucket::Expressible) {
+                        assert!(
+                            comp.is_some(),
+                            "expressible family {fname} must name a composition"
+                        );
+                    }
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Gate separation, proven on the synthetic mirror family: the transform IS
+    /// directly expressible as map(reverse) (direct gate: EXPRESSIBLE), yet the
+    /// search gate over the flat vocabulary FAILS to re-compose it (not SOLVED).
+    /// The pool never holds function-typed intermediates, so map (arity 2) can
+    /// never be applied to the function `reverse` — higher-order composition is
+    /// expressible but not search-reachable. This is precisely the "EXPRESSIBLE
+    /// but search fails" bucket the diagnostic exists to surface, and it confirms
+    /// the two gates stay separate forever.
+    #[test]
+    fn arcdiag_gate_separation() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = opts();
+                let s = discover_schemas(&o).expect("vocabulary must be discovered");
+                let vocab = vocab_concepts(&s);
+                let cands = expressibility_candidates(&s, 2);
+                let fam = transform_family(&[(3, 3), (4, 4)], &mirrored_term);
+                let (bucket, comp, _built) = classify_task(&fam, &vocab, &cands, &o);
+                assert!(
+                    matches!(bucket, Bucket::Expressible),
+                    "mirror must be EXPRESSIBLE (direct gate) — got {}",
+                    bucket_label(&bucket)
+                );
+                assert_eq!(comp.as_deref(), Some("map(rev)"), "mirror = map(rev)");
+                // And the direct gate alone sees it: `direct_solves(map(rev))`.
+                let mr = term::app(s.map.clone(), s.reverse.clone());
+                assert!(direct_solves(&fam, &mr), "map(rev) directly maps inputs→outputs");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// Real ARC tasks whose transform is a pure geometry op of the discovered
+    /// vocabulary classify honestly: vflip (arity-1 reverse) is SOLVED; mirror
+    /// (map(rev)) and v-tile (map(dup)) are EXPRESSIBLE — the higher-order
+    /// compositions the search gate can't re-derive. These are the first real
+    /// tasks the current structural ontology is already sufficient for.
+    #[test]
+    fn arcdiag_real_geometry_captured() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = opts();
+                let s = discover_schemas(&o).expect("vocabulary must be discovered");
+                let vocab = vocab_concepts(&s);
+                let cands = expressibility_candidates(&s, 2);
+                let dir = ARC_DATA_DIR;
+
+                // vflip: reverse applied directly to the grid → SOLVED, tiny cost.
+                let vflip = arc_task_to_parse(&load_arc_task_by_id(dir, "68b16354")).unwrap();
+                let (b, _c, built) = classify_task(&vflip, &vocab, &cands, &o);
+                assert!(
+                    matches!(b, Bucket::Solved),
+                    "real vflip (68b16354) must be SOLVED, got {}",
+                    bucket_label(&b)
+                );
+                assert!(built <= 2, "vflip solved at composition cost {built}, expected ~1");
+
+                // mirror: needs map(rev) — EXPRESSIBLE, not SOLVED (higher-order).
+                let mirror = arc_task_to_parse(&load_arc_task_by_id(dir, "67a3c6ac")).unwrap();
+                let (b, comp, _built) = classify_task(&mirror, &vocab, &cands, &o);
+                assert!(
+                    matches!(b, Bucket::Expressible),
+                    "real mirror (67a3c6ac) must be EXPRESSIBLE, got {}",
+                    bucket_label(&b)
+                );
+                assert_eq!(comp.as_deref(), Some("map(rev)"));
+
+                // v-tile: needs map(dup) — EXPRESSIBLE, not SOLVED.
+                let vtile = arc_task_to_parse(&load_arc_task_by_id(dir, "a416b8f3")).unwrap();
+                let (b, comp, _built) = classify_task(&vtile, &vocab, &cands, &o);
+                assert!(
+                    matches!(b, Bucket::Expressible),
+                    "real v-tile (a416b8f3) must be EXPRESSIBLE, got {}",
+                    bucket_label(&b)
+                );
+                assert_eq!(comp.as_deref(), Some("map(dup)"));
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    /// A real ARC task whose transform needs color/object/region analysis (not a
+    /// geometry op) must classify REQUIRES_NEW — the vocabulary genuinely cannot
+    /// express it, so the diagnostic points the next ontogenetic step.
+    #[test]
+    fn arcdiag_real_requires_new() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let o = opts();
+                let s = discover_schemas(&o).expect("vocabulary must be discovered");
+                let vocab = vocab_concepts(&s);
+                let cands = expressibility_candidates(&s, 2);
+                // 2dc579da extracts a non-background sub-region — needs
+                // color/object analysis, well beyond the list-transform vocab.
+                let hard = arc_task_to_parse(&load_arc_task_by_id(ARC_DATA_DIR, "2dc579da")).unwrap();
+                let (b, _c, _built) = classify_task(&hard, &vocab, &cands, &o);
+                assert!(
+                    matches!(b, Bucket::RequiresNew),
+                    "region-extraction (2dc579da) must be REQUIRES_NEW, got {}",
+                    bucket_label(&b)
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
     /// Controls: the ontogenesis path (C) must solve at least as much as the
-    /// frozen base (A) and the naive-seeds path (B), at no greater total cost —
-    /// and strictly beat A on SolveRate (A cannot transform grids at all).
     #[test]
     fn a1_controls_c_wins() {
         std::thread::Builder::new()
