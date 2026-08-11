@@ -34,6 +34,17 @@ pub struct Found {
     pub generated: u64,
 }
 
+#[derive(Debug, Clone)]
+pub struct Enumeration {
+    pub terms: Vec<Rc<Term>>,
+    /// Terms materialized across all memoized type/context/size cells.
+    pub generated: u64,
+    pub max_size: u32,
+    pub per_cell_cap: usize,
+    /// At least one otherwise-new inhabitant may have been excluded by a cap.
+    pub truncated: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Key {
     target: Type,
@@ -46,6 +57,7 @@ struct Enumerator<'a> {
     memo: HashMap<Key, Vec<Rc<Term>>>,
     generated: u64,
     per_cell_cap: usize,
+    truncated: bool,
 }
 
 /// Search closed beta-normal terms by increasing syntax size.
@@ -61,6 +73,7 @@ pub fn find_closed(
         memo: HashMap::new(),
         generated: 0,
         per_cell_cap,
+        truncated: false,
     };
     for size in 1..=max_size {
         for candidate in e.terms(target, &[], size) {
@@ -74,6 +87,40 @@ pub fn find_closed(
         }
     }
     None
+}
+
+/// Enumerate every distinct closed beta-normal term within the declared size
+/// and per-cell boundaries. This is used when a verifier must quantify over
+/// all bounded inhabitants (for example, observational mediator uniqueness)
+/// rather than stop at the first accepted program.
+pub fn enumerate_closed(
+    target: &Type,
+    atoms: &[Atom],
+    max_size: u32,
+    per_cell_cap: usize,
+) -> Enumeration {
+    let mut e = Enumerator {
+        atoms,
+        memo: HashMap::new(),
+        generated: 0,
+        per_cell_cap,
+        truncated: false,
+    };
+    let mut terms = Vec::new();
+    for size in 1..=max_size {
+        for candidate in e.terms(target, &[], size) {
+            if !terms.contains(&candidate) {
+                terms.push(candidate);
+            }
+        }
+    }
+    Enumeration {
+        terms,
+        generated: e.generated,
+        max_size,
+        per_cell_cap,
+        truncated: e.truncated,
+    }
 }
 
 impl Enumerator<'_> {
@@ -93,7 +140,9 @@ impl Enumerator<'_> {
                 let mut inner = context.to_vec();
                 inner.push((**arg).clone());
                 for body in self.terms(result, &inner, size - 1) {
-                    push_unique(&mut out, term::lam(body), self.per_cell_cap);
+                    if !push_unique(&mut out, term::lam(body), self.per_cell_cap) {
+                        self.truncated = true;
+                    }
                 }
             }
         }
@@ -139,6 +188,7 @@ impl Enumerator<'_> {
                                 p.push(item.clone());
                                 next.push(p);
                                 if next.len() >= self.per_cell_cap {
+                                    self.truncated = true;
                                     break;
                                 }
                             }
@@ -150,7 +200,9 @@ impl Enumerator<'_> {
                     }
                     for product in products {
                         let candidate = product.into_iter().fold(head.clone(), term::app);
-                        push_unique(&mut out, candidate, self.per_cell_cap);
+                        if !push_unique(&mut out, candidate, self.per_cell_cap) {
+                            self.truncated = true;
+                        }
                         if out.len() >= self.per_cell_cap {
                             break;
                         }
@@ -199,9 +251,14 @@ fn positive_compositions(total: u32, parts: usize) -> Vec<Vec<u32>> {
     out
 }
 
-fn push_unique(out: &mut Vec<Rc<Term>>, term: Rc<Term>, cap: usize) {
-    if out.len() < cap && !out.contains(&term) {
+fn push_unique(out: &mut Vec<Rc<Term>>, term: Rc<Term>, cap: usize) -> bool {
+    if out.contains(&term) {
+        true
+    } else if out.len() < cap {
         out.push(term);
+        true
+    } else {
+        false
     }
 }
 
@@ -215,5 +272,25 @@ mod tests {
         let found = find_closed(&Type::arrow(a.clone(), a), &[], 2, 100, |_| true).unwrap();
         assert_eq!(found.term, term::lam(term::var(0)));
         assert_eq!(found.size, 2);
+    }
+
+    #[test]
+    fn bounded_enumeration_returns_all_sizes_deterministically() {
+        let a = Type::Atom(0);
+        let first = enumerate_closed(&Type::arrow(a.clone(), a.clone()), &[], 4, 100);
+        let second = enumerate_closed(&Type::arrow(a.clone(), a.clone()), &[], 4, 100);
+        assert_eq!(first.terms, second.terms);
+        assert_eq!(first.generated, second.generated);
+        assert!(!first.truncated);
+        assert!(first.terms.contains(&term::lam(term::var(0))));
+        assert!(first.terms.iter().all(|term| term.size() <= 4));
+
+        let capped = enumerate_closed(
+            &Type::arrow(a.clone(), Type::arrow(a.clone(), a)),
+            &[],
+            3,
+            1,
+        );
+        assert!(capped.truncated);
     }
 }

@@ -34,6 +34,8 @@
 //!   task structure, frozen before they condition contextual allocation.
 //! - [`feature_invention`]: executable context predicates synthesized from a
 //!   lower-level raw tree substrate and retained by allocation regret.
+//! - [`universal_property`]: bounded relational discovery and validation of an
+//!   anonymous product-like universal factorization in pure lambda calculus.
 
 pub mod acquire;
 pub mod bank;
@@ -56,3 +58,4 @@ pub mod term;
 pub mod transform;
 pub mod typed;
 pub mod universal;
+pub mod universal_property;
