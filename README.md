@@ -2,11 +2,13 @@
 
 A λ-calculus synthesizer that invents its own vocabulary.
 
-No decoder. No typed DSL. No hand-picked operations. Raw terms, an oracle, a hash table.
+No decoder and no typed object-language DSL. Raw terms, an oracle, a hash table. B3
+uses simple types only as a generic meta-level proposal filter; the executable terms
+and evaluator remain the same untyped λ-calculus.
 
 The whole trick, one line: **two terms that behave identically on the tests are the same term.** That behavior-keyed hash table collapses millions of syntactically distinct programs into thousands of distinct ones. That's how a machine grows abstractions instead of memorizing them.
 
-~1,700 lines of Rust. Zero dependencies. No neural network, no new language, no special runtime.
+No neural network, no new object language, no special runtime.
 
 ## The loop
 
@@ -78,6 +80,47 @@ The sharp claim is G-conditional, not raw: raw finds pow (Church compression), b
 
 **C8 — discover the proposal schemas from a lower-level meta-language.** `disc` makes M itself a search space: λ-templates over two binders with a concept hole `C` (≤1 seed hole `S`), no inner abstraction. The machine enumerates the ≤4-leaf skeleton space — 455 deduplicated templates; `iterate` and `reduce` are just two programs in it — instantiates each over the ontology, and retains only the behaviorally-useful ones by the same counterfactual gate (6 of 455; 449 inert). The retained set reproduces C7's bootstrap: the joint rollout reaches replicate, concat, and concat_n, growing concat_n itself as a concept (`composition-{replicate, concat} ✗ → 11`). The new content is **meta-level credit assignment**: an operator's measured value is horizon-dependent. In the operator-pair control, at H=1 `iterate` unlocks replicate and `reduce` unlocks concat (tied, one frontier each); at H=2 both are credited with concat_n — a depth-2 concept produced jointly through BOTH operators across two generations, invisible to H=1 scoring. Honest control: the enumerated space also contains direct one-step concat_n templates, so the full retained set reaches concat_n at H=1 and no single schema is load-bearing there — the horizon-dependence is a property of the operator pair, not of every retained template.
 
+## B1–B3: invention from the machine's own programs
+
+The next track removes the named proposal schemas rather than merely searching over
+their catalog. Full protocols, controls, and limitations are recorded in
+[`MILESTONES.md`](MILESTONES.md).
+
+**B1 — nonrecursive abstraction invention.** From `{cons,nil}`, raw search solves
+singleton-row duplication. Generic context factorization extracts the repeated input
+from that discovered term, validates the rewrite on disjoint widths 2 and 3, and the
+new unary primitive transfers to held-out widths 4 and 7. Counterfactual cost moves
+`✗ → 2`, so the abstraction is acquired. The regression also requires the raw winner
+to contain a genuine `Prim(cons)`, preserving the earlier false-positive lesson.
+
+**B2 — recurrence induction from finite unrollings.** Raw search independently finds
+closed depth-1, depth-2, and depth-3 programs by composing fresh instance
+endofunction atoms over a supplied tail. Those atoms are data for the closed
+synthesis instances, not retained ontology entries. After they are symbolized,
+generic cross-depth comparison finds one invariant two-hole context:
+`q1=#0(#z)`, `q2=#0(#1(#z))`, `q3=#0(#1(#2(#z)))`. The induced law uses both head and
+recursive result, exactly reconstructs every observed program, compiles to an
+executable Church-list law, and succeeds at unseen depths 5, 7, and 9 with new atoms
+and tail shapes. It earns a frontier gain `✗ → 7`. Constant, headless, tailless,
+depth-specific, and merely observationally-equivalent families are rejected.
+
+**B3 — an invented recursive law constructs vocabulary.** Reifying B2's recursion
+scheme changes a generic simply-typed, beta-normal proposal space. With `{cons,nil}`
+alone, `map`, `append`, and `reverse` are absent at the discovered bounds; with the
+invented recursion atom they are found at sizes 11, 9, and 14. `map` earns `✗ → 15`,
+`append` earns `✗ → 15`, `reverse` earns `✗ → 3`, and `map(reverse)` transfers to an
+unseen 5×4 grid mirror.
+The generator contains no productions named `map`, `append`, `reverse`, `fold`, or
+`reduce`.
+
+The precise boundary matters: B2 currently induces exact first-order structural
+right recurrences and its executable backend targets Church-encoded lists. It does
+not yet infer arbitrary recursion, unknown data representations, mutual recursion,
+or unrestricted fixed points.
+The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
+per memoized type/context/size cell); its negative claims are relative to those stated
+bounds.
+
 The walls are honest too:
 
 - Naive seed injection *widens* search (one run: median cost 0.016s → 0.265s). A size-1 atom seed branches against everything.
@@ -104,14 +147,18 @@ cargo build --release
 ./target/release/supsearch ablation  # why the fold-9 wall isn't the value representation
 ./target/release/supsearch diag      # provenance: winner ancestry, semantic redundancy, cap64 vs cap512
 ./target/release/supsearch prune     # decisive: semantic pruning @ cap64 — Outcome B (no-op on this family)
+./target/release/arc1 b1             # generic within-program context invention; unseen-width gain ✗→2
+./target/release/arc1 b2             # recurrence from raw depths 1,2,3; extrapolate 5,7,9; gain ✗→7
+./target/release/arc1 b3             # invented recursion → map/append/reverse; grid mirror transfer
 ```
 
-`cargo test`: 29 pass.
+Run the complete regression suite with `cargo test --workspace`.
 
 ## Layout
 
 ```
-src/        live track: bank, bootstrap, nbe, term, parse
+src/        live track: bank, acquisition, transformation, recurrence, typed generation, NBE
+demo/arc-1 B1–B3 and ARC transfer experiments
 src/legacy/ frozen 120/120 engine
 bench/      synthesized tasks
 legacy/     frozen engine outputs + RESULTS

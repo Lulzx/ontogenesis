@@ -17,7 +17,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::io::Write;
 use std::rc::Rc;
 
-use supsearch::{acquire, bank, bootstrap, canon, nbe, parse, term, transform};
+use supsearch::{acquire, bank, bootstrap, canon, nbe, parse, recurrence, term, transform, typed};
 
 /// Build a closed term from source (for `{cons,nil}` / Church numerals).
 fn closed(s: &str) -> Rc<term::Term> {
@@ -252,6 +252,24 @@ fn main() {
             std::thread::Builder::new()
                 .stack_size(1 << 30)
                 .spawn(move || b1(&a))
+                .unwrap()
+                .join()
+                .unwrap();
+        }
+        Some("b2") => {
+            let a = args[1..].to_vec();
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(move || b2(&a))
+                .unwrap()
+                .join()
+                .unwrap();
+        }
+        Some("b3") => {
+            let a = args[1..].to_vec();
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(move || b3(&a))
                 .unwrap()
                 .join()
                 .unwrap();
@@ -1445,13 +1463,29 @@ fn b1_discovery_task() -> parse::Task {
 /// the abstraction must reduce the search cost rather than merely memorize the
 /// singleton discovery examples.
 fn b1_heldout_task() -> parse::Task {
+    b1_duplication_task(&[4, 7], 4)
+}
+
+/// Semantic validation is disjoint from both discovery and acquisition: new
+/// widths and colors make accidental agreement on singleton discovery rows
+/// insufficient to establish that the rewrite preserves the intended behavior.
+fn b1_semantic_validation_task() -> parse::Task {
+    b1_duplication_task(&[2, 3], 7)
+}
+
+fn b1_duplication_task(widths: &[usize], first_color: u32) -> parse::Task {
     parse::Task {
         arity: 1,
-        tests: (1..=3u32)
-            .map(|c| parse::Test {
-                args: vec![b1_row(c, 4)],
-                want: rc_list(&[b1_row(c, 4), b1_row(c, 4)]),
-                outer: 0,
+        tests: widths
+            .iter()
+            .enumerate()
+            .map(|(i, width)| {
+                let c = first_color + i as u32;
+                parse::Test {
+                    args: vec![b1_row(c, *width)],
+                    want: rc_list(&[b1_row(c, *width), b1_row(c, *width)]),
+                    outer: 0,
+                }
             })
             .collect(),
     }
@@ -1469,6 +1503,7 @@ fn b1(_args: &[String]) {
     // and only degenerate λ-terms (matching a 1-element list's behavior) pass.
     opts.concepts = substrate.iter().map(|c| c.body.clone()).collect();
     let discovery = b1_discovery_task();
+    let semantic_validation = b1_semantic_validation_task();
     let heldout = b1_heldout_task();
 
     println!("\n── arc1 b1: generic context abstraction invents a primitive from raw code ──");
@@ -1493,13 +1528,19 @@ fn b1(_args: &[String]) {
     let cands = transform::enumerate_abstractions(&p);
     println!("  repeated contexts → {} closed abstraction candidates", cands.len());
 
-    // 3. verify factorization (p' ≡ p on the discovery examples) + semantics
-    //    (C closed — already filtered by enumerate_abstractions).
+    // 3. verify behavior on a disjoint semantic-validation suite. The original
+    //    raw program and its rewrite must both implement row duplication there.
     let valid: Vec<&transform::Abstraction> = cands
         .iter()
-        .filter(|a| direct_solves(&discovery, &a.rewritten_program))
+        .filter(|a| {
+            direct_solves(&semantic_validation, &p)
+                && direct_solves(&semantic_validation, &a.rewritten_program)
+        })
         .collect();
-    println!("  factorization (p' ≡ p on discovery): {} valid proposals", valid.len());
+    println!(
+        "  semantic validation (unseen widths 2,3): {} valid proposals",
+        valid.len()
+    );
 
     // 4. counterfactual held-out evaluation → Gain(C_i)
     let baseline = acquire::concept_cost_abl(&heldout, &substrate, &opts, true);
@@ -1544,6 +1585,463 @@ fn b1(_args: &[String]) {
          \x20    its own discovered code, rather than selecting it from a schema catalog."
     );
     std::io::stdout().flush().ok();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// B2: recurrence induction from independently raw-discovered finite programs.
+// The discovery programs concatenate 1, 2, and 3 separate rows.  Their
+// normalized symbolic computations expose an invariant two-hole context; the
+// recurrence engine has no concat/fold/reduce/list-operation proposal catalog.
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Closed instance atoms for B2. Each is an endofunction discovered programs
+/// may compose; none names a recursion scheme or higher list operation.
+fn b2_functions(depth: usize, salt: u32) -> Vec<Rc<term::Term>> {
+    let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+    (0..depth)
+        .map(|i| {
+            let atom = b1_num(1 + (salt * 3 + i as u32 * 2) % 8);
+            term::app(cons.clone(), atom)
+        })
+        .collect()
+}
+
+fn b2_apply(functions: &[Rc<term::Term>], tail: Rc<term::Term>) -> Rc<term::Term> {
+    functions
+        .iter()
+        .rev()
+        .fold(tail, |result, f| term::app(f.clone(), result))
+}
+
+/// Extrapolation task for the executable law: apply lists of independently
+/// supplied endofunctions at depths never used for induction.
+fn b2_extrapolation_task() -> parse::Task {
+    parse::Task {
+        arity: 1,
+        tests: [5usize, 7, 9]
+            .into_iter()
+            .enumerate()
+            .map(|(salt, depth)| {
+                let functions = b2_functions(depth, 20 + salt as u32);
+                let tail = b1_row(1 + salt as u32, 2 + salt);
+                parse::Test {
+                    args: vec![rc_list(&functions), tail.clone()],
+                    want: b2_apply(&functions, tail),
+                    outer: 0,
+                }
+            })
+            .collect(),
+    }
+}
+
+fn b2_acquisition_task() -> parse::Task {
+    let functions = b2_functions(5, 50);
+    let tail = b1_row(5, 2);
+    parse::Task {
+        arity: 2,
+        tests: vec![parse::Test {
+            args: vec![rc_list(&functions), tail.clone()],
+            want: b2_apply(&functions, tail),
+            outer: 0,
+        }],
+    }
+}
+
+fn discover_b2_law(opts: &bank::Options) -> Option<(recurrence::RecurrenceLaw, Vec<Rc<term::Term>>)> {
+    let mut programs = Vec::new();
+    let mut observations = Vec::new();
+    for depth in 1..=3usize {
+        let mut local = opts.clone();
+        local.max_depth = 0;
+        let functions = b2_functions(depth, depth as u32);
+        let tail = b1_row(6 + depth as u32, 1 + depth);
+        let task = parse::Task {
+            arity: 0,
+            tests: vec![parse::Test {
+                args: vec![],
+                want: b2_apply(&functions, tail.clone()),
+                outer: 0,
+            }],
+        };
+        local.concepts.extend(functions.iter().cloned());
+        local.concepts.push(tail.clone());
+        let out = bank::solve_abl(&task, &local, true);
+        println!(
+            "  raw depth {depth}: {} (reached_size {}, built {})",
+            if out.solution.is_some() { "✓" } else { "✗" },
+            out.stats.reached_size,
+            out.stats.built
+        );
+        let program = out.solution?;
+        let (observation, external_parameters) = recurrence::observe_instantiated_program(
+            &program,
+            &functions,
+            &[tail],
+            2_000_000,
+        )?;
+        println!("    symbolic q{depth} = {}", term::show(&observation.body));
+        if external_parameters.len() != 1 {
+            return None;
+        }
+        programs.push(program);
+        observations.push(observation);
+    }
+    recurrence::infer(&observations).map(|law| (law, programs))
+}
+
+fn b2(_args: &[String]) {
+    let substrate = substrate_concepts();
+    let mut opts = bank_opts(10, 9);
+    opts.concepts = substrate.iter().map(|c| c.body.clone()).collect();
+
+    println!("\n── arc1 b2: infer an executable recursive law from finite discovered programs ──");
+    println!("discovery depths = {{1,2,3}}; schemas = none; substrate = {{cons,nil}}");
+    println!("each closed instance supplies only fresh endofunction atoms g_i and a tail z");
+    let Some((law, programs)) = discover_b2_law(&opts) else {
+        println!("  induction: ✗ raw discovery or invariant-context inference failed");
+        return;
+    };
+    for (i, p) in programs.iter().enumerate() {
+        println!("  raw p{} = {}", i + 1, term::show(p));
+    }
+    println!("  inferred base = {}", term::show(&law.base));
+    println!("  inferred step context = {}", term::show(law.step_context()));
+    println!("  law validation: ✓ exact reconstruction at depths 1,2,3");
+
+    let executable = law.compile_church();
+    let extrapolation = b2_extrapolation_task();
+    let extrapolates = direct_solves(&extrapolation, &executable);
+    println!(
+        "  extrapolation at depths 5,7,9 with novel atoms/shapes: {}",
+        if extrapolates { "✓" } else { "✗" }
+    );
+
+    let mut heldout_opts = bank_opts(8, 8);
+    heldout_opts.max_depth = 2;
+    heldout_opts.concepts = substrate.iter().map(|c| c.body.clone()).collect();
+    let acquisition_task = b2_acquisition_task();
+    let baseline = acquire::concept_cost_abl(&acquisition_task, &substrate, &heldout_opts, true);
+    let gain = acquire::propose_value_abl(
+        &executable,
+        &substrate,
+        &[acquisition_task],
+        &heldout_opts,
+        baseline,
+        true,
+    );
+    match gain {
+        Some(g) if extrapolates && g.earns() => println!(
+            "  counterfactual acquisition: {} → {}  {}  ACQUIRE",
+            acquire::disp_cost(g.before),
+            acquire::disp_cost(g.after),
+            g.kind()
+        ),
+        Some(g) => println!(
+            "  counterfactual acquisition: {} → {}  {}  REJECT",
+            acquire::disp_cost(g.before),
+            acquire::disp_cost(g.after),
+            g.kind()
+        ),
+        None => println!("  counterfactual acquisition: no executable interface  REJECT"),
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// B3: the recursion scheme induced in B2 becomes an ontology atom. A single
+// typed normal-form generator then searches for higher concepts; its grammar is
+// operation-blind and contains no map/reverse/append/fold productions.
+// ────────────────────────────────────────────────────────────────────────────
+
+fn b3_map_task() -> parse::Task {
+    let succ = closed("λn.λf.λx.f(n(f)(x))");
+    let twice = closed("λn.λf.λx.n(f)(n(f)(x))");
+    let cases = vec![
+        (succ, vec![1, 2, 4]),
+        (twice, vec![1, 3, 4]),
+    ];
+    parse::Task {
+        arity: 2,
+        tests: cases
+            .into_iter()
+            .map(|(f, values)| {
+                let inputs: Vec<Rc<term::Term>> = values.iter().map(|n| b1_num(*n)).collect();
+                let outputs: Vec<Rc<term::Term>> = inputs
+                    .iter()
+                    .map(|x| term::app(f.clone(), x.clone()))
+                    .collect();
+                parse::Test {
+                    args: vec![f, rc_list(&inputs)],
+                    want: rc_list(&outputs),
+                    outer: 0,
+                }
+            })
+            .collect(),
+    }
+}
+
+fn b3_append_task() -> parse::Task {
+    parse::Task {
+        arity: 2,
+        tests: vec![
+            parse::Test {
+                args: vec![church_list(&[1, 2]), church_list(&[3, 4])],
+                want: church_list(&[1, 2, 3, 4]),
+                outer: 0,
+            },
+            parse::Test {
+                args: vec![church_list(&[5]), church_list(&[6, 7, 8])],
+                want: church_list(&[5, 6, 7, 8]),
+                outer: 0,
+            },
+        ],
+    }
+}
+
+fn b3_reverse_task() -> parse::Task {
+    parse::Task {
+        arity: 1,
+        tests: vec![
+            parse::Test {
+                args: vec![church_list(&[1, 2, 3])],
+                want: church_list(&[3, 2, 1]),
+                outer: 0,
+            },
+            parse::Test {
+                args: vec![church_list(&[4, 1, 5, 2])],
+                want: church_list(&[2, 5, 1, 4]),
+                outer: 0,
+            },
+        ],
+    }
+}
+
+fn b3_types() -> (typed::Type, typed::Type) {
+    (typed::Type::Atom(0), typed::Type::Atom(1))
+}
+
+fn b3_atoms(
+    recursion: Option<Rc<term::Term>>,
+    append: Option<Rc<term::Term>>,
+) -> Vec<typed::Atom> {
+    let (a, list) = b3_types();
+    let arrow = typed::Type::arrow;
+    let cons_ty = arrow(a.clone(), arrow(list.clone(), list.clone()));
+    let step_ty = cons_ty.clone();
+    let rec_ty = arrow(
+        step_ty,
+        arrow(list.clone(), arrow(list.clone(), list.clone())),
+    );
+    let mut atoms = vec![
+        typed::Atom {
+            body: closed("λc.λs.λf.λz.f(c)(s(f)(z))"),
+            ty: cons_ty,
+        },
+        typed::Atom {
+            body: closed("λf.λz.z"),
+            ty: list.clone(),
+        },
+    ];
+    if let Some(body) = recursion {
+        atoms.push(typed::Atom { body, ty: rec_ty });
+    }
+    if let Some(body) = append {
+        atoms.push(typed::Atom {
+            body,
+            ty: arrow(list.clone(), arrow(list.clone(), list)),
+        });
+    }
+    atoms
+}
+
+fn b3_find(
+    task: &parse::Task,
+    target: &typed::Type,
+    atoms: &[typed::Atom],
+    max_size: u32,
+) -> Option<typed::Found> {
+    typed::find_closed(target, atoms, max_size, 50_000, |candidate| {
+        direct_solves(task, candidate)
+    })
+}
+
+struct B3Vocabulary {
+    recursion: Rc<term::Term>,
+    map: typed::Found,
+    append: typed::Found,
+    reverse: typed::Found,
+}
+
+fn discover_b3_vocabulary() -> Option<B3Vocabulary> {
+    let substrate = substrate_concepts();
+    let mut opts = bank_opts(10, 9);
+    opts.concepts = substrate.iter().map(|c| c.body.clone()).collect();
+    let (law, _) = discover_b2_law(&opts)?;
+    let recursion = law.compile_church_scheme();
+
+    let (a, list) = b3_types();
+    let arrow = typed::Type::arrow;
+    let map_ty = arrow(arrow(a.clone(), a), arrow(list.clone(), list.clone()));
+    let append_ty = arrow(list.clone(), arrow(list.clone(), list.clone()));
+    let reverse_ty = arrow(list.clone(), list);
+
+    let base_atoms = b3_atoms(Some(recursion.clone()), None);
+    let map = match b3_find(&b3_map_task(), &map_ty, &base_atoms, 18) {
+        Some(x) => x,
+        None => {
+            println!("  map proposal search: ✗ through size 18");
+            return None;
+        }
+    };
+    let append = match b3_find(&b3_append_task(), &append_ty, &base_atoms, 12) {
+        Some(x) => x,
+        None => {
+            println!("  append proposal search: ✗ through size 12");
+            return None;
+        }
+    };
+    let reverse = match b3_find(&b3_reverse_task(), &reverse_ty, &base_atoms, 20) {
+        Some(x) => x,
+        None => {
+            println!("  reverse proposal search: ✗ through size 20");
+            return None;
+        }
+    };
+    Some(B3Vocabulary { recursion, map, append, reverse })
+}
+
+fn b3_gain(
+    candidate: &Rc<term::Term>,
+    arity: u32,
+    current: &[bank::Concept],
+    task: &parse::Task,
+) -> acquire::Gain {
+    let mut opts = bank_opts(5, 8);
+    opts.max_depth = task.arity as u32;
+    opts.concepts = current.iter().map(|c| c.body.clone()).collect();
+    let baseline = acquire::concept_cost_abl(task, current, &opts, true);
+    let mut extended = current.to_vec();
+    extended.push(bank::Concept {
+        body: candidate.clone(),
+        name: "candidate".into(),
+        arity,
+    });
+    let after = acquire::concept_cost_abl(task, &extended, &opts, true);
+    acquire::Gain { arity, before: baseline, after }
+}
+
+fn b3(_args: &[String]) {
+    println!("\n── arc1 b3: invented recursion constructs a higher reasoning vocabulary ──");
+    println!("generator = simply-typed β-normal enumeration; named operation schemas = none");
+    let Some(v) = discover_b3_vocabulary() else {
+        println!("  vocabulary discovery: ✗");
+        return;
+    };
+    println!("  B2 recursion scheme = {}", term::show(&v.recursion));
+    println!(
+        "  map: size {}, generated {} → {}",
+        v.map.size,
+        v.map.generated,
+        term::show(&v.map.term)
+    );
+    println!(
+        "  append: size {}, generated {} → {}",
+        v.append.size,
+        v.append.generated,
+        term::show(&v.append.term)
+    );
+    println!(
+        "  reverse: size {}, generated {} → {}",
+        v.reverse.size,
+        v.reverse.generated,
+        term::show(&v.reverse.term)
+    );
+
+    let (a, list) = b3_types();
+    let arrow = typed::Type::arrow;
+    let substrate_atoms = b3_atoms(None, None);
+    let absent_without_recursion = [
+        b3_find(
+            &b3_map_task(),
+            &arrow(arrow(a.clone(), a), arrow(list.clone(), list.clone())),
+            &substrate_atoms,
+            v.map.size,
+        )
+        .is_none(),
+        b3_find(
+            &b3_append_task(),
+            &arrow(list.clone(), arrow(list.clone(), list.clone())),
+            &substrate_atoms,
+            v.append.size,
+        )
+        .is_none(),
+        b3_find(
+            &b3_reverse_task(),
+            &arrow(list.clone(), list),
+            &substrate_atoms,
+            v.reverse.size,
+        )
+        .is_none(),
+    ]
+    .into_iter()
+    .filter(|absent| *absent)
+    .count();
+    println!(
+        "  proposal-space gain from invented recursion: {}/3 absent → 3/3 reachable",
+        absent_without_recursion
+    );
+
+    let substrate = substrate_concepts();
+    let recursion_concept = bank::Concept {
+        body: v.recursion.clone(),
+        name: "recurrence".into(),
+        arity: 3,
+    };
+    let map_gain = b3_gain(
+        &v.map.term,
+        2,
+        &[substrate.clone(), vec![recursion_concept.clone()]].concat(),
+        &b3_map_task(),
+    );
+    let append_gain = b3_gain(
+        &v.append.term,
+        2,
+        &[substrate.clone(), vec![recursion_concept.clone()]].concat(),
+        &b3_append_task(),
+    );
+    let reverse_gain = b3_gain(
+        &v.reverse.term,
+        1,
+        &[substrate.clone(), vec![recursion_concept]].concat(),
+        &b3_reverse_task(),
+    );
+    println!(
+        "  map acquisition: {} → {}  {}",
+        acquire::disp_cost(map_gain.before),
+        acquire::disp_cost(map_gain.after),
+        map_gain.kind()
+    );
+    println!(
+        "  append acquisition: {} → {}  {}",
+        acquire::disp_cost(append_gain.before),
+        acquire::disp_cost(append_gain.after),
+        append_gain.kind()
+    );
+    println!(
+        "  reverse acquisition: {} → {}  {}",
+        acquire::disp_cost(reverse_gain.before),
+        acquire::disp_cost(reverse_gain.after),
+        reverse_gain.kind()
+    );
+
+    let mirror = term::lam(term::app(
+        term::app(v.map.term.clone(), v.reverse.term.clone()),
+        term::var(0),
+    ));
+    let mirror_transfer = direct_solves(&task(5, 4), &mirror);
+    println!(
+        "  cross-domain transfer map(reverse): 5×4 unseen grid mirror {}",
+        if mirror_transfer { "✓" } else { "✗" }
+    );
 }
 
 /// Discover `reverse` on the list domain from `{cons,nil}` via the C7 meta-space.
@@ -2204,12 +2702,27 @@ mod tests {
                 let raw = bank::solve_abl(&discovery, &o, true)
                     .solution
                     .expect("B1 discovery must be raw-reachable");
+                assert!(
+                    term_has_prim(raw.as_ref(), &substrate[0].body),
+                    "the raw program must genuinely use cons, not an observational impostor"
+                );
                 let candidate = transform::enumerate_abstractions(&raw)
                     .into_iter()
-                    .find(|a| direct_solves(&discovery, &a.rewritten_program))
+                    .find(|a| {
+                        direct_solves(&b1_semantic_validation_task(), &raw)
+                            && direct_solves(
+                                &b1_semantic_validation_task(),
+                                &a.rewritten_program,
+                            )
+                    })
                     .expect("raw program must contain a valid closed repeated context");
 
                 let heldout = b1_heldout_task();
+                assert!(direct_solves(&heldout, &candidate.concept));
+                assert!(
+                    !direct_solves(&heldout, &closed("λx.x")),
+                    "identity must not pass unseen-width semantic validation"
+                );
                 let baseline = acquire::concept_cost_abl(&heldout, &substrate, &o, true);
                 let gain = acquire::propose_value_abl(
                     &candidate.concept,
@@ -2222,6 +2735,139 @@ mod tests {
                 .expect("factored context must have a measurable interface");
                 assert!(gain.earns(), "B1 abstraction must reduce held-out cost");
                 assert_eq!(gain.arity, 1, "row duplication is unary");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn b2_induces_extrapolates_and_earns_recursive_law() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let substrate = substrate_concepts();
+                let mut discovery_opts = bank_opts(10, 9);
+                discovery_opts.concepts =
+                    substrate.iter().map(|c| c.body.clone()).collect();
+                let (law, programs) = discover_b2_law(&discovery_opts)
+                    .expect("depth-1..3 raw programs must induce one invariant law");
+                assert_eq!(programs.len(), 3);
+                assert!(law.uses_head());
+                assert!(law.uses_recursive_result());
+
+                let executable = law.compile_church();
+                assert!(transform::is_closed(&executable));
+                assert!(
+                    direct_solves(&b2_extrapolation_task(), &executable),
+                    "the executable law must extrapolate to 5,7,9"
+                );
+
+                let task = b2_acquisition_task();
+                let mut heldout_opts = bank_opts(8, 8);
+                heldout_opts.max_depth = 2;
+                heldout_opts.concepts =
+                    substrate.iter().map(|c| c.body.clone()).collect();
+                let baseline =
+                    acquire::concept_cost_abl(&task, &substrate, &heldout_opts, true);
+                assert!(baseline >= acquire::UNREACHABLE);
+                let gain = acquire::propose_value_abl(
+                    &executable,
+                    &substrate,
+                    &[task],
+                    &heldout_opts,
+                    baseline,
+                    true,
+                )
+                .expect("the compiled recurrence must expose an interface");
+                assert!(gain.frontier());
+                assert_eq!(gain.arity, 2);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn b3_invented_recursion_expands_proposals_and_recovers_vocabulary() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let vocabulary = discover_b3_vocabulary()
+                    .expect("B2 recursion must expose map, append, then reverse");
+                let (a, list) = b3_types();
+                let arrow = typed::Type::arrow;
+                let map_ty = arrow(arrow(a.clone(), a), arrow(list.clone(), list.clone()));
+                let append_ty = arrow(list.clone(), arrow(list.clone(), list.clone()));
+                let reverse_ty = arrow(list.clone(), list);
+
+                // Proposal-space controls: without the invented recursive atom,
+                // map, append, and reverse are absent at their discovered sizes.
+                let substrate_only = b3_atoms(None, None);
+                assert!(b3_find(&b3_map_task(), &map_ty, &substrate_only, 11).is_none());
+                assert!(
+                    b3_find(&b3_append_task(), &append_ty, &substrate_only, 9).is_none()
+                );
+                assert!(
+                    b3_find(&b3_reverse_task(), &reverse_ty, &substrate_only, 14).is_none()
+                );
+
+                // Honest control: recursion alone can inline an append-like
+                // computation, so append is useful vocabulary but not strictly
+                // load-bearing for reverse in this bounded typed space.
+                let recursion_only = b3_atoms(Some(vocabulary.recursion.clone()), None);
+                let inlined_reverse = b3_find(
+                    &b3_reverse_task(),
+                    &reverse_ty,
+                    &recursion_only,
+                    20,
+                )
+                .expect("recursion alone should be able to inline reverse's helper");
+                assert!(direct_solves(&b3_reverse_task(), &inlined_reverse.term));
+
+                assert!(term_has_prim(
+                    vocabulary.map.term.as_ref(),
+                    &vocabulary.recursion
+                ));
+                assert!(term_has_prim(
+                    vocabulary.append.term.as_ref(),
+                    &vocabulary.recursion
+                ));
+                assert!(term_has_prim(
+                    vocabulary.reverse.term.as_ref(),
+                    &vocabulary.recursion
+                ));
+
+                let substrate = substrate_concepts();
+                let recursion = bank::Concept {
+                    body: vocabulary.recursion.clone(),
+                    name: "recurrence".into(),
+                    arity: 3,
+                };
+                let map_gain = b3_gain(
+                    &vocabulary.map.term,
+                    2,
+                    &[substrate.clone(), vec![recursion.clone()]].concat(),
+                    &b3_map_task(),
+                );
+                assert!(map_gain.frontier());
+
+                let reverse_gain = b3_gain(
+                    &vocabulary.reverse.term,
+                    1,
+                    &[substrate, vec![recursion]].concat(),
+                    &b3_reverse_task(),
+                );
+                assert!(reverse_gain.frontier());
+
+                let mirror = term::lam(term::app(
+                    term::app(
+                        vocabulary.map.term.clone(),
+                        vocabulary.reverse.term.clone(),
+                    ),
+                    term::var(0),
+                ));
+                assert!(direct_solves(&task(5, 4), &mirror));
             })
             .unwrap()
             .join()

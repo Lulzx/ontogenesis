@@ -14,6 +14,8 @@
 //! - [`bootstrap`]: probe universes, compression mining, Church-numeral encoding.
 //! - [`transform`]: generic program-transformation meta-search (context abstraction
 //!   + composition) — the machinery that invents primitives by restructuring code.
+//! - [`recurrence`]: generic invariant-context induction across finite unrollings.
+//! - [`typed`]: operation-blind simply-typed beta-normal proposal enumeration.
 
 pub mod acquire;
 pub mod bank;
@@ -21,5 +23,7 @@ pub mod bootstrap;
 pub mod canon;
 pub mod nbe;
 pub mod parse;
+pub mod recurrence;
 pub mod term;
 pub mod transform;
+pub mod typed;
