@@ -13,10 +13,11 @@
 //! confound composition with value cost. The *next* milestone is grid concept
 //! acquisition (discover + counterfactually acquire mirror/repeat/etc.).
 
+use std::collections::hash_map::DefaultHasher;
 use std::io::Write;
 use std::rc::Rc;
 
-use supsearch::{acquire, bank, bootstrap, nbe, parse, term};
+use supsearch::{acquire, bank, bootstrap, canon, nbe, parse, term};
 
 /// Build a closed term from source (for `{cons,nil}` / Church numerals).
 fn closed(s: &str) -> Rc<term::Term> {
@@ -1303,77 +1304,213 @@ fn autodisc(args: &[String]) {
     out.flush().ok();
 }
 
-/// The discovered vocabulary as closed λ-terms from {cons,nil}: reverse, append,
-/// cons, nil. `map` and `compose` are built as higher-order combinators.
-struct Vocab {
+/// The discovered cross-domain vocabulary as closed λ-terms from {cons,nil}.
+/// ALL of `reverse`, `map`, `compose` are DISCOVERED by the C7 fold-schema
+/// meta-space (not hand-written); `append` and `dup` are derived from the
+/// discovered reverse/append. `cons`/`nil` are the substrate.
+struct Schemas {
     reverse: Rc<term::Term>,
     append: Rc<term::Term>,
-    cons: Rc<term::Term>,
-    nil: Rc<term::Term>,
+    map: Rc<term::Term>,
+    compose: Rc<term::Term>,
 }
 
-fn vocab() -> Vocab {
+/// Discover the full cross-domain vocabulary {reverse, map, compose} from
+/// {cons,nil} via the C7 fold-schema meta-space, and derive {append, dup}.
+/// Returns None if any schema fails to be proposed (the honest failure mode —
+/// the gridmeta claim only holds if the whole stack is genuinely derived).
+fn discover_schemas(opts: &bank::Options) -> Option<Schemas> {
     let cons_t = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
     let nil_t = closed("λf.λz.z");
-    // append = reduce(cons) = λxs.λys.(xs cons ys)
+    // reduce(C) = λxs.λys.(xs C ys) — the C7 proposal schema.
+    let reduce = |c: &Rc<term::Term>| -> Rc<term::Term> {
+        term::lam(term::lam(term::app(term::app(term::var(1), c.clone()), term::var(0))))
+    };
+    let append = reduce(&cons_t);
+    let singleton = term::lam(term::app(term::app(cons_t.clone(), term::var(0)), nil_t.clone()));
+    let reverse = discover_reverse(opts)?;
+    let map = discover_map(&cons_t, &nil_t, &singleton)?;
+    let compose = discover_compose(&reverse, &singleton)?;
+    Some(Schemas { reverse, append, map, compose })
+}
+
+/// Directly evaluate `body` (a closed term) as a `k`-ary function against a
+/// task's tests, comparing results to wants via canonical keys. This is the
+/// honest single-candidate gate for schema discovery: does THIS term, as a
+/// function, map the test inputs to the test outputs? (`concept_solve` is a
+/// *search* and can find a program that uses a wrong candidate in a non-obvious
+/// way — e.g. a projection that happens to compose the right values — so
+/// discovering a specific schema needs the direct gate.)
+fn direct_solves(task: &parse::Task, body: &Rc<term::Term>) -> bool {
+    let empty: nbe::Env = Rc::new(Vec::new());
+    task.tests.iter().all(|t| {
+        let mut fuel = nbe::Fuel(1_000_000);
+        let applied = t.args.iter().fold(body.clone(), |acc, a| term::app(acc, a.clone()));
+        let v = nbe::eval(&empty, &applied, &mut fuel).ok();
+        let w = nbe::eval(&empty, &t.want, &mut fuel).ok();
+        match (v, w) {
+            (Some(v), Some(w)) => {
+                let mut h1 = DefaultHasher::new();
+                let mut h2 = DefaultHasher::new();
+                let mut f1 = nbe::Fuel(1_000_000);
+                let mut f2 = nbe::Fuel(1_000_000);
+                let k1 = canon::canonicalize(v.as_ref(), &mut f1, &mut h1).ok();
+                let k2 = canon::canonicalize(w.as_ref(), &mut f2, &mut h2).ok();
+                k1 == k2
+            }
+            _ => false,
+        }
+    })
+}
+
+/// Discover `map` as a fold with a function parameter:
+///   map(f) = λf. λxs. (xs step nil),  step = λh.λrest. cons (f h) rest.
+/// The step references the outer function `f` (de Bruijn Var(3) inside the step),
+/// so the enumeration adds `f h` as a candidate element alongside the closed one
+/// (id h). Solves-gated against map(singleton) [1,2,3] → [[1],[2],[3]] — a
+/// 3-element list distinguishes cons-map from append-map, which coincide on
+/// singletons (append flattens, cons nests).
+fn discover_map(
+    cons_t: &Rc<term::Term>,
+    nil_t: &Rc<term::Term>,
+    singleton: &Rc<term::Term>,
+) -> Option<Rc<term::Term>> {
+    let num = |n: u32| closed(&bootstrap::church_num_str(n));
+    let map_task = parse::Task {
+        arity: 2,
+        tests: vec![parse::Test {
+            args: vec![singleton.clone(), church_list(&[1, 2, 3])],
+            want: rc_list(&[
+                rc_list(&[num(1)]),
+                rc_list(&[num(2)]),
+                rc_list(&[num(3)]),
+            ]),
+            outer: 0,
+        }],
+    };
+    let solves = |body: &Rc<term::Term>| -> bool { direct_solves(&map_task, body) };
+    // append = reduce(cons) = λxs.λys.(xs cons ys).
     let append = term::lam(term::lam(term::app(
         term::app(term::var(1), cons_t.clone()),
         term::var(0),
     )));
-    // singleton = λa. cons a nil
-    let singleton = term::lam(term::app(term::app(cons_t.clone(), term::var(0)), nil_t.clone()));
-    // reverse = λxs. xs (λh.λacc. append acc (singleton h)) nil
-    let reverse = term::lam(term::app(
-        term::app(
-            term::var(0),
-            term::lam(term::lam(term::app(
-                term::app(append.clone(), term::var(0)),
-                term::app(singleton.clone(), term::var(1)),
-            ))),
-        ),
-        nil_t.clone(),
-    ));
-    Vocab {
-        reverse,
-        append,
-        cons: cons_t,
-        nil: nil_t,
+    // Inside the fold step λh.λrest.…, the outer function f is Var(3) (bound by
+    // λf two lambdas out), h is Var(1), rest is Var(0).
+    let f_h = term::app(term::var(3), term::var(1)); // f h
+    let h = term::var(1);                            // id h = h
+    let unary = [("id", h), ("f", f_h)];
+    let binary = [("cons", cons_t.clone()), ("append", append)];
+    for (_, b) in &binary {
+        for (_, g) in &unary {
+            // λh.λrest. b (g h) rest
+            let step1 = term::lam(term::lam(term::app(
+                term::app(b.clone(), g.clone()),
+                term::var(0),
+            )));
+            // λh.λrest. b rest (g h)
+            let step2 = term::lam(term::lam(term::app(
+                term::app(b.clone(), term::var(0)),
+                g.clone(),
+            )));
+            for step in [step1, step2] {
+                // map = λf. λxs. (xs step nil) — built directly (no reduce
+                // wrapper, so the step's outer function f stays at Var(3)).
+                let map_cand = term::lam(term::lam(term::app(
+                    term::app(term::var(0), step),
+                    nil_t.clone(),
+                )));
+                if solves(&map_cand) {
+                    return Some(map_cand);
+                }
+            }
+        }
     }
+    None
+}
+
+/// Enumerate all closed λ-terms of exactly `size` nodes (pure combinators — no
+/// cons/nil, just λ and variables). Used to discover `compose` as the smallest
+/// closed term that composes two functions.
+fn gen_closed(size: u32) -> Vec<Rc<term::Term>> {
+    fn gen(depth: u32, size: u32) -> Vec<Rc<term::Term>> {
+        let mut out = Vec::new();
+        if size == 1 {
+            for i in 0..depth {
+                out.push(term::var(i));
+            }
+            return out;
+        }
+        if size >= 2 {
+            for b in gen(depth + 1, size - 1) {
+                out.push(term::lam(b));
+            }
+        }
+        for s1 in 1..size {
+            let s2 = size - s1;
+            for f in gen(depth, s1) {
+                for a in gen(depth, s2) {
+                    out.push(term::app(f.clone(), a));
+                }
+            }
+        }
+        out
+    }
+    gen(0, size)
+}
+
+/// Discover `compose` as the pure composition combinator λf.λg.λx. f (g x) by
+/// enumerating small closed λ-terms and solves-gating against a two-test task
+/// that pins down the argument order:
+///   compose(rev, singleton) [1,2] → [[1,2]]   (rev ∘ singleton)
+///   compose(singleton, rev) [1,2] → [[2,1]]   (singleton ∘ rev)
+/// The two tests distinguish compose from the projections (λf.λg.λx. f x and
+/// λf.λg.λx. g x), each of which passes exactly one of them.
+fn discover_compose(reverse: &Rc<term::Term>, singleton: &Rc<term::Term>) -> Option<Rc<term::Term>> {
+    let compose_task = parse::Task {
+        arity: 3,
+        tests: vec![
+            parse::Test {
+                args: vec![reverse.clone(), singleton.clone(), church_list(&[1, 2])],
+                want: rc_list(&[church_list(&[1, 2])]),
+                outer: 0,
+            },
+            parse::Test {
+                args: vec![singleton.clone(), reverse.clone(), church_list(&[1, 2])],
+                want: rc_list(&[church_list(&[2, 1])]),
+                outer: 0,
+            },
+        ],
+    };
+    let solves = |body: &Rc<term::Term>| -> bool { direct_solves(&compose_task, body) };
+    // compose is size 8; enumerate up to that and return the first solver.
+    for size in 1..=8u32 {
+        for t in gen_closed(size) {
+            if solves(&t) {
+                return Some(t);
+            }
+        }
+    }
+    None
 }
 
 /// The grid-transform meta-space: a **typed** generative enumeration of
-/// compositions of the discovered building blocks {rev, dup, map, compose}.
+/// compositions of the DISCOVERED building blocks {rev, dup, map, compose} —
+/// all proposed by the C7 fold-schema meta-space from {cons,nil}, none
+/// hand-written.
 ///
-/// The human provides the building blocks and the composition operators (map,
-/// compose) — NOT the specific transforms (mirror, vflip, rotation, tiling). The
-/// system searches compositions and discovers which solve which families.
-///
-/// Types: a grid is `List (List N)`, a row is `List N`. `rev` and `dup` are
-/// polymorphic (work on any list); `map(f)` maps a row-op over rows. The type
-/// discipline prunes the combinatorial explosion of the untyped grammar (which
-/// generated ~1.6M terms at size 6, mostly type-wrong).
-fn gridmeta_candidates() -> Vec<(String, Rc<term::Term>)> {
-    let v = vocab();
-    // Building blocks (polymorphic over lists).
-    let rev = v.reverse.clone();
-    let dup = term::lam(term::app(term::app(v.append.clone(), term::var(0)), term::var(0)));
+/// The human provides only the composition operators (map, compose) as
+/// discovered schemas and the type discipline (grid = List(List N), row = List N)
+/// — NOT the specific transforms (mirror, vflip, rotation, tiling). The system
+/// searches compositions and discovers which solve which families.
+fn gridmeta_candidates(s: &Schemas) -> Vec<(String, Rc<term::Term>)> {
+    let rev = s.reverse.clone();
+    let dup = term::lam(term::app(term::app(s.append.clone(), term::var(0)), term::var(0)));
     let id = term::lam(term::var(0));
-    // map(f) = λxs. xs (λh.λrest. cons (f h) rest) nil
-    let map = |f: &Rc<term::Term>| -> Rc<term::Term> {
-        term::lam(term::app(
-            term::app(
-                term::var(0),
-                term::lam(term::lam(term::app(
-                    term::app(v.cons.clone(), term::app(f.clone(), term::var(1))),
-                    term::var(0),
-                ))),
-            ),
-            v.nil.clone(),
-        ))
-    };
-    // compose(f,g) = λx. f (g x)
+    // map(f) = app(map, f); compose(f,g) = app(app(compose, f), g) — map and
+    // compose are now DISCOVERED closed terms, not hand-written closures.
+    let map = |f: &Rc<term::Term>| -> Rc<term::Term> { term::app(s.map.clone(), f.clone()) };
     let compose = |f: &Rc<term::Term>, g: &Rc<term::Term>| -> Rc<term::Term> {
-        term::lam(term::app(f.clone(), term::app(g.clone(), term::var(0))))
+        term::app(term::app(s.compose.clone(), f.clone()), g.clone())
     };
     // Depth-1 grid ops: the grid-level building blocks, plus map of each row-op.
     // These are GENERATED (map applied to each row-op), not hand-picked.
@@ -1413,8 +1550,10 @@ fn gridmeta_families() -> Vec<(
 /// Solves-gate each meta-space candidate against each transform family (canonical
 /// keying so grids stay hashable). Returns the (candidate, family) pairs that
 /// solve — the grid concepts that emerge from the one cross-domain library.
-fn gridmeta_discover(opts: &bank::Options) -> Vec<(String, &'static str)> {
-    let candidates = gridmeta_candidates();
+/// `None` if the vocabulary itself cannot be discovered from {cons,nil}.
+fn gridmeta_discover(opts: &bank::Options) -> Option<Vec<(String, &'static str)>> {
+    let s = discover_schemas(opts)?;
+    let candidates = gridmeta_candidates(&s);
     let families = gridmeta_families();
     let mut discovered = Vec::new();
     for (cname, body) in &candidates {
@@ -1429,7 +1568,7 @@ fn gridmeta_discover(opts: &bank::Options) -> Vec<(String, &'static str)> {
             }
         }
     }
-    discovered
+    Some(discovered)
 }
 
 /// The multi-transform generalization experiment: does the SAME discovered list
@@ -1460,11 +1599,21 @@ fn gridmeta(args: &[String]) {
         }
     }
     let opts = bank_opts(budget, max_size);
-    let candidates = gridmeta_candidates();
+    let Some(s) = discover_schemas(&opts) else {
+        println!("✗ could not discover the full vocabulary {{reverse, map, compose}} from {{cons,nil}}");
+        return;
+    };
+    let candidates = gridmeta_candidates(&s);
     let families = gridmeta_families();
 
     println!("\n── gridmeta: does the discovered list vocabulary generalize to grids? ──");
-    println!("vocabulary: {{rev, dup, map, compose}} — building blocks from {{cons,nil}}");
+    println!(
+        "discovered: reverse(size {}), map(size {}), compose(size {})",
+        s.reverse.size(),
+        s.map.size(),
+        s.compose.size()
+    );
+    println!("vocabulary: {{rev, dup, map, compose}} — ALL discovered from {{cons,nil}} by the C7 meta-space");
     println!("meta-space: {} typed compositions; families: mirror, vflip, rotation, h-tile, v-tile, 2×2", candidates.len());
     println!("budget: max_size {max_size}, {budget}s");
     out.flush().ok();
@@ -1477,7 +1626,7 @@ fn gridmeta(args: &[String]) {
     }
     println!("{header}");
     println!("{}", "-".repeat(header.len()));
-    let discovered = gridmeta_discover(&opts);
+    let discovered = gridmeta_discover(&opts).unwrap_or_default();
     for (cname, body) in &candidates {
         let mut row = format!("{cname:<34}");
         for (_fname, target, sizes) in &families {
@@ -1981,7 +2130,9 @@ mod tests {
             .stack_size(1 << 30)
             .spawn(|| {
                 let o = opts();
-                let discovered = gridmeta_discover(&o);
+                let Some(discovered) = gridmeta_discover(&o) else {
+                    panic!("must discover the full vocabulary {{reverse, map, compose}} from {{cons,nil}}");
+                };
                 let solved: Vec<&str> = {
                     let mut s: Vec<&str> = discovered.iter().map(|(_, f)| *f).collect();
                     s.sort();
