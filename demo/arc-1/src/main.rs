@@ -17,7 +17,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::io::Write;
 use std::rc::Rc;
 
-use supsearch::{acquire, bank, bootstrap, canon, nbe, parse, term};
+use supsearch::{acquire, bank, bootstrap, canon, nbe, parse, term, transform};
 
 /// Build a closed term from source (for `{cons,nil}` / Church numerals).
 fn closed(s: &str) -> Rc<term::Term> {
@@ -241,6 +241,17 @@ fn main() {
             std::thread::Builder::new()
                 .stack_size(1 << 30)
                 .spawn(move || arcdiag(&a))
+                .unwrap()
+                .join()
+                .unwrap();
+        }
+        Some("b1") => {
+            // B1 generic context-abstraction meta-search: grid NBE recurses deep
+            // on the fold structure, so run on a large stack.
+            let a = args[1..].to_vec();
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(move || b1(&a))
                 .unwrap()
                 .join()
                 .unwrap();
@@ -1369,6 +1380,172 @@ fn a1(_args: &[String]) {
     out.flush().ok();
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// B1: generic context-abstraction meta-search — the machine invents a primitive
+// by restructuring its own discovered code, not by selecting from a schema
+// catalog. The substrate is only the computational primitives {cons,nil} +
+// color-numerals; the ontology is empty. The machine raw-solves a task, factors
+// a repeated subterm out of the program's body into a hole (context abstraction),
+// and counterfactually acquires the concept iff it reduces held-out cost.
+//
+//   raw solve → p
+//   enumerate repeated contexts → (C_i, p_i')
+//   verify p_i' ≡ p (factorization) + C_i closed (semantics) → valid proposals
+//   counterfactual held-out evaluation → Gain(C_i)
+//   Gain > 0 → ACQUIRE
+// ────────────────────────────────────────────────────────────────────────────
+
+/// The fixed computational substrate: {cons, nil} as cost-1 primitives. No
+/// reverse/map/compose/mirror — the ontology is empty; the machine must build it.
+fn substrate_concepts() -> Vec<bank::Concept> {
+    vec![
+        bank::Concept {
+            body: closed("λc.λs.λf.λz.f(c)(s(f)(z))"),
+            name: "cons".into(),
+            arity: 2,
+        },
+        bank::Concept {
+            body: closed("λf.λz.z"),
+            name: "nil".into(),
+            arity: 0,
+        },
+    ]
+}
+
+/// A color numeral as a closed Church term.
+fn b1_num(n: u32) -> Rc<term::Term> {
+    closed(&bootstrap::church_num_str(n))
+}
+
+/// A row of `w` copies of color `c`.
+fn b1_row(c: u32, w: usize) -> Rc<term::Term> {
+    let cells: Vec<Rc<term::Term>> = (0..w).map(|_| b1_num(c)).collect();
+    rc_list(&cells)
+}
+
+/// Discovery family: given a singleton row `[c]`, duplicate it into the 2×1
+/// grid `[[c],[c]]`. Supplying the row keeps discovery focused on the repeated
+/// context `λr. cons r (cons r nil)` instead of spending the search budget
+/// constructing the value that will fill that context.
+fn b1_discovery_task() -> parse::Task {
+    parse::Task {
+        arity: 1,
+        tests: (1..=3u32)
+            .map(|c| parse::Test {
+                args: vec![b1_row(c, 1)],
+                want: rc_list(&[b1_row(c, 1), b1_row(c, 1)]),
+                outer: 0,
+            })
+            .collect(),
+    }
+}
+
+/// Held-out transfer: duplicate an unseen width-4 row. The operation is the
+/// same as discovery, but both the row shape and values are held out; acquiring
+/// the abstraction must reduce the search cost rather than merely memorize the
+/// singleton discovery examples.
+fn b1_heldout_task() -> parse::Task {
+    parse::Task {
+        arity: 1,
+        tests: (1..=3u32)
+            .map(|c| parse::Test {
+                args: vec![b1_row(c, 4)],
+                want: rc_list(&[b1_row(c, 4), b1_row(c, 4)]),
+                outer: 0,
+            })
+            .collect(),
+    }
+}
+
+/// B1 driver: raw solve → enumerate repeated contexts → verify factorization →
+/// counterfactual held-out evaluation → ACQUIRE/REJECT per candidate.
+fn b1(_args: &[String]) {
+    use std::io::Write;
+    let mut opts = bank_opts(60, 14);
+    opts.max_depth = 1; // p = λr. … has one binder; depth 1 suffices and shrinks the search
+    let substrate = substrate_concepts();
+    // Wire the {cons, nil} substrate into the raw search's quotient pool, or the
+    // enumerator has no way to build a list at all — [1,1] would be unreachable
+    // and only degenerate λ-terms (matching a 1-element list's behavior) pass.
+    opts.concepts = substrate.iter().map(|c| c.body.clone()).collect();
+    let discovery = b1_discovery_task();
+    let heldout = b1_heldout_task();
+
+    println!("\n── arc1 b1: generic context abstraction invents a primitive from raw code ──");
+    println!("substrate = {{cons, nil}} + color-numerals (computational primitives only)");
+    println!("ontology = empty — no reverse/map/compose/mirror; the machine must build it");
+
+    // 1. raw solve → p
+    let raw_out = bank::solve_abl(&discovery, &opts, true);
+    let p = match raw_out.solution {
+        Some(p) => p,
+        None => {
+            println!(
+                "  raw solve: ✗ no program found (reached_size {}, built {}, budget {}s)",
+                raw_out.stats.reached_size, raw_out.stats.built, 60
+            );
+            return;
+        }
+    };
+    println!("  raw solve → p = {}", term::show(&p));
+
+    // 2. enumerate repeated contexts → (C_i, p_i')
+    let cands = transform::enumerate_abstractions(&p);
+    println!("  repeated contexts → {} closed abstraction candidates", cands.len());
+
+    // 3. verify factorization (p' ≡ p on the discovery examples) + semantics
+    //    (C closed — already filtered by enumerate_abstractions).
+    let valid: Vec<&transform::Abstraction> = cands
+        .iter()
+        .filter(|a| direct_solves(&discovery, &a.rewritten_program))
+        .collect();
+    println!("  factorization (p' ≡ p on discovery): {} valid proposals", valid.len());
+
+    // 4. counterfactual held-out evaluation → Gain(C_i)
+    let baseline = acquire::concept_cost_abl(&heldout, &substrate, &opts, true);
+    println!("  held-out baseline (substrate only): {} states", acquire::disp_cost(baseline));
+    for a in &valid {
+        let g = acquire::propose_value_abl(
+            &a.concept,
+            &substrate,
+            &[heldout.clone()],
+            &opts,
+            baseline,
+            true,
+        );
+        match g {
+            Some(g) if g.earns() => println!(
+                "  C = {}  (factored subterm size {}): {} → {}  {}  ACQUIRE  arity {}",
+                term::show(&a.concept),
+                a.extracted_subterm.size(),
+                acquire::disp_cost(g.before),
+                acquire::disp_cost(g.after),
+                g.kind(),
+                g.arity
+            ),
+            Some(g) => println!(
+                "  C = {}  (factored subterm size {}): {} → {}  {}  REJECT",
+                term::show(&a.concept),
+                a.extracted_subterm.size(),
+                acquire::disp_cost(g.before),
+                acquire::disp_cost(g.after),
+                g.kind()
+            ),
+            None => println!(
+                "  C = {}  (factored subterm size {}): no valid interface  REJECT",
+                term::show(&a.concept),
+                a.extracted_subterm.size()
+            ),
+        }
+    }
+    println!(
+        "  claim: generic syntactic factorization proposes abstractions; only measured semantic\n\
+         \x20    reuse turns one into a concept — the machine creates a new primitive by restructuring\n\
+         \x20    its own discovered code, rather than selecting it from a schema catalog."
+    );
+    std::io::stdout().flush().ok();
+}
+
 /// Discover `reverse` on the list domain from `{cons,nil}` via the C7 meta-space.
 ///
 /// Path (all on the list domain, where values are small and hashing is cheap):
@@ -2011,6 +2188,44 @@ mod tests {
             seeds: vec![],
             concepts: vec![],
         }
+    }
+
+    #[test]
+    fn b1_discovers_factors_and_acquires_row_duplication() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let substrate = substrate_concepts();
+                let mut o = bank_opts(10, 14);
+                o.max_depth = 1;
+                o.concepts = substrate.iter().map(|c| c.body.clone()).collect();
+
+                let discovery = b1_discovery_task();
+                let raw = bank::solve_abl(&discovery, &o, true)
+                    .solution
+                    .expect("B1 discovery must be raw-reachable");
+                let candidate = transform::enumerate_abstractions(&raw)
+                    .into_iter()
+                    .find(|a| direct_solves(&discovery, &a.rewritten_program))
+                    .expect("raw program must contain a valid closed repeated context");
+
+                let heldout = b1_heldout_task();
+                let baseline = acquire::concept_cost_abl(&heldout, &substrate, &o, true);
+                let gain = acquire::propose_value_abl(
+                    &candidate.concept,
+                    &substrate,
+                    &[heldout],
+                    &o,
+                    baseline,
+                    true,
+                )
+                .expect("factored context must have a measurable interface");
+                assert!(gain.earns(), "B1 abstraction must reduce held-out cost");
+                assert_eq!(gain.arity, 1, "row duplication is unary");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     /// Does `t` contain a subterm `Prim(b)` with `**b == **body`? The C8 claim is

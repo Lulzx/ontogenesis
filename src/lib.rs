@@ -12,6 +12,8 @@
 //! - [`canon`]: canonical observation (Church-numeral / structural-hash value keys).
 //! - [`bank`]: the search — raw `solve` plus the quotient-aware `concept_solve`.
 //! - [`bootstrap`]: probe universes, compression mining, Church-numeral encoding.
+//! - [`transform`]: generic program-transformation meta-search (context abstraction
+//!   + composition) — the machinery that invents primitives by restructuring code.
 
 pub mod acquire;
 pub mod bank;
@@ -20,3 +22,4 @@ pub mod canon;
 pub mod nbe;
 pub mod parse;
 pub mod term;
+pub mod transform;
