@@ -100,19 +100,25 @@ control is enabled, incomplete semantic probe assignments, empty signatures, wro
 constructor arities, wrong branches/fields under representation-law probes, and
 divergent candidates through finite fuel plus a process-safe evaluator stack guard.
 
-The proposal-completeness claim is precise and limited. Every representable finite
-closed lambda functional over the declared finite atom alphabet is proposed at a finite
-syntax size; if its required observations terminate within representable finite fuel,
-the diagonal schedule tests it with enough fuel after finitely many stages. There is no
-configured experimental cap; the implementation resource model uses `u32` syntax sizes,
-`i64` evaluator fuel, available memory, and the evaluator's explicit stack guard. This
-is relative semidecision completeness for that universal language and observer. It is
-not decidable program equivalence, finite-time proof that no solution exists, literal
-infinite hardware, or a claim that practical enumeration avoids combinatorial growth.
+The proposal-completeness claim is precise and limited:
 
-The invented representation result covers arbitrary finite sum-of-products signatures
-whose constructor arities are supplied anonymously. It does not yet infer the signature
-itself from raw bytes or prove a unique latent encoding.
+> Every representable finite closed functional in the declared universal lambda
+> language is eventually proposed, and every terminating observation within
+> representable finite fuel is eventually tested.
+
+Concretely, every such functional over the declared finite atom alphabet occurs at a
+finite syntax size; if its required observations terminate within representable finite
+fuel, the diagonal schedule tests it with enough fuel after finitely many stages. There
+is no configured experimental cap; the implementation resource model uses `u32`
+syntax sizes, `i64` evaluator fuel, available memory, and the evaluator's explicit
+stack guard. This is relative semidecision completeness for that universal language
+and observer. It is not decidable program equivalence, finite-time proof that no
+solution exists, literal infinite hardware, or a claim that practical enumeration
+avoids combinatorial growth.
+
+The invented representation result covers representable finite sum-of-products
+signatures whose constructor arities are supplied anonymously. It does not yet infer
+the signature itself from raw bytes or prove a unique latent encoding.
 
 ## B3 — recursive law to reasoning vocabulary
 

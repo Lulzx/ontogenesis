@@ -113,10 +113,25 @@ unseen 5×4 grid mirror.
 The generator contains no productions named `map`, `append`, `reverse`, `fold`, or
 `reduce`.
 
-The precise boundary matters: B2 currently induces exact first-order structural
-right recurrences and its executable backend targets Church-encoded lists. It does
-not yet infer arbitrary recursion, unknown data representations, mutual recursion,
-or unrestricted fixed points.
+**B2-general — universal recursive-law invention.** Alongside the efficient structural
+B2 route, a cap-free diagonal stream enumerates every representable closed functional
+in the declared untyped lambda language and every representable positive evaluation
+fuel. Pure-lambda knot tying executes single and Church-tuple mutual fixed points,
+including mutually recursive parity and nested Ackermann recurrence. Finite behavior
+search exhaustively rediscovers a recursive functional and extrapolates at depths 5,
+7, and 9. Semantic recurrence induction also accepts an extensionally equivalent,
+eta-expanded prior computation when exact subtree induction does not. Anonymous Scott
+constructors and eliminators are invented from supplied constructor arities and used
+by a synthesized recursive tree traversal. The Ackermann abstraction earns a measured
+counterfactual frontier gain after installation.
+
+The precise boundary matters: this is relative semidecision completeness, not a
+decision procedure for program equivalence. Practical execution remains limited by
+`u32` syntax size, `i64` evaluator fuel, memory, the evaluator stack guard,
+combinatorial growth, and undecidability. Representation invention covers anonymous
+finite sum-of-products signatures whose constructor arities are supplied; it does not
+infer a signature from raw bytes or prove that the invented encoding is uniquely
+latent in observations.
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.
