@@ -213,6 +213,25 @@ controls fail. Encoder selection (16 candidates), evidence acquisition (22 bank
 constructions), and final search are separately reported. This remains a one-task
 existence result. Full protocol and boundaries are in `LEARNED_CONTEXT.md`.
 
+### B2-feature-invented — executable situational predicates
+
+The engineered raw-field vocabulary is removed from the primary condition. Lambda
+terms and grids share a lower-level numeric ordered-tree substrate, and a deterministic
+exact-size grammar synthesizes total, fuel-bounded feature programs. Nested calibration
+selects programs by downstream allocation regret plus syntax/execution cost.
+
+On controlled raw trees, the system invents `Mod2(InputNodeCount)` with zero regret;
+all primitive projections and collapse have regret 180, and a size-1 ablation fails.
+On nine disjoint generated grid tasks it invents `Relation(ReverseChildren)` and
+`Relation(MapChildren(ReverseChildren))` without a precomputed relation code.
+
+Frozen transfer solves four protected real ARC tasks at aggregate bank rank 12,
+matching the oracle and old engineered-projection ablation, versus global 13 and
+uniform 27. Disabling interaction solves 2/4. Program enumeration, feature execution,
+bank evidence (43 constructions), and universal work are separately reported. This is
+bounded multi-task evidence, not an ARC population claim. Full protocol and limits are
+in `EXECUTABLE_FEATURES.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are
@@ -292,6 +311,15 @@ Learned context representation:
 cargo test -p supsearch learned_context --lib
 cargo run --release --example contextual_allocation
 cargo run --release -p arc1 -- contextual
+```
+
+Executable feature invention:
+
+```sh
+cargo run --release --example feature_invention
+cargo run --release -p arc1 -- features
+cargo test -p supsearch feature_invention --lib
+cargo test -p arc1 invented_features_generalize_to_multiple_frozen_arc_holdouts
 ```
 
 Learned-allocation experiment:

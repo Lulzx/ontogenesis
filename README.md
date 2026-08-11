@@ -175,6 +175,16 @@ rank 11. Encoder, universal-lambda, and behavior-bank work remain separate; arbi
 learned schedules preserve the exact universal lane. See
 [`LEARNED_CONTEXT.md`](LEARNED_CONTEXT.md).
 
+**B2-feature-invented — the context basis is executable.** The learner now starts
+from raw ordered trees for lambda terms and grids and synthesizes deterministic,
+fuel-bounded feature programs. A controlled curriculum invents
+`Mod2(InputNodeCount)`, while every primitive projection has regret 180. On four
+protected real ARC tasks it invents generic `Relation(ReverseChildren)` and
+`Relation(MapChildren(ReverseChildren))`, matches the oracle at aggregate rank 12,
+beats global 13 and uniform 27, and falls to 2/4 when interaction is disabled. Feature,
+bank, and universal work remain distinct. See
+[`EXECUTABLE_FEATURES.md`](EXECUTABLE_FEATURES.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

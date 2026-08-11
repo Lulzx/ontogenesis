@@ -121,6 +121,10 @@ Both executables emit machine-readable `record,...` rows.
 
 ## Remaining scaffolding
 
+`EXECUTABLE_FEATURES.md` advances the primary condition beyond fixed projection by
+synthesizing executable predicates from a lower-level tree substrate. This section
+remains the boundary of the earlier projection milestone.
+
 The raw measurement vocabulary, projection grammar/width, similarity rule,
 decay/confidence formulas, candidate concept sets, interaction width, curriculum, and
 ARC split remain fixed. ARC's unnamed coordinate bitset is more primitive than the
