@@ -121,11 +121,11 @@ pub fn boolean_not() -> Rc<Term> {
     ))
 }
 
-fn boolean_identity() -> Rc<Term> {
+pub(crate) fn boolean_identity() -> Rc<Term> {
     term::lam(term::var(0))
 }
 
-fn irrelevant_pair_constructor() -> Rc<Term> {
+pub(crate) fn irrelevant_pair_constructor() -> Rc<Term> {
     term::lam(term::lam(term::lam(term::app(
         term::app(term::var(0), term::var(2)),
         term::var(1),
@@ -150,7 +150,7 @@ pub fn validates_boolean_negation() -> bool {
 /// Anonymous chain value. The functional must supply the Boolean step algebra
 /// and its recursive result: base ignores both and returns false; each link
 /// computes `not (recursive tail)`.
-fn parity_chain(depth: u32) -> Rc<Term> {
+pub(crate) fn parity_chain(depth: u32) -> Rc<Term> {
     (0..depth).fold(term::lam(term::lam(church_bool(false))), |tail, _| {
         term::lam(term::lam(term::app(
             term::var(1),
@@ -210,7 +210,7 @@ fn heldout_chain(payload_depths: &[u32]) -> Rc<Term> {
     )
 }
 
-fn heldout_problem(atoms: Vec<Rc<Term>>) -> SearchProblem {
+pub(crate) fn heldout_problem(atoms: Vec<Rc<Term>>) -> SearchProblem {
     let example = |depths: &[u32]| Example {
         arguments: vec![heldout_chain(depths)],
         expected: nested_expected(depths),
@@ -245,7 +245,7 @@ fn heldout_functional(payload_concept: Rc<Term>) -> Rc<Term> {
     )))
 }
 
-fn nested_problem(atoms: Vec<Rc<Term>>) -> SearchProblem {
+pub(crate) fn nested_problem(atoms: Vec<Rc<Term>>) -> SearchProblem {
     let example = |depths: &[u32]| Example {
         arguments: vec![nested_chain(depths)],
         expected: nested_expected(depths),
@@ -301,7 +301,7 @@ fn weak_nested_problem(atoms: Vec<Rc<Term>>) -> SearchProblem {
     }
 }
 
-fn parity_problem(atoms: Vec<Rc<Term>>) -> SearchProblem {
+pub(crate) fn parity_problem(atoms: Vec<Rc<Term>>) -> SearchProblem {
     let example = |depth| Example {
         arguments: vec![parity_chain(depth)],
         expected: church_bool(depth % 2 == 1),

@@ -17,7 +17,18 @@ use std::collections::hash_map::DefaultHasher;
 use std::io::Write;
 use std::rc::Rc;
 
-use supsearch::{acquire, bank, bootstrap, canon, nbe, parse, recurrence, term, transform, typed};
+use supsearch::{
+    acquire, bank, bootstrap, canon,
+    contextual_allocation::{
+        ConceptSet, ContextualEvidence, ContextualLedger, EvidenceDerivation, FreezeSpec,
+        FrozenPolicy, TaskContext,
+    },
+    nbe, parse, recurrence,
+    search_accounting::{
+        self, AccountingSummary, EvidencePhase, RunAccounting, RunProvenance,
+    },
+    term, transform, typed,
+};
 
 /// Build a closed term from source (for `{cons,nil}` / Church numerals).
 fn closed(s: &str) -> Rc<term::Term> {
@@ -241,6 +252,16 @@ fn main() {
             std::thread::Builder::new()
                 .stack_size(1 << 30)
                 .spawn(move || arcdiag(&a))
+                .unwrap()
+                .join()
+                .unwrap();
+        }
+        Some("contextual") => {
+            // Frozen real-ARC contextual allocation and independent test-pair
+            // verification use the same large-stack grid evaluation path.
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(contextual_arc)
                 .unwrap()
                 .join()
                 .unwrap();
@@ -758,7 +779,6 @@ fn load_arc_tasks(dir: &str) -> Vec<ArcTask> {
 }
 
 /// Load one ARC task by id (targeted probes / tests; `load_arc_tasks` bulk-loads).
-#[cfg(test)]
 fn load_arc_task_by_id(dir: &str, id: &str) -> ArcTask {
     let txt = std::fs::read_to_string(format!("{dir}/{id}.json")).expect("arc task file");
     let (train, test) = parse_arc_json(&txt).expect("parse arc task");
@@ -790,6 +810,458 @@ fn arc_task_to_parse(t: &ArcTask) -> Option<parse::Task> {
         })
         .collect();
     Some(parse::Task { tests, arity: 1 })
+}
+
+/// Independent verification task. These outputs are never exposed to feature
+/// extraction, utility learning, policy selection, or the search itself.
+fn arc_task_test_to_parse(t: &ArcTask) -> Option<parse::Task> {
+    let tests = t
+        .test
+        .iter()
+        .map(|ex| parse::Test {
+            args: vec![arc_grid_to_term(&ex.input)],
+            want: arc_grid_to_term(&ex.output),
+            outer: 0,
+        })
+        .collect();
+    Some(parse::Task { tests, arity: 1 })
+}
+
+// Preregistered before the final comparison. There is exactly one real pure
+// mirror task, one pure vertical-flip task, and two pure 180-degree rotation
+// tasks in the local ARC-1 corpus. The lexically first rotation is calibration;
+// the second is the frozen final transfer task.
+const CONTEXT_ARC_TRAIN_IDS: [&str; 2] = ["67a3c6ac", "68b16354"];
+const CONTEXT_ARC_CALIBRATION_ID: &str = "3c9b0459";
+const CONTEXT_ARC_HOLDOUT_ID: &str = "6150a2bd";
+
+fn grid_hflip(rows: &[Vec<u32>]) -> Vec<Vec<u32>> {
+    rows.iter()
+        .map(|row| row.iter().rev().copied().collect())
+        .collect()
+}
+
+fn grid_vflip(rows: &[Vec<u32>]) -> Vec<Vec<u32>> {
+    rows.iter().rev().cloned().collect()
+}
+
+fn grid_rot180(rows: &[Vec<u32>]) -> Vec<Vec<u32>> {
+    grid_hflip(&grid_vflip(rows))
+}
+
+/// Generic observable relation over the task's published training pairs. This
+/// uses no test output and names no learned concept or target program.
+fn observable_geometry_relation(task: &ArcTask) -> String {
+    let candidates: [(&str, fn(&[Vec<u32>]) -> Vec<Vec<u32>>); 3] = [
+        ("d4-horizontal", grid_hflip),
+        ("d4-vertical", grid_vflip),
+        ("d4-half-turn", grid_rot180),
+    ];
+    candidates
+        .iter()
+        .find(|(_, transform)| {
+            task.train
+                .iter()
+                .all(|example| transform(&example.input.rows) == example.output.rows)
+        })
+        .map(|(name, _)| (*name).to_string())
+        .unwrap_or_else(|| "non-d4-or-mixed".into())
+}
+
+fn arc_context(task: &ArcTask) -> TaskContext {
+    let same_shape = task.train.iter().all(|example| {
+        example.input.rows.len() == example.output.rows.len()
+            && example.input.rows.first().map(Vec::len)
+                == example.output.rows.first().map(Vec::len)
+    });
+    TaskContext {
+        task_id: task.id.clone(),
+        family_id: "arc-d4-geometry".into(),
+        duplicate_group_id: task.id.clone(),
+        features: std::collections::BTreeMap::from([
+            ("observable-relation".into(), observable_geometry_relation(task)),
+            ("shape-preserving".into(), same_shape.to_string()),
+        ]),
+    }
+}
+
+fn arc_provenance(
+    context: &TaskContext,
+    concept_ids: &[String],
+    phase: EvidencePhase,
+) -> RunProvenance {
+    RunProvenance {
+        task_id: context.task_id.clone(),
+        family_id: context.family_id.clone(),
+        duplicate_group_id: context.duplicate_group_id.clone(),
+        context_features: context.features.clone(),
+        concept_ids: concept_ids.to_vec(),
+        phase,
+        observed_epoch: 1,
+    }
+}
+
+fn arc_evidence(
+    context: TaskContext,
+    concept_ids: &[&str],
+    without: &bank::Outcome,
+    with: &bank::Outcome,
+    opts: &bank::Options,
+    phase: EvidencePhase,
+) -> ContextualEvidence {
+    let ids = concept_ids.iter().map(|id| (*id).to_string()).collect::<Vec<_>>();
+    ContextualEvidence {
+        without: RunAccounting::from_bank(
+            without,
+            opts,
+            arc_provenance(&context, &[], phase),
+        ),
+        with: RunAccounting::from_bank(
+            with,
+            opts,
+            arc_provenance(&context, &ids, phase),
+        ),
+        context,
+        concept_ids: ids,
+        age: 0,
+        recorded_epoch: 1,
+        derivation: EvidenceDerivation::default(),
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ArcAllocationCondition {
+    name: &'static str,
+    selected: Vec<ConceptSet>,
+    accounting: AccountingSummary,
+    training_solved: bool,
+    hidden_test_verified: bool,
+    universal_coverage: bool,
+}
+
+#[derive(Clone, Debug)]
+struct ContextualArcReport {
+    contextual_policy: FrozenPolicy,
+    global_policy: FrozenPolicy,
+    contextual: ArcAllocationCondition,
+    global: ArcAllocationCondition,
+    uniform: ArcAllocationCondition,
+    oracle: ArcAllocationCondition,
+    shuffled: ArcAllocationCondition,
+    interaction_disabled: ArcAllocationCondition,
+    irrelevant: ArcAllocationCondition,
+    misleading: ArcAllocationCondition,
+    raw_bounded: ArcAllocationCondition,
+}
+
+fn arc_concept_map() -> std::collections::HashMap<String, bank::Concept> {
+    std::collections::HashMap::from([
+        ("mirror".into(), mirror_concept()),
+        ("vflip".into(), vflip_concept()),
+        ("irrelevant-identity".into(), cand_concept(&term::lam(term::var(0)))),
+        (
+            "misleading-projection".into(),
+            cand_concept(&term::lam(term::lam(term::var(1)))),
+        ),
+    ])
+}
+
+fn run_arc_condition(
+    name: &'static str,
+    task: &ArcTask,
+    order: &[ConceptSet],
+    concepts: &std::collections::HashMap<String, bank::Concept>,
+    opts: &bank::Options,
+) -> ArcAllocationCondition {
+    let train = arc_task_to_parse(task).expect("representable ARC training pairs");
+    let hidden_test = arc_task_test_to_parse(task).expect("representable ARC test pairs");
+    let context = arc_context(task);
+    let mut runs = Vec::new();
+    let mut training_solved = false;
+    let mut hidden_test_verified = false;
+    for set in order {
+        let installed = set
+            .0
+            .iter()
+            .map(|id| concepts.get(id).expect("preregistered concept").clone())
+            .collect::<Vec<_>>();
+        let (outcome, _) = bank::concept_solve_abl(&train, &installed, opts, true);
+        runs.push(RunAccounting::from_bank(
+            &outcome,
+            opts,
+            arc_provenance(&context, &set.0, EvidencePhase::HeldOut),
+        ));
+        if let Some(solution) = outcome.solution {
+            training_solved = true;
+            if direct_solves(&hidden_test, &solution) {
+                hidden_test_verified = true;
+                break;
+            }
+        }
+    }
+    ArcAllocationCondition {
+        name,
+        selected: order.to_vec(),
+        accounting: search_accounting::aggregate(&runs).expect("one labeled ARC engine"),
+        training_solved,
+        hidden_test_verified,
+        // ARC's bank is deliberately bounded and is not the universal lane.
+        universal_coverage: false,
+    }
+}
+
+fn run_arc_raw_condition(
+    task: &ArcTask,
+    opts: &bank::Options,
+) -> ArcAllocationCondition {
+    // Raw enumeration uses an exact finite syntax boundary rather than the
+    // wall-clock stop used by interactive demos, making replay counters stable.
+    let mut raw_opts = opts.clone();
+    raw_opts.max_size = 7;
+    raw_opts.time_budget_secs = 3_600.0;
+    let train = arc_task_to_parse(task).unwrap();
+    let hidden_test = arc_task_test_to_parse(task).unwrap();
+    let outcome = bank::solve_abl(&train, &raw_opts, true);
+    let verified = outcome
+        .solution
+        .as_ref()
+        .is_some_and(|solution| direct_solves(&hidden_test, solution));
+    let context = arc_context(task);
+    let accounting = search_accounting::aggregate(&[RunAccounting::from_bank(
+        &outcome,
+        &raw_opts,
+        arc_provenance(&context, &[], EvidencePhase::HeldOut),
+    )])
+    .unwrap();
+    ArcAllocationCondition {
+        name: "raw-bounded-bank",
+        selected: Vec::new(),
+        accounting,
+        training_solved: outcome.solution.is_some(),
+        hidden_test_verified: verified,
+        universal_coverage: false,
+    }
+}
+
+fn top_arc_set(policy: &FrozenPolicy) -> ConceptSet {
+    policy.ranked.first().expect("ARC candidate set").concepts.clone()
+}
+
+fn run_contextual_arc() -> ContextualArcReport {
+    let mut opts = bank_opts(4, 14);
+    opts.fuel = 1_000_000;
+    let concepts = arc_concept_map();
+    let mirror_task = load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_TRAIN_IDS[0]);
+    let vflip_task = load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_TRAIN_IDS[1]);
+    let calibration = load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_CALIBRATION_ID);
+    let holdout = load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_HOLDOUT_ID);
+    let mirror = ConceptSet::singleton("mirror");
+    let vflip = ConceptSet::singleton("vflip");
+    let pair = ConceptSet::new(["mirror".into(), "vflip".into()]);
+
+    let measure = |task: &ArcTask, set: &ConceptSet| {
+        let parsed = arc_task_to_parse(task).unwrap();
+        let installed = set
+            .0
+            .iter()
+            .map(|id| concepts.get(id).unwrap().clone())
+            .collect::<Vec<_>>();
+        let (without, _) = bank::concept_solve_abl(&parsed, &[], &opts, true);
+        let (with, _) = bank::concept_solve_abl(&parsed, &installed, &opts, true);
+        (without, with)
+    };
+    let (mirror_without, mirror_with) = measure(&mirror_task, &mirror);
+    let (vflip_without, vflip_with) = measure(&vflip_task, &vflip);
+    let (pair_without, pair_with) = measure(&calibration, &pair);
+    let mut ledger = ContextualLedger::default();
+    ledger.record(arc_evidence(
+        arc_context(&mirror_task),
+        &["mirror"],
+        &mirror_without,
+        &mirror_with,
+        &opts,
+        EvidencePhase::Training,
+    ));
+    ledger.record(arc_evidence(
+        arc_context(&vflip_task),
+        &["vflip"],
+        &vflip_without,
+        &vflip_with,
+        &opts,
+        EvidencePhase::Training,
+    ));
+    ledger.record(arc_evidence(
+        arc_context(&calibration),
+        &["mirror", "vflip"],
+        &pair_without,
+        &pair_with,
+        &opts,
+        EvidencePhase::Calibration,
+    ));
+    let candidates = [mirror.clone(), vflip.clone(), pair.clone()];
+    let target = arc_context(&holdout);
+    let contextual_policy = ledger.learn(
+        &candidates,
+        &FreezeSpec {
+            target: target.clone(),
+            engine: search_accounting::SearchEngine::BehaviorBank,
+            freeze_epoch: 1,
+            decay_per_mille: 900,
+            contextual: true,
+            interactions: true,
+            max_interaction_width: 2,
+        },
+    );
+    let global_policy = ledger.learn(
+        &candidates,
+        &FreezeSpec {
+            target: target.clone(),
+            engine: search_accounting::SearchEngine::BehaviorBank,
+            freeze_epoch: 1,
+            decay_per_mille: 900,
+            contextual: false,
+            interactions: true,
+            max_interaction_width: 2,
+        },
+    );
+    let interaction_disabled_policy = ledger.learn(
+        &candidates,
+        &FreezeSpec {
+            target: target.clone(),
+            engine: search_accounting::SearchEngine::BehaviorBank,
+            freeze_epoch: 1,
+            decay_per_mille: 900,
+            contextual: true,
+            interactions: false,
+            max_interaction_width: 2,
+        },
+    );
+    let mut shuffled_target = target;
+    shuffled_target.features = arc_context(&mirror_task).features;
+    let shuffled_policy = ledger.learn(
+        &candidates,
+        &FreezeSpec {
+            target: shuffled_target,
+            engine: search_accounting::SearchEngine::BehaviorBank,
+            freeze_epoch: 1,
+            decay_per_mille: 900,
+            contextual: true,
+            interactions: true,
+            max_interaction_width: 2,
+        },
+    );
+    let contextual_top = [top_arc_set(&contextual_policy)];
+    let global_top = [top_arc_set(&global_policy)];
+    let shuffled_top = [top_arc_set(&shuffled_policy)];
+    let interaction_disabled_top = [top_arc_set(&interaction_disabled_policy)];
+    let uniform_order = [mirror.clone(), vflip.clone(), pair.clone()];
+    let oracle_order = [pair];
+    let irrelevant_order = [ConceptSet::singleton("irrelevant-identity")];
+    let misleading_order = [ConceptSet::singleton("misleading-projection")];
+    ContextualArcReport {
+        contextual: run_arc_condition(
+            "contextual",
+            &holdout,
+            &contextual_top,
+            &concepts,
+            &opts,
+        ),
+        global: run_arc_condition("global", &holdout, &global_top, &concepts, &opts),
+        uniform: run_arc_condition("uniform", &holdout, &uniform_order, &concepts, &opts),
+        oracle: run_arc_condition("oracle", &holdout, &oracle_order, &concepts, &opts),
+        shuffled: run_arc_condition("shuffled", &holdout, &shuffled_top, &concepts, &opts),
+        interaction_disabled: run_arc_condition(
+            "interaction-disabled",
+            &holdout,
+            &interaction_disabled_top,
+            &concepts,
+            &opts,
+        ),
+        irrelevant: run_arc_condition(
+            "irrelevant",
+            &holdout,
+            &irrelevant_order,
+            &concepts,
+            &opts,
+        ),
+        misleading: run_arc_condition(
+            "misleading",
+            &holdout,
+            &misleading_order,
+            &concepts,
+            &opts,
+        ),
+        raw_bounded: run_arc_raw_condition(&holdout, &opts),
+        contextual_policy,
+        global_policy,
+    }
+}
+
+fn contextual_arc() {
+    let report = run_contextual_arc();
+    println!("\n── contextual ARC-1 allocation (preregistered D4 slice) ──");
+    println!(
+        "split: train={:?} calibration={} holdout={} (test output verification-only)",
+        CONTEXT_ARC_TRAIN_IDS, CONTEXT_ARC_CALIBRATION_ID, CONTEXT_ARC_HOLDOUT_ID
+    );
+    println!(
+        "contextual top={} global top={}",
+        top_arc_set(&report.contextual_policy).0.join("+"),
+        top_arc_set(&report.global_policy).0.join("+")
+    );
+    for condition in [
+        &report.contextual,
+        &report.global,
+        &report.uniform,
+        &report.oracle,
+        &report.shuffled,
+        &report.interaction_disabled,
+        &report.irrelevant,
+        &report.misleading,
+        &report.raw_bounded,
+    ] {
+        let built = match condition.accounting.work {
+            search_accounting::EngineWork::BehaviorBank {
+                candidate_constructions,
+                ..
+            } => candidate_constructions,
+            _ => unreachable!(),
+        };
+        println!(
+            "{:<18} built={:<7} train={} hidden-test={} universal={} order={}",
+            condition.name,
+            built,
+            condition.training_solved,
+            condition.hidden_test_verified,
+            condition.universal_coverage,
+            condition
+                .selected
+                .iter()
+                .map(|set| set.0.join("+"))
+                .collect::<Vec<_>>()
+                .join(" -> ")
+        );
+        println!(
+            "record,engine=behavior-bank,condition={},built={},train_solved={},hidden_test_verified={},universal=false",
+            condition.name, built, condition.training_solved, condition.hidden_test_verified
+        );
+    }
+    println!("ARC `built` is a bounded-bank unit and is never combined with universal proposals.");
+    let contextual_work = report.contextual.accounting.work.comparable_primary_work();
+    let oracle_work = report.oracle.accounting.work.comparable_primary_work();
+    let next_score = report
+        .contextual_policy
+        .ranked
+        .get(1)
+        .map(|weight| weight.score)
+        .unwrap_or(0);
+    println!(
+        "regret_vs_oracle={} calibration_margin={} confidence_per_mille={} paired_solve_rate={}/1",
+        contextual_work.saturating_sub(oracle_work),
+        report.contextual_policy.ranked[0].score.saturating_sub(next_score),
+        report.contextual_policy.ranked[0].confidence_per_mille,
+        usize::from(report.contextual.hidden_test_verified),
+    );
 }
 
 /// The four-bucket diagnostic outcome.
@@ -2686,6 +3158,74 @@ mod tests {
             seeds: vec![],
             concepts: vec![],
         }
+    }
+
+    #[test]
+    fn contextual_arc_transfer_is_frozen_verified_and_deterministic() {
+        std::thread::Builder::new()
+            .stack_size(1 << 30)
+            .spawn(|| {
+                let report = run_contextual_arc();
+                assert_eq!(
+                    top_arc_set(&report.contextual_policy),
+                    ConceptSet::new(["mirror".into(), "vflip".into()])
+                );
+                assert_eq!(
+                    top_arc_set(&report.global_policy),
+                    ConceptSet::singleton("mirror")
+                );
+                assert!(report.contextual.training_solved);
+                assert!(report.contextual.hidden_test_verified);
+                assert!(report.oracle.hidden_test_verified);
+                assert!(!report.global.hidden_test_verified);
+                assert!(!report.shuffled.hidden_test_verified);
+                assert!(!report.interaction_disabled.hidden_test_verified);
+                assert!(!report.irrelevant.hidden_test_verified);
+                assert!(!report.misleading.hidden_test_verified);
+                assert!(!report.raw_bounded.hidden_test_verified);
+                assert!(report.contextual.accounting.work.comparable_primary_work()
+                    < report.uniform.accounting.work.comparable_primary_work());
+                assert_eq!(report.contextual.accounting.work.comparable_primary_work(), 5);
+                assert_eq!(report.global.accounting.work.comparable_primary_work(), 3);
+                assert_eq!(report.uniform.accounting.work.comparable_primary_work(), 11);
+                assert_eq!(
+                    report.contextual.accounting.work.comparable_primary_work(),
+                    report.oracle.accounting.work.comparable_primary_work()
+                );
+                assert!(!report.contextual.universal_coverage);
+                assert_eq!(
+                    report.contextual.accounting.engine,
+                    search_accounting::SearchEngine::BehaviorBank
+                );
+
+                // Replay the frozen winner on the final task. Non-time ARC
+                // counters and independent hidden-test verification are exact.
+                let holdout = load_arc_task_by_id(ARC_DATA_DIR, CONTEXT_ARC_HOLDOUT_ID);
+                let original_context = arc_context(&holdout);
+                let mut hidden_outputs_changed = holdout.clone();
+                for example in &mut hidden_outputs_changed.test {
+                    example.output.rows = vec![vec![9]];
+                }
+                assert_eq!(arc_context(&hidden_outputs_changed), original_context);
+                let concepts = arc_concept_map();
+                let mut replay_opts = bank_opts(4, 14);
+                replay_opts.fuel = 1_000_000;
+                let order = [top_arc_set(&report.contextual_policy)];
+                let replay = run_arc_condition(
+                    "contextual",
+                    &holdout,
+                    &order,
+                    &concepts,
+                    &replay_opts,
+                );
+                assert_eq!(replay.accounting, report.contextual.accounting);
+                assert!(replay.hidden_test_verified);
+                let raw_replay = run_arc_raw_condition(&holdout, &replay_opts);
+                assert_eq!(raw_replay.accounting, report.raw_bounded.accounting);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     #[test]

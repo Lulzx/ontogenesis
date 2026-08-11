@@ -186,6 +186,19 @@ pub struct InterleavedDovetail {
     universal_turn: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceLane {
+    Learned,
+    Universal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScheduledResource {
+    pub lane: ResourceLane,
+    pub syntax_size: u32,
+    pub evaluation_fuel: u64,
+}
+
 impl InterleavedDovetail {
     pub fn new(priority: impl IntoIterator<Item = (u32, u64)>) -> Self {
         Self {
@@ -197,21 +210,39 @@ impl InterleavedDovetail {
             universal_turn: false,
         }
     }
+
+    /// Emit a resource point with an explicit lane label. Experiments use the
+    /// label to audit that projecting away learned work reproduces the original
+    /// universal dovetail exactly, even when resource pairs happen to be equal.
+    pub fn next_labeled(&mut self) -> Option<ScheduledResource> {
+        if self.priority.is_empty() {
+            let (syntax_size, evaluation_fuel) = self.fallback.next()?;
+            return Some(ScheduledResource {
+                lane: ResourceLane::Universal,
+                syntax_size,
+                evaluation_fuel,
+            });
+        }
+        self.universal_turn = !self.universal_turn;
+        let (lane, point) = if self.universal_turn {
+            (ResourceLane::Learned, self.priority.pop_front()?)
+        } else {
+            (ResourceLane::Universal, self.fallback.next()?)
+        };
+        Some(ScheduledResource {
+            lane,
+            syntax_size: point.0,
+            evaluation_fuel: point.1,
+        })
+    }
 }
 
 impl Iterator for InterleavedDovetail {
     type Item = (u32, u64);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.priority.is_empty() {
-            return self.fallback.next();
-        }
-        self.universal_turn = !self.universal_turn;
-        if self.universal_turn {
-            self.priority.pop_front()
-        } else {
-            self.fallback.next()
-        }
+        self.next_labeled()
+            .map(|point| (point.syntax_size, point.evaluation_fuel))
     }
 }
 
@@ -318,5 +349,76 @@ mod tests {
             vec![got[1], got[3], got[5], got[6], got[7], got[8], got[9]],
             universal
         );
+    }
+
+    #[test]
+    fn arbitrary_learned_schedules_preserve_the_exact_universal_projection() {
+        // Deterministic generated policies include empty, invalid, duplicate,
+        // extreme, and ordinary learned points. Scores do not enter this
+        // scheduler, so even an arbitrarily confident policy reduces to one of
+        // these finite priority sequences.
+        let mut state = 0x5eed_u64;
+        for case in 0..64 {
+            let len = case % 17;
+            let mut priority = Vec::new();
+            for index in 0..len {
+                state = state
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1);
+                let size = if index % 7 == 0 {
+                    0
+                } else if index % 11 == 0 {
+                    u32::MAX
+                } else {
+                    (state as u32 % 19) + 1
+                };
+                let fuel = if index % 5 == 0 {
+                    0
+                } else {
+                    state.rotate_left(13).max(1)
+                };
+                priority.push((size, fuel));
+            }
+            let retained = priority
+                .iter()
+                .filter(|(size, fuel)| *size > 0 && *fuel > 0)
+                .count();
+            let universal_needed = 40;
+            let mut schedule = InterleavedDovetail::new(priority);
+            let labeled = (0..retained * 2 + universal_needed)
+                .map(|_| schedule.next_labeled().unwrap())
+                .collect::<Vec<_>>();
+            let projection = labeled
+                .iter()
+                .filter(|point| point.lane == ResourceLane::Universal)
+                .take(universal_needed)
+                .map(|point| (point.syntax_size, point.evaluation_fuel))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                projection,
+                Dovetail::default()
+                    .take(universal_needed)
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn every_sampled_universal_pair_keeps_a_finite_interleaved_index() {
+        let learned = (1..=100).map(|size| (size, u64::MAX));
+        let mut schedule = InterleavedDovetail::new(learned);
+        let targets = Dovetail::default().take(75).collect::<Vec<_>>();
+        let mut found = vec![None; targets.len()];
+        for index in 0..500 {
+            let point = schedule.next_labeled().unwrap();
+            if point.lane == ResourceLane::Universal {
+                let pair = (point.syntax_size, point.evaluation_fuel);
+                if let Some(target_index) = targets.iter().position(|target| *target == pair) {
+                    found[target_index] = Some(index);
+                }
+            }
+        }
+        assert!(found.iter().all(Option::is_some));
+        assert!(found.into_iter().flatten().all(|index| index < 500));
     }
 }

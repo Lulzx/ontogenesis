@@ -24,11 +24,19 @@
 //!   the fair universal schedule retained as a fallback.
 //! - [`learned_allocation`]: utility-ledger learning and deterministic resource
 //!   allocation over ontology concepts.
+//! - [`search_accounting`]: labeled cross-engine experiment accounting without
+//!   conflating universal enumeration and behavior-bank work units.
+//! - [`contextual_allocation`]: frozen context- and interaction-aware utility
+//!   policies with explicit leakage rejection.
+//! - [`contextual_guidance`]: heterogeneous recursive holdouts that measure
+//!   contextual allocation against global, uniform, oracle, and controls.
 
 pub mod acquire;
 pub mod bank;
 pub mod bootstrap;
 pub mod canon;
+pub mod contextual_allocation;
+pub mod contextual_guidance;
 pub mod fixpoint;
 pub mod learned_allocation;
 pub mod nbe;
@@ -37,6 +45,7 @@ pub mod parse;
 pub mod recurrence;
 pub mod recursion_search;
 pub mod representation;
+pub mod search_accounting;
 pub mod term;
 pub mod transform;
 pub mod typed;
