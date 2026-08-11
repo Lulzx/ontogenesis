@@ -185,6 +185,17 @@ beats global 13 and uniform 27, and falls to 2/4 when interaction is disabled. F
 bank, and universal work remain distinct. See
 [`EXECUTABLE_FEATURES.md`](EXECUTABLE_FEATURES.md).
 
+**U1 — bounded universal-property ontogenesis.** From heterogeneous executable
+arrows, empty-alphabet pure-lambda search now invents an anonymous carrier, two
+observers, and a reusable higher-order mediator generator. Every independently
+enumerated mediator through the declared boundary commutes and belongs to one
+full-normal-form equivalence class; a hidden-tag container passes existence but
+fails uniqueness. The acquired structure matches the oracle at one proposal on
+a protected downstream swap versus 10 raw typed proposals, 32 uniform, and 31
+with an irrelevant ontology. Its charged 5,286-check discovery cost breaks even
+after 378 uses while a negative-transfer map control is correctly worse. See
+[`UNIVERSAL_PROPERTY.md`](UNIVERSAL_PROPERTY.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

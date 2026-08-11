@@ -51,6 +51,8 @@ command but not guarded by any assertion.
 | B2-context-learned ARC existence result: learned `z` rank 5, uniform rank 11, protected test verification only | confirmed, asserted, executable | `demo/arc-1/src/main.rs`; `LEARNED_CONTEXT.md` |
 | B2-feature-invented: compositional executable predicates beat every raw primitive projection and replay exactly | confirmed, asserted, executable | `src/feature_invention.rs`; `EXECUTABLE_FEATURES.md` |
 | B2-feature-invented ARC: 4/4 at aggregate rank 12 from frozen generated experience, interaction ablation 2/4 | confirmed, asserted, executable | `demo/arc-1/src/main.rs`; `EXECUTABLE_FEATURES.md` |
+| U1: pure-lambda relational search invents an anonymous carrier, observers, and mediator generator; protected cones commute and have one bounded mediator class | confirmed, asserted, executable | `src/universal_property.rs`; `UNIVERSAL_PROPERTY.md` |
+| U1 cost contraction: downstream swap 1 proposal vs raw typed 10/uniform 32/irrelevant 31, charged break-even 378 uses; negative-transfer control preserved | confirmed, asserted, executable | `examples/universal_property.rs`; `UNIVERSAL_PROPERTY.md` |
 | B3: invented recursion expands proposals to map/append/reverse | confirmed, asserted | `src/typed.rs`; `b3_invented_recursion_expands_proposals_and_recovers_vocabulary` |
 | B3 transfer: invented map(reverse) mirrors unseen 5×4 grid | confirmed, asserted | same B3 regression test |
 

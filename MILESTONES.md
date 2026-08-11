@@ -232,6 +232,27 @@ bank evidence (43 constructions), and universal work are separately reported. Th
 bounded multi-task evidence, not an ARC population claim. Full protocol and limits are
 in `EXECUTABLE_FEATURES.md`.
 
+### U1 — universal-property ontogenesis
+
+The system now searches the empty-alphabet pure lambda language for an anonymous
+carrier and two observers because heterogeneous computations repeatedly factor
+through them. An operation-blind typed search then discovers a reusable
+`(X->A)->(X->B)->X->P` generator. No pair/product/tuple/projection/mediator atom
+or schema occurs in the discovery substrate.
+
+Frozen Boolean, numeral, and Church-list cones commute. Exhaustive typed
+mediator enumeration through size 10 (50,000 terms per cell, with no truncation)
+finds one valid full-normal-form class on each protected cone. A three-field
+hidden-tag control satisfies both observer equations but fails uniqueness.
+Syntax mining finds no shared normalized subtree.
+
+On downstream swap, learned U1 matches the oracle at 1 proposal versus raw typed
+10, irrelevant 31, and uniform 32; pure universal lambda is unsolved through
+size 10 after 10,180 proposals. Discovery costs 5,286 comparable checks, breaks
+even at 378 uses, and yields net gain 8,714 over 1,000 uses. A `mapBoth` negative
+transfer control is worse (442 versus 221), preserving the contextual value
+boundary. Full protocol and limitations are in `UNIVERSAL_PROPERTY.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are
@@ -320,6 +341,13 @@ cargo run --release --example feature_invention
 cargo run --release -p arc1 -- features
 cargo test -p supsearch feature_invention --lib
 cargo test -p arc1 invented_features_generalize_to_multiple_frozen_arc_holdouts
+```
+
+Universal-property ontogenesis:
+
+```sh
+cargo run --release --example universal_property
+cargo test --release -p supsearch universal_property --lib
 ```
 
 Learned-allocation experiment:
