@@ -46,6 +46,7 @@ command but not guarded by any assertion.
 | B2-general: semantic recurrence embedding beyond exact normalized subtrees | confirmed, asserted | `recurrence::tests::semantic_induction_crosses_nonidentical_normalized_embedding` |
 | B2-general: anonymous representation invention, law probes, recursive tree traversal, and malformed controls | confirmed, asserted | `src/representation.rs` |
 | B2-general: Ackermann counterfactual frontier gain and divergent-candidate rejection | confirmed, asserted | `src/recursion_search.rs`; `src/nbe.rs` |
+| B2-guided: relevant ontology yields 122× then 230× recursive-discovery proposal gains while matched irrelevant/misleading controls fail | confirmed, asserted | `src/ontology_guidance.rs`; `ONTOLOGY_GUIDANCE.md` |
 | B3: invented recursion expands proposals to map/append/reverse | confirmed, asserted | `src/typed.rs`; `b3_invented_recursion_expands_proposals_and_recovers_vocabulary` |
 | B3 transfer: invented map(reverse) mirrors unseen 5×4 grid | confirmed, asserted | same B3 regression test |
 

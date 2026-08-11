@@ -120,6 +120,27 @@ The invented representation result covers representable finite sum-of-products
 signatures whose constructor arities are supplied anonymously. It does not yet infer
 the signature itself from raw bytes or prove a unique latent encoding.
 
+### B2-guided — learned ontology as universal-search bias
+
+Question: can acquired concepts reduce the cost of discovering the next recursive law
+by orders of magnitude without replacing the universal fallback?
+
+`ontology_guidance` runs a two-step developmental sequence. An independently validated
+Boolean-negation concept reduces recursive parity discovery by at least 122× proposals
+(41,272 baseline proposals without a solution versus rank 337 with the concept). The
+actually discovered parity executable is then acquired and reduces discovery of a
+distinct nested recursive law by at least 230× (162,550 prior-ontology proposals
+without a solution versus rank 705 after installation). Both results extrapolate on
+independent holdouts and require load-bearing recursion.
+
+Equally sized irrelevant and misleading ontologies fail at the guided bound, ruling
+out mere alphabet enlargement. A recorded aggregate overfit motivated single-payload
+discriminating holdouts and is locked in as a negative regression. The finite priority
+prefix then returns to the unchanged universal dovetail, so these gains reshape
+practical reachability without weakening B2-general's completeness floor. Full
+protocol, measurements, limitations, and reproduction commands are in
+`ONTOLOGY_GUIDANCE.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are
@@ -174,4 +195,11 @@ cargo test -p supsearch fixpoint --lib
 cargo test -p supsearch recurrence --lib
 cargo test -p supsearch representation --lib
 cargo test -p supsearch recursion_search --lib
+```
+
+Ontology-guidance experiment:
+
+```sh
+cargo run --release --example ontology_guided
+cargo test -p supsearch ontology_guidance --lib
 ```

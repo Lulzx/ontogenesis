@@ -132,6 +132,16 @@ combinatorial growth, and undecidability. Representation invention covers anonym
 finite sum-of-products signatures whose constructor arities are supplied; it does not
 infer a signature from raw bytes or prove that the invented encoding is uniquely
 latent in observations.
+
+**B2-guided — ontogenesis reshapes universal search.** A two-stage experiment now
+connects that completeness floor to practical discovery. An independently validated
+negation concept makes recursive parity at least 122× cheaper by proposal count; the
+discovered parity executable then makes a distinct nested recursive law at least 230×
+cheaper. Matched irrelevant and misleading ontologies fail, an aggregate-overfit
+control is explicitly falsified, and the finite priority prefix resumes the unchanged
+fair dovetail. See [`ONTOLOGY_GUIDANCE.md`](ONTOLOGY_GUIDANCE.md) for the protocol and
+reproduction command.
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

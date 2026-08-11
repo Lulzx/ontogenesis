@@ -12,6 +12,8 @@ The active implementation now lives in:
 - `src/fixpoint.rs` — pure-lambda single and mutual fixed-point synthesis.
 - `src/representation.rs` — anonymous sum-of-products representation invention from
   supplied constructor arities.
+- `src/ontology_guidance.rs` / `examples/ontology_guided.rs` — measured developmental
+  recursive-search bias with the universal dovetail preserved as fallback.
 - `demo/arc-1/src/main.rs` — `b1`, `b2`, and `b3` experiments plus regression tests.
 - `MILESTONES.md` — frozen claims, controls, evidence, and limitations.
 
@@ -24,6 +26,8 @@ B3  invented recursion → map/append/reverse
     map acquisition                                         ✗ → 15
     reverse acquisition                                     ✗ → 3
     map(reverse) → unseen 5×4 grid mirror                   ✓
+B2-guided  {not}: recursive parity                          ≥122× proposals
+           {not, parity}: nested recursive law              ≥230× proposals
 ```
 
 The earlier substrate bug remains documented in git history and the B1 regression now
