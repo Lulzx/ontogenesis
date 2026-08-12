@@ -45,6 +45,8 @@
 //! - [`world_model`]: Direction G world-model ontogenesis — factored state
 //!   compression and invented reversible-counter transfer in a persistent
 //!   deterministic world.
+//! - [`math_world`]: Direction M1 mathematical ontogenesis — invent distance
+//!   as a reusable concept in an arithmetic world.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -78,3 +80,4 @@ pub mod typed;
 pub mod universal;
 pub mod universal_property;
 pub mod world_model;
+pub mod math_world;

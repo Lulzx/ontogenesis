@@ -421,6 +421,19 @@ coupled control world honestly reports partial factorization
 (`parents=[[0],[0,1],[0,1]]`) with held-out factored accuracy 0.000, so the
 discovery does not over-claim compression. Protocol: `WORLD_MODEL.md`.
 
+### Direction M1 — invent distance as a reusable mathematical concept
+
+The first problem of the Mathematical Ontogenesis track. Mathematics is
+treated as a world `W = (S, A, T, O)`. From four Pythagorean-triple
+observations `(x,y) -> d`, the agent invents `sqrt(x*x + y*y)` (the Euclidean
+distance, size 8, discovery_cost 99,573) which generalizes to all four held-out
+points. The concept is reusable: predicting a new point's distance costs 1
+evaluation (`concept_reasoning_cost=4`) versus re-synthesizing from scratch
+(`baseline_reasoning_cost=99,577`), a saving of 99,573 expressions. It also
+compresses the observations (24 raw tokens -> 8-node expression, gain 16). A
+non-Pythagorean control honestly reports no generalizing fit. Protocol:
+`MATH_WORLD.md`.
+
 
 ## B3 — recursive law to reasoning vocabulary
 
@@ -539,4 +552,11 @@ World-model ontogenesis (Direction G):
 ```sh
 cargo run --release --example world_model
 cargo test -p supsearch world_model --lib
+```
+
+Mathematical ontogenesis (Direction M1):
+
+```sh
+cargo run --release --example math_world
+cargo test -p supsearch math_world --lib
 ```

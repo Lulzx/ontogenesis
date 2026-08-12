@@ -197,3 +197,18 @@ Docs: `docs/CAUSAL_ONTOLOGY.md`.
 
 New module: `src/world_model.rs`. Example: `examples/world_model.rs`.
 Docs: `docs/WORLD_MODEL.md`.
+
+## Addendum (2026-08-12): Direction M1 mathematical ontogenesis
+
+| Claim | Status | Where |
+|---|---|---|
+| Arithmetic expression grammar over x,y with + - * / sqrt and composition | confirmed, asserted | `src/math_world.rs` (`Expr`) |
+| Bottom-up behavior-deduped enumeration | confirmed, asserted | `build_table` |
+| Discovers `sqrt(x*x+y*y)` from Pythagorean triples, generalizes to held-out | confirmed, asserted | `discover_concept`, `discovers_distance_expression` |
+| Concept cheaper than re-synthesis (transfer saving) | confirmed, asserted | `transfer_report`, `concept_is_cheaper_than_resynthesis` |
+| Concept compresses observations | confirmed, asserted | `compression_report`, `concept_compresses_observations` |
+| Non-generalizing control honestly reports no fit | confirmed, asserted | `non_generalizing_fit_is_detected` |
+| Deterministic machine record (`deterministic=true`) | confirmed, asserted | `machine_record_is_deterministic` |
+
+New module: `src/math_world.rs`. Example: `examples/math_world.rs`.
+Docs: `docs/MATH_WORLD.md`.

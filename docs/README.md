@@ -305,6 +305,16 @@ world honestly reports partial factorization with held-out accuracy 0.000, so
 the discovery does not over-claim compression. See
 [`WORLD_MODEL.md`](WORLD_MODEL.md).
 
+**Direction M1 — invent distance as a reusable mathematical concept.** The
+first problem of the Mathematical Ontogenesis track. Mathematics is treated as
+a world `W = (S, A, T, O)`. From four Pythagorean-triple observations, the
+agent invents `sqrt(x*x + y*y)` (the Euclidean distance), which generalizes to
+all held-out points. The concept is reusable: predicting a new point's
+distance costs 1 evaluation versus re-synthesizing from scratch (saving
+99,573 expressions), and it compresses the observations (24 raw tokens -> 8
+nodes, gain 16). A non-Pythagorean control honestly reports no generalizing
+fit. See [`MATH_WORLD.md`](MATH_WORLD.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.
