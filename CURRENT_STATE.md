@@ -88,9 +88,23 @@ unseen universes pass and accelerate (special-value operations 217→59);
 missing-composite, non-squarefree, duplicate, and removed-element controls are
 declined with baseline costs. M17 reaches
 `L3_transferred_ontology_with_measured_utility`; extensional universes, the
-grammar, and the exact checker remain supplied. M18 remains unreached.
+grammar, and the exact checker remain supplied.
 
-Directions G and Mathematical Ontogenesis M1–M17 are implemented. M10 added
+## M18 toy zeta result
+
+A separately pre-registered experiment supplies extensional semigroup
+universes with exponent cap 2 and exact integer special values
+`S_s=sum u^s`. The learner infers irreducibles and retains the local factor
+`q^2+q+1`; the checker verifies the exact product identity, a formal pole of
+order `|P|` at `s=0`, and the reflection identity at the rational center
+`1/2`. All three frozen four-prime transfer universes are exact and
+accelerated (operations 584→422, description 249→21 integers); corrupted,
+missing, extra, and `s=0` controls are declined. M18 reaches
+`L3_transferred_ontology_with_measured_utility` as a bounded integer toy zeta;
+the power primitive, coefficient grammar, and exact checker remain supplied.
+M19 remains unreached.
+
+Directions G and Mathematical Ontogenesis M1–M18 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -100,7 +114,8 @@ M15/M15b add recurrence-generated oscillatory coordinates with conditional
 closed-shift routing. M16 adds unlabelled structural predicate invention with
 checked orthogonal latent directions and rational spectral decomposition. M17
 adds irreducible inference and local-factor invention with exact finite Euler
-product transfer.
+product transfer. M18 adds the exponent-parameterized toy zeta object with
+exact integer special values and formal pole/reflection certificates.
 
 ## M12 result
 
@@ -146,5 +161,7 @@ cargo test -p supsearch --lib spectral_world
 cargo run --release --example spectral_world
 cargo test -p supsearch --lib euler_world
 cargo run --release --example euler_world
+cargo test -p supsearch --lib zeta_world
+cargo run --release --example zeta_world
 cargo test --workspace
 ```

@@ -11,3 +11,5 @@ lto = true
 codegen-units = 1
 
 [dependencies]
+num-bigint = "0.4"
+num-traits = "0.2"

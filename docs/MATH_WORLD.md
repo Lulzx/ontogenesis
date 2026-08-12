@@ -304,4 +304,8 @@ theorem. M17 supplies squarefree universes extensionally, infers irreducibles
 from multiplication behavior, invents the local factor `1+r`, and verifies the
 finite Euler product identity with special-value operations falling 217→59;
 four incompatible controls are declined. It reaches L3 in the bounded integer
-toy domain, not a general analytic Euler product. M18–M30 are not claimed.
+toy domain, not a general analytic Euler product. M18 extends the substrate to
+an exponent-parameterized toy zeta, retains `q^2+q+1`, verifies exact integer
+special values with operations falling 584→422 and description 249→21, and
+declines corrupted/missing/extra/`s=0` controls; it reaches L3 as a bounded
+toy, not an analytic zeta function. M19–M30 are not claimed.

@@ -6,9 +6,9 @@ stage was allowed to know, what the system actually searched or inferred,
 what evidence supports the result, and what is explicitly not claimed.
 
 Status is intentionally asymmetric. M1–M12 are reached experiments, M13b,
-M14c, M15b, M16, and M17 have integrity-calibrated L3 results, M15 has an exact
-L2 result with a failed L3 gate, and M18–M30 remain unreached. A complete
-directory is not a claim of a completed ladder.
+M14c, M15b, M16, M17, and M18 have integrity-calibrated L3 results, M15 has an
+exact L2 result with a failed L3 gate, and M19–M30 remain unreached. A
+complete directory is not a claim of a completed ladder.
 
 | Milestone | Topic | Status |
 |---|---|---|
@@ -30,7 +30,7 @@ directory is not a claim of a completed ladder.
 | M15b | Fourier coordinate routing | reached — exact L3 conditional routing |
 | [M16](M16_TOY_SPECTRAL_THEOREM.md) | Toy spectral theorem | reached — exact L3 conditional routing |
 | [M17](M17_EULER_PRODUCT.md) | Finite Euler product | reached — exact L3 finite Euler product |
-| [M18](M18_TOY_ZETA.md) | Toy zeta | not attempted |
+| [M18](M18_TOY_ZETA.md) | Toy zeta | reached — exact L3 toy zeta object |
 | [M19](M19_FUNCTIONAL_EQUATION.md) | Functional equation | not attempted |
 | [M20](M20_COMPLETED_OBJECT.md) | Completed toy object | not attempted |
 | [M21](M21_CRITICAL_LOCUS.md) | Critical symmetry locus | not attempted |

@@ -75,3 +75,16 @@ removing the debt entry.
   templates are not supplied.
 - D6 is conditioned, not eliminated: the toy domain remains a bounded
   squarefree integer universe with a trusted exact checker.
+
+## M18 entry (pre-registered)
+
+- New debt D7: `pow(p,s)` is supplied as a generic power primitive, the
+  coefficient grammar fixes degree and coefficient bounds, and the exact
+  integer checker is trusted.
+- The retained local factor `q^2+q+1` and the formal pole/reflection
+  certificates are constructed from generic arithmetic and exponent
+  evaluation, not supplied as zeta templates.
+- Prime lists, factorization metadata, zeta names, and pole/zero labels are
+  not supplied.
+- D7 is conditioned, not eliminated: the toy remains bounded integer
+  semigroup arithmetic with trusted exact semantics.

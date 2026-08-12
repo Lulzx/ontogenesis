@@ -66,6 +66,9 @@
 //! - [`euler_world`]: Direction M17 finite Euler product -- irreducible
 //!   inference from multiplication behavior, local-factor invention, and
 //!   exact product/special-value transfer.
+//! - [`zeta_world`]: Direction M18 toy zeta object -- exact rational special
+//!   values, exponent-parameterized local factors, and formal pole/reflection
+//!   certificates.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -107,4 +110,5 @@ pub mod typed;
 pub mod universal;
 pub mod universal_property;
 pub mod world_model;
+pub mod zeta_world;
 pub mod math_world;

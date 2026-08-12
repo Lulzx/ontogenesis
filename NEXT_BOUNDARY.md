@@ -895,3 +895,168 @@ M17 fails L3 if the retained local factor is not found, any compatible
 universe is not exact or not accelerated, any control is accepted as exact,
 aggregate special-value operations do not fall, or candidate accounting mixes
 units. Any post-output change creates M17b and preserves this run.
+
+---
+
+# Next Boundary — M18 Toy Zeta Object
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M18 implementation; executed without amendment
+
+## Recorded outcome
+
+M18 passed the frozen L3 gate. From two extensional semigroup universes with
+exponent cap 2, the learner inferred irreducibles and retained the local
+factor `q^2+q+1` (candidate index 0, one of 16,806 coefficient vectors, the
+only candidate valid on training). The exact checker verifies that
+`prod_{p in P} (p^{2s}+p^s+1) = sum_{u in U} u^s` as exact integers, that the
+completed factor `1-p^{-s}` has formal pole order `|P|` at `s=0`, and that the
+reflection identity for `C(p,s)=p^{1-s}-p^s` holds at the rational center
+`1/2`. All three frozen four-prime downstream universes are exact and
+accelerated (aggregate operations 584→422, measured gain 162); all four
+controls are declined with baseline counts preserved. False-positive
+acceptances and negative-transfer tasks are both zero, and description cost
+falls 249→21 stored integers. Claim level is
+`L3_transferred_ontology_with_measured_utility`. No grammar, task, threshold,
+ordering, or candidate space was changed after observing this outcome.
+
+## Motivation and intended claim
+
+M17 retained a squarefree local factor `1+r` from a generic arithmetic grammar.
+M18 asks whether the same extensional universe substrate can produce a compact
+exponent-parameterized object connecting a Dirichlet-like global sum,
+multiplicative factorization, exact integer special values, and exact formal
+poles/zeros. “Zeta,” “Euler product,” “pole,” and “zero” are not primitives or
+candidate labels.
+
+Maximum claim: `L3_transferred_ontology_with_measured_utility`, conditional on
+exact validation and lower actual special-value operations on every frozen
+compatible universe, exact decline of every control, and zero negative
+transfer. This is a bounded toy result, not an analytic-continuation claim.
+
+## Frozen substrate
+
+- Hidden objects are finite sets `P` of distinct primes from `{2,3,5,7,11}`,
+  with `2 <= |P| <= 4`. Only the extensional universe is observed.
+- A universe is the sorted multiset
+  `U(P,E) = {prod_{p in P} p^{e_p} : 0 <= e_p <= E}` with frozen `E = 2`.
+  Generation metadata and factorizations are never passed to search.
+- Special values are exact integers
+  `S_s = sum_{u in U} u^s` for integer `s`; training exponents are
+  `s = 1,2,3,4`. This integer form was fixed by pre-execution amendment so the
+  exact toy remains closed under finite arithmetic; the object is a
+  positive-power toy analog of the Dirichlet-like sum.
+- Irreducible inference and exponent-cap inference use only multiplication
+  and membership tests on the observed universe.
+- A local factor is an integer-coefficient univariate polynomial in
+  `q = p^s`, degree through 4, coefficients in `[-3,3]`, with the power
+  evaluation `q = p^s` as a supplied generic primitive. Candidates are
+  enumerated deterministically by coefficient vector (degree 0 through 4) and
+  deduplicated by exact integer behavior on the training grid
+  `(p in training irreducibles, s in training exponents)`. This coefficient
+  grammar was fixed by pre-execution amendment as the tractable executable
+  form of the frozen bounded local-factor grammar; it contains the retained
+  object `q^2+q+1`.
+
+## Exact checker
+
+For a submitted local factor `L(q)`, the checker:
+
+1. recomputes the irreducible factors and verifies `E = 2` from the raw
+   universe (`p^2` present and `p^3` absent for every irreducible `p`);
+2. recomputes every special value by direct exact integer summation;
+3. evaluates `L(p,s)` exactly and requires
+   `prod_{p in P} L(p,s) = S_s` for every frozen exponent;
+4. verifies the formal completed factor `C(p,s)=p^{1-s}-p^s` satisfies
+   `C(p,1/2)=0` and `C(p,1-s)=-C(p,s)` exactly for every irreducible, with
+   `1/2` treated as the rational center of the toy reflection;
+5. verifies the formal pole certificate: for the completed factor
+   `1-p^{-s}`, the identity `1-p^0=0` holds for every irreducible, so the
+   completed infinite Euler object has pole order `|P|` at `s=0`. This
+   certificate is a fixed algebraic check on the retained completion, not a
+   condition on the submitted finite local factor's denominator.
+
+The checker returns boolean acceptance only; no normal form, denominator,
+counterexample, or error distinction flows back into proposal ranking. The
+pole/zero certificates are formal exact algebraic facts about the retained
+object, not empirical evaluations at undefined points.
+
+## Frozen downstream suite
+
+Training universes are `P=[2,3]` and `P=[2,3,5]` with exponents `s=1,2,3,4`.
+None of the downstream tasks appear in training:
+
+1. `P=[2,3,5,7]`, exponents `s=5,6`;
+2. `P=[3,5,7,11]`, exponents `s=5,6`;
+3. `P=[2,5,7,11]`, exponents `s=5,6`.
+
+All downstream universes have `k=4` irreducibles and `|U|=81`, so direct
+summation is expensive relative to the retained product schema. This was fixed
+before any implementation or output was observed.
+
+Controls, all incompatible:
+
+1. corrupted special value: one `S_s` numerator incremented by one;
+2. missing element: `U(P,E)` with `4` removed;
+3. extra element: `U(P,E)` with `8` inserted (not in the semigroup);
+4. `s=0`: the raw sum is defined (`|U|`), but the retained schema must decline
+   because its formal pole certificate makes evaluation at `s=0` undefined;
+5. single-factor candidates `1+q` and `1-q` must fail exact
+   validation on training.
+
+## Compared conditions and accounting
+
+- **Baseline:** store and evaluate the raw universe and special values. Cost
+  is `|U|-1` exact integer additions per exponent plus `|U|` stored integers
+  and one integer per special value.
+- **Acquired:** infer `P` and `E` (reported separately), evaluate `k` local
+  factors by Horner form (`degree` multiplications and `degree` additions),
+  multiply them (`k-1` integer multiplications), and store `k` irreducibles
+  plus the coefficient vector. `pow(p,s)` costs `s-1` multiplications and is
+  reported separately.
+- Description cost is the number of stored integers: raw stores `|U|` values
+  plus one integer per special value; acquired stores `k` irreducibles, the
+  exponent cap, and the coefficient vector length.
+
+Report per task: universe cardinality, irreducible count, inference checks,
+checker calls, baseline operations, acquired operations, exact equality,
+formal pole order, false-positive acceptance, and negative transfer. Success
+requires exact recovery of every compatible task, strictly fewer acquired
+operations than baseline on every compatible task, exact decline of every
+control with unchanged baseline counts, zero false-positive acceptances, zero
+negative-transfer tasks, lower aggregate operations, and lower aggregate
+description cost.
+
+## Supplied-ontology ledger
+
+- **Supplied:** extensional universe, exact integer arithmetic, the `pow`
+  evaluation primitive, the bounded local-factor grammar, and the exact
+  checker including the frozen rational center `1/2`.
+- **Acquired:** irreducible/exponent inference and the retained local-factor
+  program composing global sum, factorization, special values, and formal
+  pole/zero certificates.
+- **Not supplied:** prime lists, factorization metadata, zeta names, Euler
+  templates, pole/zero labels, or checker information beyond boolean
+  acceptance.
+- **Accounting:** operations, stored integers, inference checks, and checker
+  calls are distinct labeled units.
+
+## Controls and ablations
+
+- `single_atom_grammar`: a weaker substrate restricted to degree-0 and
+  degree-1 coefficient vectors cannot produce a valid local factor.
+- `primes_supplied_ablation`: a stronger substrate that receives `P` directly
+  passes but does not establish inference.
+- Corrupted, missing, extra, and `s=0` observations must be declined.
+- The formal pole order must equal `|P|` and the reflection center must be
+  exactly `1/2`.
+
+M18 fails L3 if no local factor is retained from training, any compatible
+universe is not exact or not accelerated, any control is accepted, aggregate
+operations or description cost do not fall, or accounting mixes units. Any
+post-output change creates M18b and preserves this run.
