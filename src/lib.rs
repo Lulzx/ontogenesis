@@ -94,6 +94,8 @@
 //!   reformulation of the M27 conjecture predicate.
 //! - [`rh_making_surrogate_world`]: Direction M29b coefficient-derived
 //!   forcing object in a bounded even-quartic surrogate.
+//! - [`real_rh_ontogenesis`]: Direction M30a bounded proof-program search
+//!   against the real Riemann Hypothesis.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -125,6 +127,7 @@ pub mod learned_context;
 pub mod locus_world;
 pub mod making_object_world;
 pub mod real_zeta_world;
+pub mod real_rh_ontogenesis;
 pub mod rh_equivalence_world;
 pub mod rh_making_surrogate_world;
 pub mod nbe;

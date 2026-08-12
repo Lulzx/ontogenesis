@@ -247,8 +247,23 @@ surrogate. It is not an object for xi and explains no prime phenomenon:
 `real_zeta_object=false`, `rh_proved=false`, and `m29_reached=false`. D20
 remains active. Real M29 and M30 remain unreached.
 
+## M30 real-RH ontogenesis result
+
+M30a exhaustively searches 12,480 bounded proof programs against the actual
+target `forall rho, xi(rho)=0 -> Re(rho)=1/2`. Cold and acquired conditions use
+the same canonical space. No closed proof and no certified strictly smaller
+reduction are found. The acquired ordering reaches the best spectral frontier
+at rank 54 rather than 342, but `SpectralCorrespondence` and `SelfAdjointness`
+remain open assumptions.
+
+All six shortcut controls decline and the terminal closure rule passes its
+separate positive control. The completed run records
+`outcome=attempted_unreached`, `real_rh_proved=false`, and
+`m30_reached=false`. It is an L0 bounded-search negative result, not a theorem.
+D21 remains active.
+
 Directions G and Mathematical Ontogenesis M1–M28 plus M29b surrogate are
-implemented. M10 added
+implemented, and real M30 has been attempted. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -279,6 +294,8 @@ M28 adds the exact reflection-orbit reformulation `rho=1-conj(rho)`, with
 bidirectional affine certificates and explicit no-RH/no-global-novelty labels.
 M29b adds a noncircular coefficient-derived forcing object for an even-quartic
 surrogate, with an explicit hard stop before real M29.
+M30a runs bounded proof-program ontogenesis against real RH, exposing a
+two-assumption spectral frontier without claiming a proof or reduction.
 
 ## M12 result
 

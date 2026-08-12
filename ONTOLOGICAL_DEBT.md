@@ -198,3 +198,12 @@ removing the debt entry.
 - D20 caps the corrected M29b result at L2 and prevents promotion to real M29.
   It tests noncircular coefficient-derived forcing in a bounded surrogate
   family; it neither constructs an object for xi nor proves RH.
+
+## M30a real-run entry (pre-registered)
+
+- D15–D20 remain visible; the M26–M29 artifacts are inputs, not axioms that
+  establish RH.
+- New debt D21: the bounded proof-program grammar, inference rules, maximum
+  length four, frontier score, and strict-reduction criterion are supplied.
+- D21 means failure is only failure within this bounded search. Success would
+  still require independent review of the checker and every trusted lemma.

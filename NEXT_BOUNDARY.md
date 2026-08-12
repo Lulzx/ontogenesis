@@ -2409,3 +2409,73 @@ The machine record must expose all seven individual control booleans, not only
 a total. M29b otherwise has the same hard stop: a passing surrogate leaves
 `real_zeta_object=false`, `rh_proved=false`, and `m29_reached=false`. Any
 further post-output change creates M29c.
+
+---
+
+# Next Boundary — M30a Real-RH Ontogenesis Run
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** executed without amendment; M30 attempted and unreached
+
+## M30a recorded outcome
+
+Both conditions exhaustively checked 12,480 proof programs from the same
+canonical candidate space. No closed proof of real RH and no certified strict
+reduction were found. The best real-xi frontier is the spectral-forcing chain,
+whose open assumptions are exactly `SpectralCorrespondence` and
+`SelfAdjointness`; it is therefore not accepted as a proof.
+
+The acquired M26–M29 ordering reaches that frontier at rank 54 rather than 342,
+an ordering gain of 288 candidates. All six shortcut controls decline, and a
+synthetic closure control confirms the checker can accept the terminal rule
+when independent proofs of both bridge statements are supplied. The run records
+`proof_found=false`, `reduction_found=false`, `real_rh_proved=false`,
+`m30_reached=false`, and `outcome=attempted_unreached`. This is an
+`L0_bounded_search_negative_result`, not a mathematical theorem.
+
+## Intended claim and hard stop
+
+M30a runs ontogenesis against the actual target
+`forall rho, xi(rho)=0 -> Re(rho)=1/2`. It searches for a closed proof or a
+strictly smaller certified reduction using the real-zeta artifacts acquired in
+M26–M28. A run may fail. It must not substitute the M29b even-quartic surrogate
+for xi, and it must report open assumptions on the best frontier program.
+
+## Frozen proof grammar and checker
+
+Primitive statements are the M26 functional equation, conjugation closure,
+M27 finite zero evidence, M28 predicate equivalence, Euler-product semantics,
+and M29b surrogate theorem. Two explicitly conjectural real-zeta bridge
+statements are also enumerable: existence of a self-adjoint operator whose
+spectrum is exactly the nontrivial xi zeros, and proof of its self-adjointness.
+Candidate programs are all ordered subsets of up to four distinct statements,
+followed by one of the fixed inference rules. Exactly the same programs occur
+in cold and acquired conditions; acquired ordering prioritizes symmetry,
+equivalence, and forcing-object motifs without checker feedback.
+
+The checker propagates exact domain (`real_xi` versus `even_quartic`), scope
+(`finite` versus `universal`), and open-assumption sets. A proof is accepted
+only when it derives the real-xi universal critical-line target with no open
+assumptions. A reduction is accepted only when both implications are certified
+and its unresolved obligations are a strict subset of the target obligation,
+not merely a renamed equivalent. The checker returns only accepted/rejected to
+search; a separate post-run pass may inspect the best frontier.
+
+## Frozen families, controls, and accounting
+
+Controls must reject symmetry-alone, finite-evidence, equivalence-as-proof,
+surrogate-domain transfer, and a proof with either conjectural bridge left
+open. A synthetic closed derivation is used only to show the proof checker is
+not constant-false; it cannot enter the real search or milestone status.
+
+The run reports candidate programs enumerated, checker calls, whether cold and
+acquired search found a proof or reduction, the rank and open assumptions of
+the best frontier, and any ordering gain in reaching that frontier. M30 is
+reached only by a closed real-RH proof or valid strict reduction. Otherwise the
+scientific outcome is `attempted_unreached`, not an audit milestone or a
+surrogate M30. Any post-output change creates M30b.

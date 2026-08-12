@@ -11,8 +11,9 @@ calibrated L3 results, M25 has a toy RH-making object result, M15 has an exact
 L2 result with a failed L3 gate, M26 has an exact L2 real-zeta completion
 selection result, M27b has a finite-data L2 critical-locus conjecture, M28 has
 an exact L2 reflection-orbit equivalence, and M29b has an L2 forcing-object
-surrogate while real M29 remains unreached. M30 remains unreached. A
-complete directory is not a claim of a completed ladder.
+surrogate while real M29 remains unreached. M30a runs bounded ontogenesis on
+real RH and returns `attempted_unreached`. A complete directory is not a claim
+of a completed ladder.
 
 | Milestone | Topic | Status |
 |---|---|---|
@@ -46,7 +47,7 @@ complete directory is not a claim of a completed ladder.
 | [M27](M27_CRITICAL_LINE.md) | Critical line | M27b reached — finite-data L2 conjecture |
 | [M28](M28_RH_EQUIVALENCES.md) | RH equivalence | reached — exact L2 local reformulation |
 | [M29](M29_RH_MAKING_OBJECT.md) | RH-making object | M29b surrogate reached — real M29 unreached |
-| [M30](M30_RIEMANN_HYPOTHESIS.md) | Riemann Hypothesis | not reached |
+| [M30](M30_RIEMANN_HYPOTHESIS.md) | Riemann Hypothesis | M30a real run completed — attempted, unreached |
 
 Reproduce reached stages with:
 
@@ -55,5 +56,7 @@ cargo test -p supsearch --lib math_world
 cargo run --release --example math_world
 cargo test -p supsearch --lib rh_making_surrogate_world
 cargo run --release --example rh_making_surrogate_world
+cargo test -p supsearch --lib real_rh_ontogenesis
+cargo run --release --example real_rh_ontogenesis
 cargo test --workspace
 ```

@@ -338,3 +338,5 @@ M28 proves the exact predicate equivalence
 neither RH nor global novelty is claimed. M29b retains
 `diag(a,b,a^2-4b)` as an exact forcing object for a supplied even-quartic
 surrogate, but explicitly leaves real M29, M30, and RH unreached.
+M30a then checks 12,480 proof programs against real RH. It finds no proof or
+strict reduction; acquired ordering moves the open spectral frontier 342→54.

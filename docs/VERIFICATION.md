@@ -254,3 +254,4 @@ M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 | M27b real-zeta zero-locus conjecture and corrected controls | confirmed, finite numerical conjecture | `src/critical_line_world.rs`, `NEXT_BOUNDARY.md` |
 | M28 reflection-orbit predicate equivalence | confirmed, exact affine certificate | `src/rh_equivalence_world.rs`, `NEXT_BOUNDARY.md` |
 | M29b coefficient-derived forcing surrogate | confirmed, exact bounded surrogate; real M29 unreached | `src/rh_making_surrogate_world.rs`, `NEXT_BOUNDARY.md` |
+| M30a real-RH ontogenesis run | confirmed, 12,480-program bounded negative search; M30 unreached | `src/real_rh_ontogenesis.rs`, `NEXT_BOUNDARY.md` |
