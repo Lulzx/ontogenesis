@@ -245,3 +245,60 @@ removing the debt entry.
   `reconstructed`, not retired.
 - Load-bearing real-xi spectral correspondence remains `supplied/unproved`.
   Finite symmetry does not retire the limiting operator obligation.
+
+## SH4 operator-kernel entry (pre-registered)
+
+- Targeted debt: D21's named spectral/self-adjoint atoms and D24's missing
+  finite-to-infinite semantics.
+- New debt D25: Hilbert/operator types, seven inference rules, certificate
+  formats, convergence semantics, test-function separation, and the final xi
+  adapter are supplied as trusted kernel ontology.
+- SH4 can make future search honest and executable, but does not itself reduce
+  mathematical debt. D25 must later be audited independently and cannot be
+  counted as discovered mathematics.
+
+## SH5 operator-search entry (pre-registered)
+
+- D25 is reused as the independent checker.
+- New debt D26: Jacobi form, `c_00(N)`, prime/index coefficient primitives,
+  depth-three grammar, Carleman criterion, common-core certificate interface,
+  test-function grammar, and trace-remainder certificate shape are supplied.
+- D26 caps any discovery claim: selection inside this family is not invention
+  of the general operator idea. Exact certificates, not numerical fit, govern
+  real-M29 status.
+
+## Status after SH4c and invalidated SH5
+
+- D25 remains supplied trusted infrastructure. SH4c adds a checked Carleman
+  rule but does not discover the theorem.
+- The first SH5 run is invalidated because it did not execute breadth-first
+  proof closure and did not explicitly submit two malformed trace controls.
+  D26 therefore remains wholly active and no SH5 frontier is claimed.
+
+## SH5b corrected status
+
+- SH5b executes fair proof closure and reaches essential self-adjointness for
+  360 candidates. It selects `a_n=1`, `b_n=p_n` without zero-derived input.
+- D26 remains active because no resolvent or trace certificate is found. The
+  operator family is a certified frontier, not an xi correspondence.
+
+## SH6 trace-calibration entry (pre-registered)
+
+- New debt D27: graph families, matrix moments, closed-walk syntax, coefficient
+  bound, normalization language, and exact finite trace checker are supplied.
+- D27 permits only finite trace-schema reconstruction and transfer. It cannot
+  establish an infinite operator or xi correspondence without independent
+  convergence and normalization certificates.
+
+- SH6's directed negative control was invalidated before execution because the
+  closed-walk trace identity holds for directed square matrices. SH6b replaces
+  it with a rectangular non-endomorphism control; D27 otherwise remains.
+
+## SH7 prime-trace retry entry (pre-registered)
+
+- D27 is reused only through the retained closed-walk schema.
+- New debt D28: the second-moment target, two-term symbolic basis, coefficient
+  bound, normalization list, and limiting gate are supplied.
+- D28 permits an exact finite prime-to-spectrum identity claim. A scalar moment
+  or degenerate normalized limit does not establish equality of spectral and
+  xi-zero measures and cannot reach M29.

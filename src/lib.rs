@@ -102,6 +102,10 @@
 //!   cross-domain reuse of anonymous witness/property obligation generators.
 //! - [`spectral_witness_search`]: self-hosting Phase SH3 generic symmetric
 //!   witness construction and provenance-safe real-M29 retry.
+//! - [`operator_kernel`]: self-hosting Phase SH4 typed infinite-operator and
+//!   trace-identity proof kernel.
+//! - [`operator_search`], [`trace_schema_search`], and [`prime_trace_search`]:
+//!   prime-Jacobi proof search and cross-domain trace-schema transfer.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -137,6 +141,10 @@ pub mod real_rh_ontogenesis;
 pub mod generator_reconstruction;
 pub mod stall_diagnosis;
 pub mod spectral_witness_search;
+pub mod operator_kernel;
+pub mod operator_search;
+pub mod trace_schema_search;
+pub mod prime_trace_search;
 pub mod rh_equivalence_world;
 pub mod rh_making_surrogate_world;
 pub mod nbe;

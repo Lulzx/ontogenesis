@@ -258,3 +258,7 @@ M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 | SH1 M29 stall diagnosis | confirmed, ten executable ablations isolate the spectral bridge | `src/stall_diagnosis.rs`, `NEXT_BOUNDARY.md` |
 | SH2b obligation-generator reconstruction | confirmed failure, exact but non-amortizing | `src/generator_reconstruction.rs`, `NEXT_BOUNDARY.md` |
 | SH3b generic symmetric-witness reconstruction | confirmed finite cross-domain transfer; real M29 unreached | `src/spectral_witness_search.rs`, `NEXT_BOUNDARY.md` |
+| SH4c typed infinite-operator kernel | confirmed infrastructure; 11/11 controls, real M29 unreached | `src/operator_kernel.rs`, `NEXT_BOUNDARY.md` |
+| SH5b prime Jacobi proof closure | confirmed 1,600 candidates; essential-self-adjoint frontier | `src/operator_search.rs`, `NEXT_BOUNDARY.md` |
+| SH6b finite trace-schema calibration | confirmed cross-domain transfer and amortized utility | `src/trace_schema_search.rs`, `NEXT_BOUNDARY.md` |
+| SH7b exact prime-Jacobi second trace | confirmed finite identity; degenerate scalar limit, real M29 unreached | `src/prime_trace_search.rs`, `NEXT_BOUNDARY.md` |

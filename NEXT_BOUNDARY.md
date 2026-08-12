@@ -2700,3 +2700,323 @@ transfers are now asymmetric even-valued raw encodings whose frozen targets are
 their symmetric averages. Exact target equality is required; transpose and
 identity must fail. The directed control carries incompatible-domain metadata
 and must be declined before construction. Any further change creates SH3c.
+
+---
+
+# Next Boundary — SH4 Typed Infinite-Operator Proof Kernel
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; convergence-rule gate invalidated by post-run audit
+
+## SH4 recorded outcome and audit
+
+The kernel passed its synthetic chains and eight controls, but post-run review
+found rule 4 too broad: strong-resolvent convergence justifies continuous
+functional calculus vanishing at infinity under the frozen assumptions, not
+all bounded-continuous functions. SH4 is preserved as invalidated. SH4b narrows
+only this type/rule and removes an unused control fixture; all other rules and
+tests remain frozen.
+
+## Purpose
+
+SH4 replaces the named `SpectralCorrespondence` and `SelfAdjointness` atoms
+with proof-producing typed obligations. It is infrastructure for the active
+real-M29 goal, not a claim that an xi operator exists.
+
+## Frozen language
+
+The language distinguishes Hilbert spaces, dense domains, symmetric operators,
+closures, self-adjoint operators, finite truncation families, convergence
+modes, spectral measures, test functions, arithmetic distributions, and trace
+identities. Every judgment carries provenance and a set of trusted assumptions.
+
+The checker may use only these frozen rules:
+
+1. a dense-domain certificate plus an exact symmetry certificate establishes a
+   densely defined symmetric operator;
+2. a certified zero deficiency-index pair establishes essential
+   self-adjointness, and closure then establishes self-adjointness;
+3. self-adjoint truncations plus a certified common-core resolvent limit
+   establish strong-resolvent convergence;
+4. strong-resolvent convergence transfers bounded-continuous spectral
+   integrals, but not point spectra or eigenvalue-by-eigenvalue limits;
+5. an independently normalized trace identity equates a spectral distribution
+   and arithmetic distribution only on its certified test-function class;
+6. an exact separation certificate for that class upgrades distributional
+   equality to equality of locally finite measures;
+7. equality of the limiting spectral measure with the xi-zero measure plus
+   self-adjointness certifies the M29 correspondence obligation.
+
+## Required negative controls
+
+The checker must reject: finite symmetry implying limiting self-adjointness;
+symmetry implying essential self-adjointness; strong operator convergence
+substituted for strong-resolvent convergence; strong-resolvent convergence
+implying point-spectrum convergence; an unnormalized trace formula; equality on
+a non-separating finite test set; zero-derived construction provenance; and a
+certificate with an undeclared analytic assumption.
+
+SH4 passes only if valid synthetic derivations certify, every malformed control
+fails for a typed reason, assumption/provenance propagation is deterministic,
+and no rule mentions xi except the final target adapter. Any post-output rule
+change creates SH4b.
+
+---
+
+# Next Boundary — SH4b Corrected Resolvent Functional Calculus
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; passed all nine controls
+
+Replace `BoundedContinuousClass` with
+`ContinuousVanishingAtInfinityClass`. The transfer rule concludes spectral
+integral convergence only for that exact class. Add a rejected control for an
+arbitrary bounded-continuous class. No other checker rule may change. Any
+further change creates SH4c.
+
+## SH4b recorded outcome
+
+The corrected `C_0` rule passed four synthetic chains and all nine controls.
+This is proof infrastructure only; it supplies neither a real operator nor an
+M29 correspondence. The later Carleman extension is frozen separately as
+SH4c.
+
+---
+
+# Next Boundary — SH4c Proof-Producing Carleman Extension
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; passed all eleven controls
+
+Add facts for positive Jacobi off-diagonal coefficients and divergence of the
+reciprocal coefficient series. The new rule derives essential
+self-adjointness only from a densely defined symmetric operator plus both facts
+for the identical operator. Missing facts and operator mismatch are negative
+controls. Existing SH4b rules and controls remain unchanged.
+
+SH4c passed the Carleman chain and both new controls while retaining all nine
+SH4b controls. Assumption and provenance propagation remains deterministic;
+`m29_reached=false`.
+
+---
+
+# Next Boundary — SH5 Prime-Derived Operator and Proof-Closure Search
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; invalidated by protocol audit
+
+## Candidate language
+
+Construct Jacobi operators on `c_00(N)` using
+`(Jx)_n=a_{n-1}x_{n-1}+b_n x_n+a_n x_{n+1}`. Coefficient programs are bounded
+arithmetic expressions over `n`, constants `0,1`, the nth prime `p_n`, prime
+gaps `p_{n+1}-p_n`, addition, absolute difference, and integer square root.
+Zero locations, zero counts, and M27 observations are unavailable during
+construction or ranking.
+
+Enumerate coefficient-program pairs by total syntax size through depth three.
+For each candidate, synthesize all SH4c derivations by breadth-first closure.
+The checker may independently certify dense domain and exact finite-support
+symmetry from the tridiagonal form. It may certify zero deficiency only through
+a frozen Carleman certificate whose exact rational lower-bound series diverges.
+
+## Trace and convergence obligations
+
+Finite truncations are exact symmetric matrices. No finite observation implies
+strong-resolvent convergence. A candidate must synthesize a common-core
+resolvent certificate from coefficient bounds before SH4c admits the limit.
+
+Prime-to-spectrum trace candidates are identities over a generic even compactly
+supported test-function grammar. Numerical comparison ranks candidates only.
+The checker accepts a trace identity only with a symbolic normalization and
+remainder certificate uniform in truncation size. Equality on sampled test
+functions is not a certificate.
+
+## Gate
+
+SH5 reports the complete candidate count, proof states reached, rejection
+histogram, best independently certified frontier, and any numerically ranked
+but uncertified trace candidates. Controls include zero-derived coefficients,
+asymmetric off-diagonals, convergent Carleman sums, nonuniform remainders, and
+sampled-test equality. M29 remains unreached unless SH4c derives
+`ExactXiSpectrumCorrespondence` with no undeclared assumption. Any change after
+output creates SH5b.
+
+## SH5 recorded outcome and audit
+
+The first implementation enumerated 40 expressions and all 1,600 ordered
+coefficient pairs, but used a fixed derivation template instead of the frozen
+breadth-first proof closure. Two trace controls also tested certificate absence
+rather than explicit malformed-certificate rejection. Preserve this output as
+invalidated; it does not establish the SH5 frontier.
+
+---
+
+# Next Boundary — SH5b Corrected Operator Proof Search
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; essential-self-adjoint frontier reached
+
+Retain the SH5 expression enumeration, provenance boundary, independent SH4c
+checker, and frontier ordering. Replace the fixed proof template with fair
+breadth-first closure over every applicable SH4c rule. Represent the convergent
+Carleman control by the exact p-series case `a_n=n^2`, outside the candidate
+grammar. Submit an unnormalized trace identity and equality on a finite sampled
+test class to SH4c and require typed rejection. No common-core or trace fact may
+enter as an axiom generated only from the candidate coefficients.
+
+The run passes only if all 1,600 candidates reach their maximal checked closure,
+all five controls receive explicit outcomes, and the reported best frontier is
+derived from accepted kernel judgments. Any later change creates SH5c.
+
+## SH5b recorded outcome
+
+SH5b exhaustively checked all 1,600 coefficient pairs by fair proof closure.
+The histogram is 1,240 dense-symmetric candidates and 360 candidates with a
+checked self-adjoint closure. The frozen ranking selected `a_n=1`, `b_n=p_n`.
+All five controls produced explicit rejection records. No resolvent or trace
+certificate was derived, so the exact frontier is essential self-adjointness
+and `m29_reached=false`.
+
+---
+
+# Next Boundary — SH6 Cross-Domain Trace-Search Calibration
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** invalidated before implementation; directed control is mathematically false
+
+Before expanding the real-xi language, test whether search reconstructs known
+finite trace identities without names or target-derived features. Use path and
+cycle Jacobi families with independently computed moments as positive domains,
+and a directed nonsymmetric family as a negative domain. Candidate schemas are
+cyclic closed-walk sums, diagonal moments, bounded integer linear combinations,
+and exact polynomial normalizations.
+
+SH6 passes only if one retained schema proves `tr(A^k)` by exact closed-walk
+enumeration on both positive domains, transfers to held-out sizes with lower
+amortized proof search than cold enumeration, and declines the directed
+control. Xi and prime inputs are prohibited. This calibrates trace-schema
+discovery and cannot by itself advance real M29.
+
+## SH6 pre-run audit
+
+The directed negative control is invalid: for every square matrix, including a
+directed adjacency matrix, `tr(A^k)` is the weighted closed-walk sum. No SH6
+output was produced. SH6b corrects only the domain routing and freezes the
+candidate order and accounting explicitly.
+
+---
+
+# Next Boundary — SH6b Corrected Cross-Domain Trace Calibration
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; finite trace schema transferred
+
+Training tasks are unweighted path and cycle adjacency matrices at sizes three
+through six and powers two through four. Candidate programs, in frozen order,
+are diagonal-entry powers, all-entry powers, cyclic closed-walk products, and
+unrestricted walk products. The target is computed independently by exact
+integer matrix multiplication and diagonal summation. A program is retained
+only if it matches every training target.
+
+Held-out positives are larger path and cycle matrices and a directed square
+matrix. The incompatible control is a rectangular source-target incidence
+matrix, for which an endomorphism trace power is undefined and must be declined
+before evaluation. Acquisition cost is the number of candidate schemas tested;
+cold transfer repeats that search, while retained transfer costs one schema
+check. SH6b passes only with exact equality, cross-domain transfer, control
+decline, and positive amortized utility after the frozen three transfers. It
+does not use primes or xi and cannot advance M29.
+
+## SH6b recorded outcome
+
+The search retained cyclic closed-walk products at proposal 3/4. It matched 24
+training tasks exactly, transferred to held-out paths, cycles, and a directed
+square matrix, declined rectangular input, and reduced three-transfer checks
+from 9 cold to 6 including acquisition. This is finite trace-schema
+calibration only; `m29_reached=false`.
+
+---
+
+# Next Boundary — SH7 Prime-Jacobi Exact Trace Retry
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; invalidated by control-audit
+
+Apply only the SH6b-retained closed-walk schema to SH5b's selected family
+`a_n=1`, `b_n=p_n`. For the second moment, enumerate symbolic length-two
+closed walks and search integer linear combinations of diagonal-square and
+edge-square sums with coefficients in `[-2,2]`, lexicographically ordered.
+The checker compares symbolic monomial maps, not sampled prime values. Hold out
+truncation sizes seven through ten.
+
+After specialization, search normalizations from `1`, `N`, `sum p_n`, and
+`sum p_n^2`. A normalization advances the infinite frontier only if the exact
+finite identity has a finite nonzero limit and an independently supplied
+separating-class trace identity connects that limit measure to the xi-zero
+measure. A constant or divergent scalar moment cannot be promoted to measure
+equality. Controls are a wrong coefficient, a sampled-only equality, a
+zero-derived normalization, and scalar-moment-to-measure promotion. Report all
+finite identities even when the limiting gate fails.
+
+## SH7 recorded outcome and audit
+
+SH7 found the symbolic identity
+`tr(J_N^2)=sum_{n<=N} p_n^2+2(N-1)` after 20 coefficient-pair checks and
+verified sizes two through ten. Its only finite normalization is the degenerate
+scalar limit one. However, sampled-only and zero-derived controls were asserted
+by absence rather than submitted to a checker, so preserve SH7 as invalidated.
+
+---
+
+# Next Boundary — SH7b Explicit Trace-Control Certificates
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; exact finite identity, limiting gate failed
+
+Retain the SH7 search and all numerical/symbolic outputs. Add a trace-evidence
+type distinguishing symbolic polynomial identities from sampled equality, and
+a normalization-provenance type distinguishing arithmetic-only from
+zero-derived expressions. The checker must explicitly reject sampled evidence,
+zero-derived normalization, and promotion of one scalar moment to a separating
+measure identity. Any change to the coefficient search, training sizes, or
+normalization list invalidates SH7b.
+
+## SH7b recorded outcome
+
+The corrected checker retained the SH7 identity after 20 searches and rejected
+all four explicit controls. The exact finite identity transfers through size
+ten. Normalization by `sum p_n^2` tends only to the degenerate scalar one; the
+other frozen normalizations diverge. There is no separating-class trace
+identity, so the certified frontier is a degenerate scalar limit and
+`m29_reached=false`.
+
+---
+
+# Next Boundary — SH8 Test-Function Trace Language
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** frozen before implementation
+
+Extend the retained closed-walk schema to even polynomial test functions of
+degrees two, four, and six for the SH5b prime Jacobi family. Candidate
+arithmetic expressions are finite sums over prime-indexed closed walks
+generated mechanically from matrix entries; no xi zeros or explicit-formula
+constants are available during construction.
+
+SH8 first checks every finite identity symbolically and then asks whether a
+single normalization yields a locally finite limiting distribution on the
+three-function class. This class is explicitly nonseparating, so even a pass
+cannot produce measure equality or M29. Controls permute one walk weight, omit
+boundary terms, introduce zero-derived normalization, and attempt finite-class
+measure promotion. Record divergence before any class expansion.

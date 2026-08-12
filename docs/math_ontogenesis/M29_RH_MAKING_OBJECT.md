@@ -58,3 +58,16 @@ The prime-only real retry constructs finite symmetric families without zero
 coordinate provenance, but it does not match held-out zero spectra and has no
 exact limiting correspondence. This reduces finite witness-construction debt;
 it does not solve the real M29 object problem.
+
+## Infinite-operator continuation
+
+SH4c replaces named self-adjointness and correspondence atoms with a typed
+proof kernel. SH5b searches 1,600 prime-derived Jacobi operators and certifies
+360 self-adjoint closures, selecting `a_n=1`, `b_n=p_n` under the frozen
+ranking. SH6b independently reconstructs the closed-walk trace schema, and
+SH7b transfers it to obtain the exact finite identity
+`tr(J_N^2)=sum_{n<=N}p_n^2+2(N-1)`.
+
+The normalization is divergent or a degenerate scalar. It supplies no
+separating-class distribution identity and therefore no equality with the xi
+zero measure. The exact limiting xi-spectrum correspondence remains open.

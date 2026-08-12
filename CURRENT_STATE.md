@@ -281,6 +281,15 @@ held-out spectral match or exact limiting correspondence. Mathematical
 capability remains at real M29 unreached; one finite witness-construction debt
 is now `reconstructed`.
 
+SH4b/SH4c now provide a typed infinite-operator kernel with corrected `C_0`
+functional calculus and an explicit Carleman rule. SH5b exhaustively closes
+1,600 prime-derived Jacobi candidates: 360 earn self-adjoint closures, and the
+frozen ranking selects `a_n=1`, `b_n=p_n`. SH6b reconstructs and transfers the
+finite closed-walk trace schema. SH7b then discovers and symbolically verifies
+`tr(J_N^2)=sum_{n<=N}p_n^2+2(N-1)`. Its available limits diverge or collapse to
+one scalar, so no separating trace identity or xi spectral correspondence is
+obtained. Real M29 remains unreached.
+
 Directions G and Mathematical Ontogenesis M1–M28 plus M29b surrogate are
 implemented, and real M30 has been attempted. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
