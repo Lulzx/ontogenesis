@@ -80,3 +80,50 @@ across three non-zeta domains. Its real application stops at the missing
 positivity certificate for the Weil arithmetic functional. SH14 calibrates
 exact rational LDL certificates but lacks validated intervals for the
 archimedean term. No RH-equivalent positivity premise is assumed.
+
+## M29c reverse forcing object
+
+M29c constructs `X = L_weil` from the typed three-term explicit formula and
+takes `P = L(f*f) >= 0`. The pole Gram is exactly rank-one PSD. A checked
+implication derives self-adjointness and spectral correspondence from
+arithmetic-only `P`, then RH. All six shortcut controls decline.
+
+The numeric attack at `a=1/128` certifies the `2x2` section and leaves the
+`4x4` inconclusive with a later-pivot enclosure of width `~5e10`. Domination
+of the prime block by `Pole+Arch` does not fire. This does not reach M29:
+`real_zeta_object` is the Weil functional, but `P` is unproved,
+`rh_proved=false`, and `m29_reached=false`. The residual is
+`PositiveFunctional(L_weil)`.
+
+## M29e/M29f frontier: the object is T / the positive kernel
+
+The explicit formula (Guinand-Weil, unconditional) gives `L(h) = sum_rho
+hhat(rho)` for even `h`. The two dual squares are distinct:
+
+- convolution square `h = f*f`: `L(f*f) = sum_rho fhat(rho)^2`, because the
+  transform of a convolution is the product of transforms;
+- pointwise square `h = f*f` (the code's `P`): `L(f*f) = sum_rho
+  (fhat * fhat)(rho)`, because the transform of a product is a convolution.
+
+Weil's criterion (a theorem, both directions) states `RH` iff `L` is
+nonnegative on the separating algebra, equivalently `L(f*f) >= 0` for all
+even `f` (`P`), equivalently `L(f*f) >= 0` for all even `f`. So `P <=> RH` is
+established; only `P` itself (equivalently `RH`) is open.
+
+The missing object `T` therefore has two exact, unconditionally definable
+pictures:
+
+- GNS (time): `Tf = [f]`, `L(f*f) = ||Tf||^2`; a Hilbert norm iff `P`;
+- zero-evaluation (frequency): `Tf = (fhat(rho))_rho` into the quadratic
+  space `Q(v) = sum_rho v_rho^2`, with `L(f*f) = Q(Tf)`; `Q` positive
+  definite iff all zeros lie on the line iff `RH`.
+
+The positive kernel is the GNS measure (time) = the zero measure (frequency);
+it is a positive measure iff `RH`. M29f proves no finite Gram section, in any
+basis at any dimension, certifies `P`: an exact rational moment sequence has
+PSD Hankel sections through `N` and an indefinite `H_{N+1}` for every `N`.
+
+The program has therefore reduced M29 to `P` exactly and correctly. The
+object `T`/`mu` is identified, but constructing it is `RH` itself; it is a
+theorem to prove, not an object a finite search can produce. `m29_reached`
+stays false until such a theorem exists.

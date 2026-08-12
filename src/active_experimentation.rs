@@ -74,10 +74,7 @@ pub fn action_value(candidates: &[Hypothesis], x: u8) -> i64 {
 
 /// Choose the best intervention among those not yet performed (greedy).
 /// Returns None when no remaining intervention separates any candidate pair.
-pub fn select_action(
-    candidates: &[Hypothesis],
-    done: &BTreeSet<u8>,
-) -> Option<(u8, u64, i64)> {
+pub fn select_action(candidates: &[Hypothesis], done: &BTreeSet<u8>) -> Option<(u8, u64, i64)> {
     let mut best: Option<(u8, u64, i64)> = None;
     for x in 1..4u8 {
         if done.contains(&x) {
@@ -126,7 +123,7 @@ pub struct ExperimentReport {
     pub active_true_recovered: bool,
     pub passive_final_candidates: usize,
     pub passive_distinguished: bool, // passive data alone resolved the world
-    pub crucial_action: u8, // intervention that first separates (0 = none needed)
+    pub crucial_action: u8,          // intervention that first separates (0 = none needed)
     pub steps: Vec<ActionStep>,
 }
 
@@ -181,10 +178,7 @@ pub fn run_active(world: &Hypothesis, initial: &BTreeMap<u8, bool>) -> Experimen
     let total_action_cost = steps.len() as u64 * ACTION_COST;
 
     // Passive baseline: only the default input is observed; no interventions.
-    let passive_candidates = pool
-        .iter()
-        .filter(|h| consistent(h, &initial))
-        .count();
+    let passive_candidates = pool.iter().filter(|h| consistent(h, &initial)).count();
     let passive_distinguished = passive_candidates == 1;
 
     ExperimentReport {
@@ -207,7 +201,12 @@ pub fn machine_record(r: &ExperimentReport) -> String {
     let steps: String = r
         .steps
         .iter()
-        .map(|s| format!("x{}:g{}:c{}-{}", s.action, s.gain, s.candidates_before, s.candidates_after))
+        .map(|s| {
+            format!(
+                "x{}:g{}:c{}-{}",
+                s.action, s.gain, s.candidates_before, s.candidates_after
+            )
+        })
         .collect::<Vec<_>>()
         .join(",");
     format!(
@@ -244,11 +243,23 @@ mod tests {
         let initial = init(false);
         let r = run_active(&world, &initial);
         assert!(r.initial_candidates >= 8, "passive data leaves ambiguity");
-        assert!(r.passive_final_candidates > 1, "passive data should NOT resolve");
-        assert!(!r.passive_distinguished, "passive learner must fail to distinguish");
+        assert!(
+            r.passive_final_candidates > 1,
+            "passive data should NOT resolve"
+        );
+        assert!(
+            !r.passive_distinguished,
+            "passive learner must fail to distinguish"
+        );
         assert!(r.actions_taken >= 1, "active learner must intervene");
-        assert!(r.active_true_recovered, "active learner must recover world truth");
-        assert!(r.crucial_action != 0, "an intervention must be the crucial experiment");
+        assert!(
+            r.active_true_recovered,
+            "active learner must recover world truth"
+        );
+        assert!(
+            r.crucial_action != 0,
+            "an intervention must be the crucial experiment"
+        );
     }
 
     #[test]
@@ -269,7 +280,10 @@ mod tests {
         // action_value for each of 1,2,3 is purely from candidate disagreement.
         for x in 1..4u8 {
             let v = action_value(&candidates, x);
-            assert_eq!(v, 7, "all functions of 2 bits: probing any input splits 8/8, gain 8 - cost 1 = 7");
+            assert_eq!(
+                v, 7,
+                "all functions of 2 bits: probing any input splits 8/8, gain 8 - cost 1 = 7"
+            );
         }
     }
 

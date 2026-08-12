@@ -78,10 +78,10 @@ pub fn generate_language() -> Vec<Hypothesis> {
 /// A single probe decision made by the agent.
 #[derive(Clone, Debug)]
 pub struct ProbeStep {
-    pub probe: u8, // which input to measure
-    pub gain: u64, // expected hypothesis reduction (candidate pairs separated)
-    pub cost: u64, // execution cost
-    pub value: i64, // gain - cost
+    pub probe: u8,            // which input to measure
+    pub gain: u64,            // expected hypothesis reduction (candidate pairs separated)
+    pub cost: u64,            // execution cost
+    pub value: i64,           // gain - cost
     pub measured_label: bool, // world's true answer (after the probe runs)
     pub candidates_before: usize,
     pub candidates_after: usize,
@@ -102,9 +102,7 @@ pub struct ProbeReport {
 
 /// Is hypothesis `h` consistent with the measured (input -> label) map?
 fn consistent(h: &Hypothesis, measured: &BTreeMap<u8, bool>) -> bool {
-    measured
-        .iter()
-        .all(|(t, lab)| h.contains(t) == *lab)
+    measured.iter().all(|(t, lab)| h.contains(t) == *lab)
 }
 
 /// Predicted labels (true-set membership) of all candidates on token `t`.
@@ -153,9 +151,12 @@ pub fn select_probe(
         if !(has_true && has_false) {
             continue; // no separating power
         }
-        let gain = hypotheses.iter().filter(|h| h.contains(&t)).count().min(
-            hypotheses.len() - hypotheses.iter().filter(|h| h.contains(&t)).count(),
-        ) as u64;
+        let gain = hypotheses
+            .iter()
+            .filter(|h| h.contains(&t))
+            .count()
+            .min(hypotheses.len() - hypotheses.iter().filter(|h| h.contains(&t)).count())
+            as u64;
         let cand = (t, gain, v);
         best = Some(match best {
             None => cand,
@@ -176,9 +177,16 @@ pub fn select_probe(
 /// `truth`: the hidden world predicate (extension). `measured`: the evidence
 /// already gathered (input -> label). Candidate hypotheses = every language
 /// predicate consistent with `measured`.
-pub fn run(language: &[Hypothesis], truth: &Hypothesis, measured: &BTreeMap<u8, bool>) -> ProbeReport {
-    let mut candidates: Vec<Hypothesis> =
-        language.iter().filter(|h| consistent(h, measured)).cloned().collect();
+pub fn run(
+    language: &[Hypothesis],
+    truth: &Hypothesis,
+    measured: &BTreeMap<u8, bool>,
+) -> ProbeReport {
+    let mut candidates: Vec<Hypothesis> = language
+        .iter()
+        .filter(|h| consistent(h, measured))
+        .cloned()
+        .collect();
     let initial = candidates.len();
     let mut measured_tokens: BTreeSet<u8> = measured.keys().copied().collect();
     let mut measured_map = measured.clone();
@@ -245,7 +253,12 @@ pub fn machine_record(r: &ProbeReport) -> String {
     let steps: String = r
         .steps
         .iter()
-        .map(|s| format!("t{}:g{}:c{}-{}", s.probe, s.gain, s.candidates_before, s.candidates_after))
+        .map(|s| {
+            format!(
+                "t{}:g{}:c{}-{}",
+                s.probe, s.gain, s.candidates_before, s.candidates_after
+            )
+        })
         .collect::<Vec<_>>()
         .join(",");
     format!(
@@ -298,11 +311,17 @@ mod tests {
         let m = measured(&[(0, true), (2, true)]);
         let lang = generate_language();
         let candidates: Vec<&Hypothesis> = lang.iter().filter(|h| consistent(h, &m)).collect();
-        assert!(candidates.len() >= 2, "expected multiple consistent candidates");
+        assert!(
+            candidates.len() >= 2,
+            "expected multiple consistent candidates"
+        );
 
         let report = run(&lang, &truth, &m);
         assert!(report.probes_run >= 1, "must invent at least one probe");
-        assert!(report.final_candidates == 1, "should narrow to a single hypothesis");
+        assert!(
+            report.final_candidates == 1,
+            "should narrow to a single hypothesis"
+        );
         assert!(report.true_recovered, "should recover the world truth");
         assert!(!report.observationally_equivalent_stuck);
         // probe cost is bounded by the number of probes actually run

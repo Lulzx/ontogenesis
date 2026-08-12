@@ -399,6 +399,41 @@ removing the debt entry.
   independently checked dimension-uniform identity, nonnegative bound, and
   compatible density/continuity bridge on an infinite separating test class.
 
+## SH19 recorded status
+
+- 2880 generic programs produced 18 identity restatements of the SH18
+  three-term integrand and zero positivity witnesses. No representation was
+  retained.
+- D40 remains supplied and active. Wrapping the known integrand in the frozen
+  category syntax does not retire the uniform-positivity obligation.
+
+## M29c reverse-forcing entry (pre-registered)
+
+- Targeted residual: `PositiveFunctional(L_weil)`.
+- New debt D42: Weil's criterion, the GNS-to-self-adjointness implication, and
+  the explicit-formula-to-correspondence implication are supplied as checked
+  lemmas. The pole rank-one identity is constructed from the exact geometric
+  sequence `(-1/4)^k`; it is not a positivity witness for `L`.
+- Finite domination at one scale cannot retire D42 or D40. `m29_reached`
+  requires `P` on the separating algebra.
+
+## M29c recorded status
+
+- Pole rank-one identity and the `P => RH` implication check. Finite
+  domination does not fire. The `4x4` pivot width is `~5e10`.
+- D42 remains supplied. Residual is still `PositiveFunctional(L_weil)`.
+
+## M29e Hermite-gram entry (pre-registered)
+
+- The even Hermite products span the same algebra as the monomial Hankel.
+  Changing basis cannot invent positivity; it can only tighten enclosures.
+- Finite Hermite sections remain finite evidence. D40 and D42 stay active.
+
+## M29e recorded status
+
+- Hermite `2x2` certified; `4x4` inconclusive with width `~3e3`.
+- P is unproved. D40 and D42 remain supplied.
+
 ## SH18b tail-proof replay entry (pre-registered)
 
 - D37 remains active because SH18 used an undocumented archimedean tail
@@ -406,3 +441,29 @@ removing the debt entry.
   comparisons leading to the looser `|t|+32` envelope.
 - Batching is accounting infrastructure only. It does not strengthen the
   finite positivity claim or reduce any analytic proof obligation.
+
+## SH19a scale-generator entry (pre-registered)
+
+- New debt D41: positive-rational syntax, the bounded scale interval, Gaussian
+  Fourier differentiation semantics, and certified-margin objective are
+  supplied. No scale value, xi ordinate, or finite-matrix answer is supplied.
+- A retained scale can at most reconstruct a transferable basis-family
+  generator. D40 remains active until a dimension-uniform positive
+  representation and compatible topological extension are certified.
+
+## SH19a recorded status
+
+- 102 generic programs produced 9 exact scales. No scale was retained: the
+  only positive zeroth-and-`2x2` candidate (`a=1/128`) has an inconclusive
+  `4x4` LDL.
+- D41 remains supplied. D40 is unchanged. Finite localization is not a
+  uniform representation.
+
+## SH18c monotone-tail replay entry (pre-registered)
+
+- SH17's endpoint multiplier lacked a derivation. SH18c supplies the exact
+  log-derivative monotonicity check and direct sum-integral comparison.
+- The repair narrows finite intervals but cannot establish infinite Weil
+  positivity or retire D40.
+- The tail theorem is the live evaluator used by SH19a. A dedicated scale-two
+  `4x4` replay was not executed.

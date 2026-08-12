@@ -302,9 +302,76 @@ claim; SH18b corrects it and derives the archimedean box tail. Its seven
 scale-two product entries nest, but interval LDL is inconclusive at pivot zero
 (`[-1.9898e-2,2.1439e-2]`). The dominant widths are archimedean and prime-tail,
 not MPFR rounding. No finite or infinite Weil positivity or exact xi spectrum
-is claimed; real M29 remains open. The next frozen search targets a
-dimension-uniform positive representation with compatible density and
-continuity, not additional finite minors as an endpoint.
+is claimed; real M29 remains open.
+
+SH19a enumerated 102 arithmetic scale programs and 9 exact rationals in
+`[1/128,2]`. Every coarse/fine zeroth enclosure nested. Scale `1/128` has a
+strictly positive zeroth entry and a certified positive `2x2` LDL, but its
+`4x4` LDL is inconclusive, so no scale generator is retained. All six
+leakage/overfit controls decline. Scale selection does not create the missing
+uniform positivity representation. The stage-two `4x4` gate is unchanged.
+SH19 then searched 2880 dimension-parametric programs in the frozen 5-tuple
+grammar. Eighteen restate the SH18 three-term integrand and pass identity;
+none has a sum-of-squares or positive-kernel witness, so no representation is
+retained. All six representation controls decline and the stage-two `4x4` gate
+is unchanged.
+
+M29c reverses the M30 frontier onto one residual. The object is the typed
+Weil functional; `P` is positivity on squares. The pole Hankel is an exact
+rank-one PSD, and a checked implication sends arithmetic-only `P` to RH.
+At `a=1/128` the `2x2` section is certified positive (last pivot
+`[2.84e3, 1.05e4]`); the `4x4` is inconclusive with pivot width `~5e10`.
+Frobenius domination fails at both dimensions. `m29_reached=false`. The
+residual is `PositiveFunctional(L_weil)`. High even powers of a wide Gaussian
+are the wrong coordinates for a uniform certificate.
+
+M29d proves the exact pole-Fourier and prime-monotonicity lemmas and certifies
+`L(e^{-t^2/128}) ≥ 0.4916` with `M2,M4>0` at that scale, hence
+`L(e^{-a t^2})>0` on a left neighbourhood of `a=1/128`. It does not prove
+the full interval `(0,1/128]` and does not prove `P`.
+
+M29e evaluates the same algebra in the Hermite-product basis. The `2x2` is
+tight and positive (`pivot [4.32, 8.85]`). The `4x4` is still inconclusive
+(`[-2.37e3, 1.06e3]`), about `10^7` narrower than the monomial section and
+still containing zero. `m29_reached=false`. The residual is still `P`.
+
+M29f names the missing object instead of running dimension 6. The uniform
+certificate is `L(f*f)=||Tf||^2`; `T` is the GNS operator and the positive
+kernel `mu` is the GNS measure, both equivalent to `P` and to RH. It proves
+exactly that finite Gram sections cannot certify `P`: for every `N` the
+moment sequence `m_k=1` (`k<=2N+1`), `m_{2N+2}=0` has PSD Hankel sections
+through `N` and an indefinite `H_{N+1}`. `positive_kernel_constructed=false`,
+`dimension6_skipped=true`, `m29_reached=false`; residual
+`PositiveFunctional(L_weil)`, missing object `T: GNS operator / positive
+kernel mu`.
+
+M29g audits the `P ==> RH` reduction and finds it exact but resting on two
+supplied theorems. The chain `P => GNS`, `GNS + ES => self-adjoint`,
+`self-adjoint + SC => RH` closes, and all six controls decline. `P` alone
+forces neither self-adjointness nor correspondence
+(`p_alone_forces_self_adjoint=false`, `p_alone_forces_correspondence=false`).
+The hidden premises are `EssentialSelfAdjointness` and
+`SpectralCorrespondence`, matching M30a's open assumptions. The reduction is
+valid; the only genuine residual is `P` (equivalently RH).
+
+M29h records the explicit kernel decomposition — the certificate template for
+`P`. The pole term is positive on pointwise squares (`2 f(i/2)^2 >= 0`), the
+prime term is negative on convolution squares
+(`-(1/pi) sum Lambda(n)/sqrt(n) |fhat(log n)|^2 <= 0`), and the archimedean
+term is signed; the two clean signs live in Fourier-dual pictures.
+`certificate_template_identified=true`, `positive_kernel_constructed=false`,
+`m29_reached=false`. Discharging `P` is exactly proving the positive part
+absorbs the signed archimedean and the negative prime part.
+
+M29i invents the Weil Jacobi object: the LDL pivot sequence `d_n` of the
+Weil Gram, equivalently the Jacobi coefficients `beta_n = d_{n+1}/d_n` of the
+orthonormal-polynomial recurrence — the Hilbert-Polya operator in canonical
+form. It puts the residual `P` (`d_n >= 0` for all `n`) and the hidden
+premise ES (Carleman: `sum 1/sqrt(beta_n) = inf` gives determinacy) into one
+recurrence. Exact calibrations pass (point mass degenerate `beta_0=0`,
+uniform on `[0,1]` positive with Carleman divergence, M29f counterexample has
+a negative pivot). `weil_pivots_computed=false`, `m29_reached=false`: the
+object is identified, not discharged.
 
 Directions G and Mathematical Ontogenesis M1–M28 plus M29b surrogate are
 implemented, and real M30 has been attempted. M10 added

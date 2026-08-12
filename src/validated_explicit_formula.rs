@@ -4,6 +4,75 @@ use rug::float::{Constant, Round};
 use rug::ops::{AddAssignRound, DivAssignRound, MulAssignRound, SubAssignRound};
 use rug::Float;
 
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ExactScale {
+    numerator: u32,
+    denominator: u32,
+}
+
+impl ExactScale {
+    pub fn new(numerator: u32, denominator: u32) -> Option<Self> {
+        if numerator == 0 || denominator == 0 {
+            return None;
+        }
+        let divisor = gcd_u32(numerator, denominator);
+        Some(Self {
+            numerator: numerator / divisor,
+            denominator: denominator / divisor,
+        })
+    }
+
+    pub const fn integer(value: u32) -> Self {
+        Self {
+            numerator: value,
+            denominator: 1,
+        }
+    }
+
+    pub fn numerator(self) -> u32 {
+        self.numerator
+    }
+
+    pub fn denominator(self) -> u32 {
+        self.denominator
+    }
+
+    pub fn multiply(self, other: Self) -> Option<Self> {
+        Self::new(
+            self.numerator.checked_mul(other.numerator)?,
+            self.denominator.checked_mul(other.denominator)?,
+        )
+    }
+
+    pub fn divide(self, other: Self) -> Option<Self> {
+        Self::new(
+            self.numerator.checked_mul(other.denominator)?,
+            self.denominator.checked_mul(other.numerator)?,
+        )
+    }
+
+    pub(crate) fn interval(self, precision: u32, provenance: Provenance) -> Interval {
+        let mut lower = Float::with_val(precision, self.numerator);
+        lower.div_assign_round(self.denominator, Round::Down);
+        let mut upper = Float::with_val(precision, self.numerator);
+        upper.div_assign_round(self.denominator, Round::Up);
+        Interval {
+            lower,
+            upper,
+            precision,
+            provenance,
+            tail_certified: true,
+        }
+    }
+}
+
+fn gcd_u32(mut left: u32, mut right: u32) -> u32 {
+    while right != 0 {
+        (left, right) = (right, left % right);
+    }
+    left.max(1)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Provenance {
     Generic,
@@ -253,6 +322,18 @@ impl Interval {
 
     pub(crate) fn strictly_negative(&self) -> bool {
         self.upper < 0
+    }
+
+    pub(crate) fn abs_upper(&self) -> Float {
+        let mut left = self.lower.clone();
+        left.abs_mut();
+        let mut right = self.upper.clone();
+        right.abs_mut();
+        if left > right {
+            left
+        } else {
+            right
+        }
     }
 
     pub(crate) fn contains_interval(&self, other: &Self) -> bool {

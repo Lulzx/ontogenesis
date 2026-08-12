@@ -181,7 +181,14 @@ struct Search<'a> {
 }
 
 impl<'a> Search<'a> {
-    fn make_val(&self, c: u32, j: usize, t: &Rc<Term>, mk: &Make, fuel: &mut Fuel) -> Result<Rc<Val>, Abort> {
+    fn make_val(
+        &self,
+        c: u32,
+        j: usize,
+        t: &Rc<Term>,
+        mk: &Make,
+        fuel: &mut Fuel,
+    ) -> Result<Rc<Val>, Abort> {
         let env = &self.levels[c as usize].envs[j];
         match mk {
             Make::Eval => eval(env, t, fuel),
@@ -362,7 +369,9 @@ fn solve_internal(task: &Task, opts: &Options, use_canon: bool) -> Outcome {
             }
         } else {
             let mut h = DefaultHasher::new();
-            quote_hash(&v, 0, &mut fuel, &mut h).ok().map(|_| h.finish())
+            quote_hash(&v, 0, &mut fuel, &mut h)
+                .ok()
+                .map(|_| h.finish())
         };
         match key {
             Some(k) => target_hash.push(k),
@@ -627,11 +636,19 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
         let mut fuel = Fuel(i64::MAX / 2);
         let v = match eval(&empty, nf, &mut fuel) {
             Ok(v) => v,
-            Err(_) => return Outcome { solution: None, stats: Stats::default() },
+            Err(_) => {
+                return Outcome {
+                    solution: None,
+                    stats: Stats::default(),
+                }
+            }
         };
         let mut h = DefaultHasher::new();
         if quote_hash(&v, 0, &mut fuel, &mut h).is_err() {
-            return Outcome { solution: None, stats: Stats::default() };
+            return Outcome {
+                solution: None,
+                stats: Stats::default(),
+            };
         }
         target_hash.push(h.finish());
     }
@@ -644,11 +661,19 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
             let mut fuel = Fuel(opts.fuel);
             let v = match eval(&empty, &task.tests[j].args[i], &mut fuel) {
                 Ok(v) => v,
-                Err(_) => return Outcome { solution: None, stats: Stats::default() },
+                Err(_) => {
+                    return Outcome {
+                        solution: None,
+                        stats: Stats::default(),
+                    }
+                }
             };
             vals.push(v);
         }
-        pool.push(PoolEntry { term: var(i as u32), vals });
+        pool.push(PoolEntry {
+            term: var(i as u32),
+            vals,
+        });
     }
 
     let mut seen: HashSet<Vec<u64>> = HashSet::new();
@@ -663,7 +688,10 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
             }
             return Outcome {
                 solution: Some(sol),
-                stats: Stats { built: 1, ..Default::default() },
+                stats: Stats {
+                    built: 1,
+                    ..Default::default()
+                },
             };
         }
         seen.insert(hashes);
@@ -688,7 +716,10 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
                 if built % 512 == 0 && start.elapsed().as_secs_f64() > opts.time_budget_secs {
                     return Outcome {
                         solution: None,
-                        stats: Stats { built, ..Default::default() },
+                        stats: Stats {
+                            built,
+                            ..Default::default()
+                        },
                     };
                 }
                 // Compute the concept applied to this tuple, per test.
@@ -749,7 +780,10 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
                         let mut st = Stats::default();
                         st.built = built;
                         st.elapsed_secs = start.elapsed().as_secs_f64();
-                        return Outcome { solution: Some(sol), stats: st };
+                        return Outcome {
+                            solution: Some(sol),
+                            stats: st,
+                        };
                     } else if seen.insert(hashes.clone()) && additions.len() < pool_cap {
                         additions.push(PoolEntry { term, vals: vs });
                     }
@@ -780,7 +814,10 @@ pub fn concept_solve(task: &Task, concepts: &[Concept], opts: &Options) -> Outco
 
     Outcome {
         solution: None,
-        stats: Stats { built, ..Default::default() },
+        stats: Stats {
+            built,
+            ..Default::default()
+        },
     }
 }
 
@@ -906,7 +943,13 @@ fn concept_solve_internal(
         match stripped {
             Some(nf) => target.push(nf),
             None => {
-                return (Outcome { solution: None, stats: Stats::default() }, m);
+                return (
+                    Outcome {
+                        solution: None,
+                        stats: Stats::default(),
+                    },
+                    m,
+                );
             }
         }
     }
@@ -918,11 +961,27 @@ fn concept_solve_internal(
         let mut fuel = Fuel(opts.fuel);
         let v = match eval(&empty, nf, &mut fuel) {
             Ok(v) => v,
-            Err(_) => return (Outcome { solution: None, stats: Stats::default() }, m),
+            Err(_) => {
+                return (
+                    Outcome {
+                        solution: None,
+                        stats: Stats::default(),
+                    },
+                    m,
+                )
+            }
         };
         match value_key(&v, use_canon, i64::MAX / 2, opts) {
             Some(k) => target_keys.push(k),
-            None => return (Outcome { solution: None, stats: Stats::default() }, m),
+            None => {
+                return (
+                    Outcome {
+                        solution: None,
+                        stats: Stats::default(),
+                    },
+                    m,
+                )
+            }
         }
     }
 
@@ -934,7 +993,15 @@ fn concept_solve_internal(
             let mut fuel = Fuel(opts.fuel);
             let v = match eval(&empty, &task.tests[j].args[i], &mut fuel) {
                 Ok(v) => v,
-                Err(_) => return (Outcome { solution: None, stats: Stats::default() }, m),
+                Err(_) => {
+                    return (
+                        Outcome {
+                            solution: None,
+                            stats: Stats::default(),
+                        },
+                        m,
+                    )
+                }
             };
             vals.push(v);
         }
@@ -991,7 +1058,10 @@ fn concept_solve_internal(
             return (
                 Outcome {
                     solution: Some(sol),
-                    stats: Stats { built: 1, ..Default::default() },
+                    stats: Stats {
+                        built: 1,
+                        ..Default::default()
+                    },
                 },
                 m,
             );
@@ -1014,7 +1084,13 @@ fn concept_solve_internal(
                 built += 1;
                 if built % 512 == 0 && start.elapsed().as_secs_f64() > opts.time_budget_secs {
                     return (
-                        Outcome { solution: None, stats: Stats { built, ..Default::default() } },
+                        Outcome {
+                            solution: None,
+                            stats: Stats {
+                                built,
+                                ..Default::default()
+                            },
+                        },
                         m,
                     );
                 }
@@ -1084,7 +1160,10 @@ fn concept_solve_internal(
                         return (
                             Outcome {
                                 solution: Some(sol),
-                                stats: Stats { built, ..Default::default() },
+                                stats: Stats {
+                                    built,
+                                    ..Default::default()
+                                },
                             },
                             m,
                         );
@@ -1127,7 +1206,16 @@ fn concept_solve_internal(
     }
 
     m.fill(pool.len());
-    (Outcome { solution: None, stats: Stats { built, ..Default::default() } }, m)
+    (
+        Outcome {
+            solution: None,
+            stats: Stats {
+                built,
+                ..Default::default()
+            },
+        },
+        m,
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1416,10 +1504,7 @@ pub fn concept_solve_diag(
                     if ok_hash {
                         // parents reference pool ids; if any parent was itself
                         // freshly added this round, keep the logical id mapping.
-                        let parent_ids = tuple
-                            .iter()
-                            .map(|&ti| pool[ti].id)
-                            .collect::<Vec<_>>();
+                        let parent_ids = tuple.iter().map(|&ti| pool[ti].id).collect::<Vec<_>>();
                         if hashes == target_hash {
                             let mut sol = term.clone();
                             for _ in 0..k {

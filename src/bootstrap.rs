@@ -138,7 +138,13 @@ fn collect_subterms_term(t: &Rc<Term>, d: u32, f: &mut impl FnMut(&Rc<Term>, u32
 
 /// Collect the free-variable *context indices* of `t` (indices < root_env) in
 /// first-occurrence order. `d` is the binder depth within `t`.
-fn collect_free(t: &Rc<Term>, d: u32, root_env: u32, order: &mut Vec<u32>, seen: &mut HashSet<u32>) {
+fn collect_free(
+    t: &Rc<Term>,
+    d: u32,
+    root_env: u32,
+    order: &mut Vec<u32>,
+    seen: &mut HashSet<u32>,
+) {
     match t.as_ref() {
         Term::Var(i) if *i >= d && *i - d < root_env => {
             let c = *i - d;
@@ -439,7 +445,11 @@ pub fn mine(
         for (gain, key, pat) in &candidates {
             eprintln!(
                 "  boot-debug: arity {} size {} count {} gain {} key {:?} :: {}",
-                pat.k, pat.s, pat.count, gain, key,
+                pat.k,
+                pat.s,
+                pat.count,
+                gain,
+                key,
                 term_show(&pat.comb)
             );
         }
@@ -644,11 +654,11 @@ pub fn build_grouping_pool(train_args: &[Rc<Term>], seed: u64) -> ProbeSet {
 pub fn build_holdout_pool(seed: u64) -> ProbeSet {
     let base = generator_pool();
     let extra = vec![
-        church_num_str(7),       // a larger numeral
-        church_list_str(&[]),    // empty list
+        church_num_str(7),            // a larger numeral
+        church_list_str(&[]),         // empty list
         "λc.λn.c(λa.λb.a)(n)".into(), // cons(0, nil)
-        "λa.λb.λs.s(a)(b)".into(), // a fresh pair
-        church_list_str(&[5, 1, 4]), // an irregular list
+        "λa.λb.λs.s(a)(b)".into(),    // a fresh pair
+        church_list_str(&[5, 1, 4]),  // an irregular list
     ];
     build_pool(base, &extra, seed)
 }
@@ -674,8 +684,12 @@ mod tests {
         // λa.λb.a(b): the first free var (the head `b`) becomes the outer
         // parameter, so the combinator is "apply p to q".
         let sol = p("λa.λb.b(a)");
-        let Term::Lam(inner1) = sol.as_ref() else { panic!() };
-        let Term::Lam(inner2) = inner1.as_ref() else { panic!() };
+        let Term::Lam(inner1) = sol.as_ref() else {
+            panic!()
+        };
+        let Term::Lam(inner2) = inner1.as_ref() else {
+            panic!()
+        };
         let (comb, k) = abstract_term(inner2, 2);
         assert_eq!(k, 2);
         assert_eq!(term_show(&comb), "λa.λb.a(b)");

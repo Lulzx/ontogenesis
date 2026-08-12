@@ -23,9 +23,9 @@ pub const NVARS: usize = 3;
 /// Deterministic function of a node.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fn {
-    Root,            // exogenous; takes both natural values
-    Copy,            // equals its single parent
-    Not,             // not of its single parent
+    Root, // exogenous; takes both natural values
+    Copy, // equals its single parent
+    Not,  // not of its single parent
     And,
     Or,
     Xor,
@@ -45,7 +45,9 @@ fn topo_order(parents: &[Vec<u8>]) -> Option<Vec<u8>> {
         indeg[i] = parents[i].len() as u8;
     }
     let mut order = Vec::new();
-    let mut ready: Vec<u8> = (0..NVARS as u8).filter(|v| indeg[*v as usize] == 0).collect();
+    let mut ready: Vec<u8> = (0..NVARS as u8)
+        .filter(|v| indeg[*v as usize] == 0)
+        .collect();
     ready.sort_unstable();
     while let Some(v) = ready.pop() {
         order.push(v);
@@ -137,7 +139,11 @@ pub fn enumerate_models() -> Vec<CausalModel> {
 
 /// Evaluate the model given root/forced assignments; computes endogenous vars
 /// in topological order. `forced` maps var -> Some(value) for interventions.
-pub fn evaluate(m: &CausalModel, roots: &[bool; NVARS], forced: &[Option<bool>; NVARS]) -> [bool; NVARS] {
+pub fn evaluate(
+    m: &CausalModel,
+    roots: &[bool; NVARS],
+    forced: &[Option<bool>; NVARS],
+) -> [bool; NVARS] {
     let mut val = [false; NVARS];
     for &v in &m.order {
         let v = v as usize;
@@ -197,7 +203,6 @@ pub fn intervene(m: &CausalModel, x: u8, val: bool) -> BTreeSet<[bool; NVARS]> {
 fn consistent_passive(m: &CausalModel, passive: &BTreeSet<[bool; NVARS]>) -> bool {
     passive.iter().all(|p| observe(m).contains(p))
 }
-
 
 /// One intervention step.
 #[derive(Clone, Debug)]
@@ -341,8 +346,16 @@ mod tests {
         let c = chain_model();
         let f = fork_model();
         // Passive data identical: all variables equal.
-        assert_eq!(observe(&c), observe(&f), "must be observationally equivalent passively");
-        assert_eq!(observe(&c).len(), 2, "A root in {{0,1}} gives two passive joints");
+        assert_eq!(
+            observe(&c),
+            observe(&f),
+            "must be observationally equivalent passively"
+        );
+        assert_eq!(
+            observe(&c).len(),
+            2,
+            "A root in {{0,1}} gives two passive joints"
+        );
         // Intervention on A separates them: chain -> B,C track A; fork -> B,C free.
         assert_ne!(
             intervene(&c, 0, false),
@@ -357,9 +370,15 @@ mod tests {
         let passive = observe(&truth);
         let names = ["A", "B", "C"];
         let r = run_causal(&truth, &passive, &names);
-        assert!(r.passive_candidates > 1, "passive data alone should be ambiguous (Markov-equivalent models)");
+        assert!(
+            r.passive_candidates > 1,
+            "passive data alone should be ambiguous (Markov-equivalent models)"
+        );
         assert!(!r.passive_distinguished);
-        assert!(!r.interventions.is_empty(), "must intervene to identify structure");
+        assert!(
+            !r.interventions.is_empty(),
+            "must intervene to identify structure"
+        );
         assert_eq!(r.final_candidates, 1);
         assert!(r.true_recovered, "must recover the exact causal model");
     }
@@ -400,6 +419,9 @@ mod tests {
             }
             distinct_seen += 1;
         }
-        assert!(distinct_seen >= 2, "should have exercised more than one consistent model");
+        assert!(
+            distinct_seen >= 2,
+            "should have exercised more than one consistent model"
+        );
     }
 }

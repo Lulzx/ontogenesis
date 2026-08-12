@@ -127,9 +127,11 @@ pub fn classify_concepts(old: &Ontology, new: &Ontology) -> Vec<MigrationEntry> 
 
 fn classify_one(oc: &Concept, new: &Ontology) -> MigrationKind {
     // 1. Exact identity preserved.
-    if new.concepts.iter().any(|nc| {
-        nc.extension == oc.extension && nc.label == oc.label
-    }) {
+    if new
+        .concepts
+        .iter()
+        .any(|nc| nc.extension == oc.extension && nc.label == oc.label)
+    {
         return MigrationKind::Preserved;
     }
     // 2. Any old token no longer observed => concept dissolved.
@@ -213,8 +215,7 @@ pub fn migrate(
         .concepts
         .iter()
         .filter(|nc| {
-            !old
-                .concepts
+            !old.concepts
                 .iter()
                 .any(|oc| oc.extension == nc.extension && oc.label == nc.label)
         })
@@ -312,11 +313,7 @@ mod tests {
         }
     }
     fn kind_of(r: &MigrationReport, id: u64) -> MigrationKind {
-        r.entries
-            .iter()
-            .find(|e| e.old_id == id)
-            .unwrap()
-            .kind
+        r.entries.iter().find(|e| e.old_id == id).unwrap().kind
     }
 
     #[test]

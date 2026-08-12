@@ -1,9 +1,24 @@
 //! SH16: validated interval quadrature for Gaussian and archimedean terms.
 
-use crate::validated_explicit_formula::{Interval, IntervalError, Provenance};
+use crate::validated_explicit_formula::{ExactScale, Interval, IntervalError, Provenance};
+use crate::validated_prime_power::Rational;
 use rug::float::Round;
 use rug::ops::{DivAssignRound, MulAssignRound};
 use rug::Float;
+
+fn exact_ratio_i128(numerator: i128, denominator: i128, precision: u32) -> Interval {
+    let mut lower = Float::with_val(precision, numerator);
+    lower.div_assign_round(denominator, Round::Down);
+    let mut upper = Float::with_val(precision, numerator);
+    upper.div_assign_round(denominator, Round::Up);
+    Interval {
+        lower,
+        upper,
+        precision,
+        provenance: Provenance::Generic,
+        tail_certified: true,
+    }
+}
 
 fn exact_ratio(numerator: i32, denominator: i32, precision: u32) -> Interval {
     let mut lower = Float::with_val(precision, numerator);
@@ -56,17 +71,18 @@ fn square_nonnegative(x: &Interval) -> Result<Interval, IntervalError> {
     }
 }
 
-fn gaussian(x: &Interval, scale: i32) -> Result<Interval, IntervalError> {
-    if scale <= 0 {
-        return Err(IntervalError::Domain);
-    }
+fn gaussian(x: &Interval, scale: ExactScale) -> Result<Interval, IntervalError> {
     let square = square_nonnegative(x)?;
     let zero = Interval::exact_integer(0, x.precision, Provenance::Generic);
-    let scale = Interval::exact_integer(scale, x.precision, Provenance::Generic);
+    let scale = scale.interval(x.precision, Provenance::Generic);
     zero.sub(&square.mul(&scale)?)?.exp()
 }
 
-fn gaussian_moment_cell(x: &Interval, power: usize, scale: i32) -> Result<Interval, IntervalError> {
+fn gaussian_moment_cell(
+    x: &Interval,
+    power: usize,
+    scale: ExactScale,
+) -> Result<Interval, IntervalError> {
     debug_assert_eq!(power % 2, 0);
     let square = square_nonnegative(x)?;
     let mut polynomial = Interval::exact_integer(1, x.precision, Provenance::Generic);
@@ -140,7 +156,7 @@ fn archimedean_kernel(
 
 pub(crate) fn archimedean_entry(
     power: usize,
-    gaussian_scale: i32,
+    gaussian_scale: ExactScale,
     bound: i32,
     cells: usize,
     terms: usize,
@@ -152,20 +168,21 @@ pub(crate) fn archimedean_entry(
 
 pub(crate) fn archimedean_entries(
     powers: &[usize],
-    gaussian_scale: i32,
+    gaussian_scale: ExactScale,
     bound: i32,
     cells: usize,
     terms: usize,
     precision: u32,
 ) -> Result<Vec<Interval>, IntervalError> {
-    if powers.iter().any(|power| power % 2 != 0) {
+    if powers.iter().any(|power| power % 2 != 0) || cells % 2 != 0 {
         return Err(IntervalError::Domain);
     }
     let mut totals = vec![Interval::exact_integer(0, precision, Provenance::Generic); powers.len()];
-    let denominator = cells as i32;
-    for cell in 0..cells {
-        let left_numerator = -bound * denominator + 2 * bound * cell as i32;
-        let right_numerator = left_numerator + 2 * bound;
+    let half_cells = cells / 2;
+    let denominator = half_cells as i32;
+    for cell in 0..half_cells {
+        let left_numerator = bound * cell as i32;
+        let right_numerator = left_numerator + bound;
         let left = exact_ratio(left_numerator, denominator, precision);
         let right = exact_ratio(right_numerator, denominator, precision);
         let domain = interval_from_endpoints(&left.lower, &right.upper, precision);
@@ -190,10 +207,74 @@ pub(crate) fn archimedean_entries(
     if bound < 6 {
         return Err(IntervalError::Domain);
     }
+    let two = Interval::exact_integer(2, precision, Provenance::Generic);
     let thirty_two = Interval::exact_integer(32, precision, Provenance::Generic);
     for (total, power) in totals.iter_mut().zip(powers.iter().copied()) {
+        *total = total.mul(&two)?;
         let tail = gaussian_tail(bound, power + 1, gaussian_scale, precision)?
             .add(&gaussian_tail(bound, power, gaussian_scale, precision)?.mul(&thirty_two)?)?;
+        *total = total.add(&tail)?;
+    }
+    Ok(totals)
+}
+
+pub(crate) fn archimedean_even_polynomials(
+    polynomials: &[Vec<Rational>],
+    gaussian_scale: ExactScale,
+    bound: i32,
+    cells: usize,
+    terms: usize,
+    precision: u32,
+) -> Result<Vec<Interval>, IntervalError> {
+    if cells % 2 != 0 || bound < 6 {
+        return Err(IntervalError::Domain);
+    }
+    let mut totals =
+        vec![Interval::exact_integer(0, precision, Provenance::Generic); polynomials.len()];
+    let half_cells = cells / 2;
+    let denominator = half_cells as i32;
+    for cell in 0..half_cells {
+        let left_numerator = bound * cell as i32;
+        let right_numerator = left_numerator + bound;
+        let left = exact_ratio(left_numerator, denominator, precision);
+        let right = exact_ratio(right_numerator, denominator, precision);
+        let domain = interval_from_endpoints(&left.lower, &right.upper, precision);
+        let width = right.sub(&left)?;
+        let kernel = archimedean_kernel(&domain, terms, true)?;
+        let gaussian = gaussian(&domain, gaussian_scale)?;
+        let square = square_nonnegative(&domain)?;
+        for (total, coeffs) in totals.iter_mut().zip(polynomials) {
+            if coeffs.is_empty() {
+                continue;
+            }
+            let last = *coeffs.last().unwrap();
+            let mut value = exact_ratio_i128(last.numerator, last.denominator, precision);
+            for coefficient in coeffs.iter().rev().skip(1) {
+                value = value.mul(&square)?.add(&exact_ratio_i128(
+                    coefficient.numerator,
+                    coefficient.denominator,
+                    precision,
+                ))?;
+            }
+            *total = total.add(&value.mul(&gaussian)?.mul(&kernel)?.mul(&width)?)?;
+        }
+    }
+    let two = Interval::exact_integer(2, precision, Provenance::Generic);
+    let thirty_two = Interval::exact_integer(32, precision, Provenance::Generic);
+    for (total, coeffs) in totals.iter_mut().zip(polynomials) {
+        *total = total.mul(&two)?;
+        let mut tail = Interval::exact_integer(0, precision, Provenance::Generic);
+        for (power_index, coefficient) in coeffs.iter().copied().enumerate() {
+            if coefficient == Rational::new(0, 1) {
+                continue;
+            }
+            let abs = coefficient.abs();
+            let weight = exact_ratio_i128(abs.numerator, abs.denominator, precision);
+            let power = power_index * 2;
+            let term = gaussian_tail(bound, power + 1, gaussian_scale, precision)?
+                .add(&gaussian_tail(bound, power, gaussian_scale, precision)?.mul(&thirty_two)?)?;
+            tail = tail.add(&weight.mul(&term)?)?;
+        }
         *total = total.add(&tail)?;
     }
     Ok(totals)
@@ -225,22 +306,25 @@ where
 fn gaussian_tail(
     bound: i32,
     power: usize,
-    scale: i32,
+    scale: ExactScale,
     precision: u32,
 ) -> Result<Interval, IntervalError> {
-    if bound <= 0 || scale <= 0 {
+    if bound <= 0 {
         return Err(IntervalError::Domain);
     }
     // For 2*a*B^2 >= p+1, integration by parts gives
     // 2*int_B^infinity t^p exp(-a*t^2) dt
     // <= (p+2)*B^(p-1)*exp(-a*B^2)/a.
-    if 2 * scale as usize * bound as usize * (bound as usize) < power + 1 {
+    if 2_u64 * u64::from(scale.numerator()) * bound as u64 * (bound as u64)
+        < (power as u64 + 1) * u64::from(scale.denominator())
+    {
         return Err(IntervalError::Domain);
     }
     let b = Float::with_val(precision, bound);
     let mut exponent = b.clone();
     exponent.square_mut();
-    exponent.mul_assign_round(scale, Round::Up);
+    exponent.mul_assign_round(scale.numerator(), Round::Down);
+    exponent.div_assign_round(scale.denominator(), Round::Down);
     exponent = -exponent;
     exponent.exp_round(Round::Up);
     let mut factor = Float::with_val(precision, 1);
@@ -250,7 +334,8 @@ fn gaussian_tail(
     factor.mul_assign_round(&exponent, Round::Up);
     let mut safety = Float::with_val(precision, power as u32 + 2);
     safety.mul_assign_round(&factor, Round::Up);
-    safety.div_assign_round(scale, Round::Up);
+    safety.mul_assign_round(scale.denominator(), Round::Up);
+    safety.div_assign_round(scale.numerator(), Round::Up);
     Ok(Interval {
         lower: -safety.clone(),
         upper: safety,
@@ -262,7 +347,7 @@ fn gaussian_tail(
 
 fn whole_gaussian_moment(
     power: usize,
-    scale: i32,
+    scale: ExactScale,
     bound: i32,
     cells: usize,
     precision: u32,
@@ -295,10 +380,12 @@ pub struct Sh16Experiment {
 }
 
 pub fn sh16_experiment() -> Sh16Experiment {
-    let base_zero = whole_gaussian_moment(0, 1, 6, 512, 80).expect("base gaussian");
-    let fine_zero = whole_gaussian_moment(0, 1, 7, 2048, 160).expect("fine gaussian");
-    let base_two = whole_gaussian_moment(2, 1, 6, 512, 80).expect("base gaussian moment");
-    let fine_two = whole_gaussian_moment(2, 1, 7, 2048, 160).expect("fine gaussian moment");
+    let unit_scale = ExactScale::integer(1);
+    let base_zero = whole_gaussian_moment(0, unit_scale, 6, 512, 80).expect("base gaussian");
+    let fine_zero = whole_gaussian_moment(0, unit_scale, 7, 2048, 160).expect("fine gaussian");
+    let base_two = whole_gaussian_moment(2, unit_scale, 6, 512, 80).expect("base gaussian moment");
+    let fine_two =
+        whole_gaussian_moment(2, unit_scale, 7, 2048, 160).expect("fine gaussian moment");
     let pi = {
         let mut lower = Float::with_val(160, rug::float::Constant::Pi);
         lower.sqrt_round(Round::Down);
@@ -321,12 +408,12 @@ pub fn sh16_experiment() -> Sh16Experiment {
         fine_zero.width() < base_zero.width() && fine_two.width() < base_two.width();
     let base_archimedean = [0, 2, 4, 6]
         .into_iter()
-        .map(|power| archimedean_entry(power, 1, 6, 256, 64, 80))
+        .map(|power| archimedean_entry(power, unit_scale, 6, 256, 64, 80))
         .collect::<Result<Vec<_>, _>>()
         .expect("base archimedean entries");
     let fine_archimedean = [0, 2, 4, 6]
         .into_iter()
-        .map(|power| archimedean_entry(power, 1, 7, 1024, 256, 160))
+        .map(|power| archimedean_entry(power, unit_scale, 7, 1024, 256, 160))
         .collect::<Result<Vec<_>, _>>()
         .expect("fine archimedean entries");
     let archimedean_shrinks = base_archimedean
@@ -409,8 +496,9 @@ mod tests {
 
     #[test]
     fn product_scale_gaussian_moments_are_certified() {
-        let zero = whole_gaussian_moment(0, 2, 7, 2048, 160).expect("scaled gaussian");
-        let two = whole_gaussian_moment(2, 2, 7, 2048, 160).expect("scaled gaussian moment");
+        let scale = ExactScale::integer(2);
+        let zero = whole_gaussian_moment(0, scale, 7, 2048, 160).expect("scaled gaussian");
+        let two = whole_gaussian_moment(2, scale, 7, 2048, 160).expect("scaled gaussian moment");
         let sqrt_pi_over_two = {
             let quotient = Interval::pi(160)
                 .div(&Interval::exact_integer(2, 160, Provenance::Generic))
@@ -438,11 +526,31 @@ mod tests {
     #[test]
     fn batched_archimedean_entries_equal_scalar_wrappers() {
         let powers = [0, 2, 4, 6];
-        let batch = archimedean_entries(&powers, 2, 6, 64, 32, 80).expect("batch");
+        let scale = ExactScale::integer(2);
+        let batch = archimedean_entries(&powers, scale, 6, 64, 32, 80).expect("batch");
         for (power, batched) in powers.into_iter().zip(batch) {
-            let scalar = archimedean_entry(power, 2, 6, 64, 32, 80).expect("scalar");
+            let scalar = archimedean_entry(power, scale, 6, 64, 32, 80).expect("scalar");
             assert!(batched.contains_interval(&scalar));
             assert!(scalar.contains_interval(&batched));
         }
+    }
+
+    #[test]
+    fn even_half_box_contains_full_box_quadrature() -> Result<(), IntervalError> {
+        let scale = ExactScale::integer(2);
+        let half_box = archimedean_entries(&[0], scale, 6, 64, 32, 80)
+            .expect("even half-box")
+            .remove(0);
+        let full_box = integrate_cells(6, 64, 80, |t| {
+            gaussian_moment_cell(t, 0, scale)?.mul(&archimedean_kernel(t, 32, true)?)
+        })?;
+        let thirty_two = Interval::exact_integer(32, 80, Provenance::Generic);
+        let full_with_tail = full_box.add(
+            &gaussian_tail(6, 1, scale, 80)?
+                .add(&gaussian_tail(6, 0, scale, 80)?.mul(&thirty_two)?)?,
+        )?;
+        assert!(half_box.lower <= full_with_tail.upper);
+        assert!(full_with_tail.lower <= half_box.upper);
+        Ok(())
     }
 }

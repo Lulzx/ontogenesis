@@ -44,7 +44,13 @@ fn subsets(vars: &[usize], k: usize) -> Vec<Vec<usize>> {
     gen_subsets(vars, k, 0, &mut idx, &mut out);
     out
 }
-fn gen_subsets(vars: &[usize], k: usize, start: usize, cur: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
+fn gen_subsets(
+    vars: &[usize],
+    k: usize,
+    start: usize,
+    cur: &mut Vec<usize>,
+    out: &mut Vec<Vec<usize>>,
+) {
     if cur.len() == k {
         out.push(cur.clone());
         return;
@@ -95,7 +101,9 @@ fn consistent(y: usize, p: &[usize], observed: &[Transition]) -> bool {
 
 /// Discover the minimal parent set for every output variable.
 pub fn discover_factors(nvars: usize, observed: &[Transition]) -> Vec<Vec<usize>> {
-    (0..nvars).map(|y| find_minimal_parents(nvars, y, observed)).collect()
+    (0..nvars)
+        .map(|y| find_minimal_parents(nvars, y, observed))
+        .collect()
 }
 
 /// A factored transition model: per output variable, a rule table from
@@ -106,7 +114,11 @@ pub struct FactoredModel {
     pub rules: Vec<BTreeMap<(Vec<bool>, usize), bool>>,
 }
 
-pub fn build_factored(nvars: usize, parents: &[Vec<usize>], observed: &[Transition]) -> FactoredModel {
+pub fn build_factored(
+    nvars: usize,
+    parents: &[Vec<usize>],
+    observed: &[Transition],
+) -> FactoredModel {
     let mut rules = Vec::new();
     for y in 0..nvars {
         let mut r = BTreeMap::new();
@@ -115,7 +127,11 @@ pub fn build_factored(nvars: usize, parents: &[Vec<usize>], observed: &[Transiti
         }
         rules.push(r);
     }
-    FactoredModel { nvars, parents: parents.to_vec(), rules }
+    FactoredModel {
+        nvars,
+        parents: parents.to_vec(),
+        rules,
+    }
 }
 
 /// Predict the next state using the factored model; `None` if any variable's
@@ -171,8 +187,16 @@ pub fn evaluate_generalization(
             }
         }
     }
-    let f = if held.is_empty() { 0.0 } else { f_correct as f64 / held.len() as f64 };
-    let r = if held.is_empty() { 0.0 } else { raw_correct as f64 / held.len() as f64 };
+    let f = if held.is_empty() {
+        0.0
+    } else {
+        f_correct as f64 / held.len() as f64
+    };
+    let r = if held.is_empty() {
+        0.0
+    } else {
+        raw_correct as f64 / held.len() as f64
+    };
     GenReport {
         nvars,
         observed: observed.len(),
@@ -211,12 +235,19 @@ pub fn coupled_step(n: usize, s: &[bool], a: usize) -> Vec<bool> {
 }
 
 /// Enumerate every `(state, action)` transition of a world `step`.
-pub fn all_transitions(n: usize, step: &dyn Fn(usize, &[bool], usize) -> Vec<bool>) -> Vec<Transition> {
+pub fn all_transitions(
+    n: usize,
+    step: &dyn Fn(usize, &[bool], usize) -> Vec<bool>,
+) -> Vec<Transition> {
     let mut out = Vec::new();
     for code in 0..(1usize << n) {
         let s: Vec<bool> = (0..n).map(|i| (code >> i) & 1 == 1).collect();
         for a in 0..=n {
-            out.push(Transition { s: s.clone(), a, sp: step(n, &s, a) });
+            out.push(Transition {
+                s: s.clone(),
+                a,
+                sp: step(n, &s, a),
+            });
         }
     }
     out
@@ -231,7 +262,12 @@ pub fn parity_split(transitions: &[Transition]) -> (Vec<Transition>, Vec<Transit
     let mut obs = Vec::new();
     let mut held = Vec::new();
     for tr in transitions {
-        let idx: usize = tr.s.iter().enumerate().filter(|(_, &b)| b).map(|(i, _)| 1usize << i).sum();
+        let idx: usize =
+            tr.s.iter()
+                .enumerate()
+                .filter(|(_, &b)| b)
+                .map(|(i, _)| 1usize << i)
+                .sum();
         let gray = idx ^ (idx >> 1);
         if (gray + tr.a) % 4 < 2 {
             obs.push(tr.clone());
@@ -272,11 +308,19 @@ pub fn invent_switch_concept(
         if sp[w] != ref_state[w] {
             // action `a` changes switch `w`; with a single-bit toggle and no
             // other action changing it, this identifies the concept.
-            return SwitchConcept { switch: w, toggle_action: a, probe_cost };
+            return SwitchConcept {
+                switch: w,
+                toggle_action: a,
+                probe_cost,
+            };
         }
     }
     // No action toggles it: it is constant. Cost still counts the probes.
-    SwitchConcept { switch: w, toggle_action: usize::MAX, probe_cost }
+    SwitchConcept {
+        switch: w,
+        toggle_action: usize::MAX,
+        probe_cost,
+    }
 }
 
 /// Transfer prediction: using an invented switch concept (the action that
@@ -335,7 +379,12 @@ pub fn transfer_to_new_switch(
 
 /// Raw BFS plan cost (number of state expansions) from `start` to reach the
 /// exact target state in the full product state space.
-pub fn plan_raw(n: usize, start: &[bool], target: &[bool], step: &dyn Fn(usize, &[bool], usize) -> Vec<bool>) -> Option<usize> {
+pub fn plan_raw(
+    n: usize,
+    start: &[bool],
+    target: &[bool],
+    step: &dyn Fn(usize, &[bool], usize) -> Vec<bool>,
+) -> Option<usize> {
     use std::collections::VecDeque;
     if start == target {
         return Some(0);
@@ -368,7 +417,11 @@ pub fn plan_raw(n: usize, start: &[bool], target: &[bool], step: &dyn Fn(usize, 
 /// sum over switches of one toggle in each component that differs from the
 /// target — bounded by the number of switches, not the product state space.
 pub fn plan_factored(start: &[bool], target: &[bool]) -> usize {
-    start.iter().zip(target.iter()).filter(|(a, b)| a != b).count()
+    start
+        .iter()
+        .zip(target.iter())
+        .filter(|(a, b)| a != b)
+        .count()
 }
 
 // ---------------------------------------------------------------------------
@@ -410,8 +463,14 @@ mod tests {
             assert_eq!(parents[i], vec![i], "switch {i} must depend only on itself");
         }
         let rep = evaluate_generalization(n, &obs, &held, &parents);
-        assert!(rep.factored_accuracy > 0.5, "factorization must generalize to held-out transitions");
-        assert_eq!(rep.raw_accuracy, 0.0, "raw table cannot generalize to held-out combos");
+        assert!(
+            rep.factored_accuracy > 0.5,
+            "factorization must generalize to held-out transitions"
+        );
+        assert_eq!(
+            rep.raw_accuracy, 0.0,
+            "raw table cannot generalize to held-out combos"
+        );
     }
 
     #[test]
@@ -440,7 +499,10 @@ mod tests {
         // poor, so the discovery does not over-claim compression.
         let (obs, held) = parity_split(&trans);
         let rep = evaluate_generalization(n, &obs, &held, &parents);
-        assert!(rep.factored_accuracy < 0.5, "coupled world must not generalize like a factored one");
+        assert!(
+            rep.factored_accuracy < 0.5,
+            "coupled world must not generalize like a factored one"
+        );
     }
 
     #[test]
@@ -464,7 +526,10 @@ mod tests {
             }
         }
         let tr = transfer_to_new_switch(3, 2, 0, &two_switch_step);
-        assert!(tr.transfer_saved > 0, "transfer must cost less than cold restart");
+        assert!(
+            tr.transfer_saved > 0,
+            "transfer must cost less than cold restart"
+        );
     }
 
     #[test]
@@ -475,7 +540,10 @@ mod tests {
         let raw = plan_raw(n, &start, &target, &two_switch_step).unwrap();
         let factored = plan_factored(&start, &target);
         assert_eq!(factored, 6, "one toggle per differing switch");
-        assert!(factored < raw, "component planning must be cheaper than raw BFS");
+        assert!(
+            factored < raw,
+            "component planning must be cheaper than raw BFS"
+        );
     }
 
     #[test]

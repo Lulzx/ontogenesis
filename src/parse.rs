@@ -270,10 +270,7 @@ fn lower_with_outer(e: &Expr, m: u32, d: u32) -> Option<Rc<Term>> {
             }
         }
         Expr::Lam(b) => Some(lam(lower_with_outer(b, m, d + 1)?)),
-        Expr::App(f, a) => Some(app(
-            lower_with_outer(f, m, d)?,
-            lower_with_outer(a, m, d)?,
-        )),
+        Expr::App(f, a) => Some(app(lower_with_outer(f, m, d)?, lower_with_outer(a, m, d)?)),
         Expr::Ref(_) => None,
     }
 }

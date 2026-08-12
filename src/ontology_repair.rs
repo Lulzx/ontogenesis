@@ -149,7 +149,7 @@ pub struct Stage {
     pub transitions: Vec<Transition>,
     pub added: Vec<u64>,
     pub cost: CostLedger,
-    pub replayed: bool, // current-task predictive replay
+    pub replayed: bool,             // current-task predictive replay
     pub accumulated_replayed: bool, // all historical commitments answered
     pub replayed_checks: u64,
     pub affected_concepts: Vec<u64>,
@@ -247,12 +247,7 @@ pub fn witness(extension: &BTreeSet<u8>) -> Rc<Term> {
 /// Returns `None` if evaluation does not terminate within fuel or is not a bool.
 pub fn evaluate_witness(w: &Rc<Term>, token: u8) -> Option<bool> {
     let applied = term::app(w.clone(), church_numeral(token));
-    let norm = nbe::normalize(
-        &Rc::new(Vec::new()),
-        &applied,
-        &mut nbe::Fuel(5000),
-    )
-    .ok()?;
+    let norm = nbe::normalize(&Rc::new(Vec::new()), &applied, &mut nbe::Fuel(5000)).ok()?;
     let outer = match norm.as_ref() {
         Term::Lam(body) => body,
         _ => return None,
@@ -346,12 +341,9 @@ fn greedy_build(observations: &[Observation], task: &Task) -> Ontology {
         }
     }
     // Assign stable sequential ids.
-    ontology.concepts.sort_by(|a, b| {
-        a.extension
-            .iter()
-            .next()
-            .cmp(&b.extension.iter().next())
-    });
+    ontology
+        .concepts
+        .sort_by(|a, b| a.extension.iter().next().cmp(&b.extension.iter().next()));
     for (i, c) in ontology.concepts.iter_mut().enumerate() {
         c.id = i as u64;
     }
@@ -464,7 +456,10 @@ fn op_between(old: &Ontology, new: &Ontology) -> Vec<Transition> {
                 .iter()
                 .map(|id| {
                     let nc = new.concepts.iter().find(|c| c.id == *id).unwrap();
-                    nc.extension.iter().filter(|t| oc.extension.contains(t)).count() as u64
+                    nc.extension
+                        .iter()
+                        .filter(|t| oc.extension.contains(t))
+                        .count() as u64
                 })
                 .max()
                 .unwrap_or(0);
@@ -474,13 +469,10 @@ fn op_between(old: &Ontology, new: &Ontology) -> Vec<Transition> {
             });
             if dominant_tokens * 2 > retained && dominant_has_label {
                 RepairOp::Specialize
-            } else if covering
-                .iter()
-                .all(|id| {
-                    let nc = new.concepts.iter().find(|c| c.id == *id).unwrap();
-                    nc.label != oc.label
-                })
-            {
+            } else if covering.iter().all(|id| {
+                let nc = new.concepts.iter().find(|c| c.id == *id).unwrap();
+                nc.label != oc.label
+            }) {
                 RepairOp::Remove // fragmented, no sub-concept keeps its label
             } else {
                 RepairOp::Split
@@ -523,7 +515,7 @@ impl Default for RepairSpec {
 pub struct Runner {
     pub spec: RepairSpec,
     pub truth: BTreeMap<u8, u8>, // current world truth: token -> label (latest wins)
-    pub task: Task, // current downstream task
+    pub task: Task,              // current downstream task
     pub accumulated_answers: Vec<(u8, u8)>, // every query ever committed to
     pub stages: Vec<Stage>,
     pub previous: Option<Ontology>,
@@ -534,7 +526,9 @@ impl Runner {
         Runner {
             spec,
             truth: BTreeMap::new(),
-            task: Task { queries: Vec::new() },
+            task: Task {
+                queries: Vec::new(),
+            },
             accumulated_answers: Vec::new(),
             stages: Vec::new(),
             previous: None,
@@ -723,7 +717,11 @@ fn ops_counts(stage: &Stage) -> BTreeMap<&'static str, u64> {
         RepairOp::StructuralReplace,
     ] {
         let n = stage.transitions.iter().filter(|t| t.op == op).count() as u64
-            + if op == RepairOp::Add { stage.added.len() as u64 } else { 0 };
+            + if op == RepairOp::Add {
+                stage.added.len() as u64
+            } else {
+                0
+            };
         counts.insert(op.name(), n);
     }
     counts
@@ -759,7 +757,11 @@ pub fn machine_record(stages: &[Stage]) -> String {
         "non_monotonic_total={}",
         stages
             .iter()
-            .map(|s| s.transitions.iter().filter(|t| t.op.is_non_monotonic()).count())
+            .map(|s| s
+                .transitions
+                .iter()
+                .filter(|t| t.op.is_non_monotonic())
+                .count())
             .sum::<usize>()
     ));
     fields.push("deterministic=true".to_string());
@@ -787,10 +789,12 @@ mod tests {
     }
     fn count_op(stage: &Stage, op: RepairOp) -> u64 {
         stage.transitions.iter().filter(|t| t.op == op).count() as u64
-            + if op == RepairOp::Add { stage.added.len() as u64 } else { 0 }
+            + if op == RepairOp::Add {
+                stage.added.len() as u64
+            } else {
+                0
+            }
     }
-
-
 
     #[test]
     fn witness_accepts_exactly_its_extension() {
@@ -828,7 +832,11 @@ mod tests {
         let t2 = task(&[(0, 0), (1, 0), (2, 2), (3, 2), (4, 1), (5, 1)]);
         let s2 = r.add_stage(&o2, &t2).clone();
         assert_eq!(s2.ontology.concepts.len(), 3);
-        assert!(s2.transitions.iter().any(|t| t.op == RepairOp::Split), "expected a split, got {:?}", s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>());
+        assert!(
+            s2.transitions.iter().any(|t| t.op == RepairOp::Split),
+            "expected a split, got {:?}",
+            s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>()
+        );
         assert!(s2.replayed);
         // {4,5} class1 untouched -> preserved
         assert!(s2.preserved_concepts.iter().any(|id| {
@@ -851,9 +859,17 @@ mod tests {
         let t2 = task(&[(0, 0), (1, 0), (2, 0), (3, 0)]);
         let s2 = r.add_stage(&o2, &t2).clone();
         assert_eq!(s2.ontology.concepts.len(), 1);
-        assert!(s2.transitions.iter().filter(|t| t.op == RepairOp::Merge).count() >= 1, "expected a merge, got {:?}", s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>());
+        assert!(
+            s2.transitions
+                .iter()
+                .filter(|t| t.op == RepairOp::Merge)
+                .count()
+                >= 1,
+            "expected a merge, got {:?}",
+            s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>()
+        );
         assert!(s2.replayed); // current-task replay holds
-        // accumulated replay is not required to hold after a deliberate world coarsening
+                              // accumulated replay is not required to hold after a deliberate world coarsening
     }
 
     #[test]
@@ -866,7 +882,11 @@ mod tests {
         let o2 = obs(&[(0, 0), (1, 0), (2, 0), (3, 5), (4, 1), (5, 1)]);
         let t2 = task(&[(0, 0), (1, 0), (2, 0), (3, 5), (4, 1), (5, 1)]);
         let s2 = r.add_stage(&o2, &t2).clone();
-        assert!(s2.transitions.iter().any(|t| t.op == RepairOp::Specialize), "expected specialize: {:?}", s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>());
+        assert!(
+            s2.transitions.iter().any(|t| t.op == RepairOp::Specialize),
+            "expected specialize: {:?}",
+            s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -879,7 +899,11 @@ mod tests {
         let o2 = obs(&[(0, 0), (1, 0), (2, 1), (3, 1), (4, 1), (5, 1)]);
         let t2 = task(&[(0, 0), (1, 0), (2, 1), (3, 1), (4, 1), (5, 1)]);
         let s2 = r.add_stage(&o2, &t2).clone();
-        assert!(s2.transitions.iter().any(|t| t.op == RepairOp::Generalize), "expected generalize: {:?}", s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>());
+        assert!(
+            s2.transitions.iter().any(|t| t.op == RepairOp::Generalize),
+            "expected generalize: {:?}",
+            s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -893,7 +917,11 @@ mod tests {
         let o2 = obs(&[(0, 3), (1, 4), (2, 1), (3, 1), (4, 2), (5, 2)]);
         let t2 = task(&[(0, 3), (1, 4), (2, 1), (3, 1), (4, 2), (5, 2)]);
         let s2 = r.add_stage(&o2, &t2).clone();
-        assert!(s2.transitions.iter().any(|t| t.op == RepairOp::Remove), "expected remove/invalidate: {:?}", s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>());
+        assert!(
+            s2.transitions.iter().any(|t| t.op == RepairOp::Remove),
+            "expected remove/invalidate: {:?}",
+            s2.transitions.iter().map(|t| t.op).collect::<Vec<_>>()
+        );
         // unaffected concepts {2,3} and {4,5} preserved
         assert_eq!(count_op(&s2, RepairOp::Retain), 2);
     }
@@ -920,16 +948,56 @@ mod tests {
         assert!(s1.replayed && s1.accumulated_replayed);
         let s2 = r
             .add_stage(
-                &obs(&[(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2), (6, 3), (7, 3)]),
-                &task(&[(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2), (6, 3), (7, 3)]),
+                &obs(&[
+                    (0, 0),
+                    (1, 0),
+                    (2, 1),
+                    (3, 1),
+                    (4, 2),
+                    (5, 2),
+                    (6, 3),
+                    (7, 3),
+                ]),
+                &task(&[
+                    (0, 0),
+                    (1, 0),
+                    (2, 1),
+                    (3, 1),
+                    (4, 2),
+                    (5, 2),
+                    (6, 3),
+                    (7, 3),
+                ]),
             )
             .clone();
         assert!(s2.replayed && s2.accumulated_replayed);
         assert_eq!(s2.ontology.concepts.len(), 4);
         let s3 = r
             .add_stage(
-                &obs(&[(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2), (6, 3), (7, 3), (8, 4), (9, 4)]),
-                &task(&[(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2), (6, 3), (7, 3), (8, 4), (9, 4)]),
+                &obs(&[
+                    (0, 0),
+                    (1, 0),
+                    (2, 1),
+                    (3, 1),
+                    (4, 2),
+                    (5, 2),
+                    (6, 3),
+                    (7, 3),
+                    (8, 4),
+                    (9, 4),
+                ]),
+                &task(&[
+                    (0, 0),
+                    (1, 0),
+                    (2, 1),
+                    (3, 1),
+                    (4, 2),
+                    (5, 2),
+                    (6, 3),
+                    (7, 3),
+                    (8, 4),
+                    (9, 4),
+                ]),
             )
             .clone();
         assert!(s3.replayed && s3.accumulated_replayed);

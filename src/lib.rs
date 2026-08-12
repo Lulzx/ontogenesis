@@ -106,6 +106,23 @@
 //!   trace-identity proof kernel.
 //! - [`operator_search`], [`trace_schema_search`], and [`prime_trace_search`]:
 //!   prime-Jacobi proof search and cross-domain trace-schema transfer.
+//! - [`weil_representation_search`]: self-hosting Phase SH19 dimension-uniform
+//!   representation search for Weil positivity.
+//! - [`weil_forcing_object`]: M29c reverse forcing object: pole rank-1 identity,
+//!   P-implies-RH chain, and prime-domination attack.
+//! - [`weil_positivity_proof`]: exact lemmas and a certified 0th-entry theorem
+//!   for the Gaussian family; does not claim separating-algebra positivity.
+//! - [`weil_hermite_gram`]: M29e Hermite-product Gram sections of the Weil
+//!   functional.
+//! - [`weil_positive_kernel`]: M29f the missing object is the GNS operator /
+//!   positive kernel; proves no finite Gram section certifies P.
+//! - [`weil_reduction_audit`]: M29g audit of the `P ==> RH` reduction,
+//!   exposing essential self-adjointness and spectral correspondence as its
+//!   two supplied theorem obligations.
+//! - [`weil_kernel_decomposition`]: M29h explicit sign structure of the
+//!   pole/archimedean/prime terms — the certificate template for P.
+//! - [`weil_jacobi_object`]: M29i the Weil Jacobi object — the pivot
+//!   sequence `d_n` / Jacobi coefficients `beta_n` bridging P and ES.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -113,69 +130,78 @@ pub mod bank;
 pub mod bootstrap;
 pub mod canon;
 pub mod causal_ontology;
+pub mod completion_world;
+pub mod concept_migration;
+pub mod conjecture_world;
 pub mod contextual_allocation;
 pub mod contextual_guidance;
-pub mod conjecture_world;
-pub mod critical_line_world;
-pub mod concept_migration;
-pub mod completion_world;
 pub mod coproduct_property;
-pub mod euclid_world;
+pub mod counting_law_search;
+pub mod counting_nonidentifiability;
+pub mod critical_line_world;
 pub mod equivalence_world;
+pub mod euclid_world;
 pub mod euler_world;
-pub mod fixpoint;
-pub mod functional_world;
-pub mod hidden_zeros_world;
 pub mod feature_invention;
-pub mod initial_algebra;
-pub mod irrational_world;
-pub mod polynomial_world;
-pub mod symmetry_world;
+pub mod fixpoint;
 pub mod fourier_world;
+pub mod functional_world;
+pub mod generator_reconstruction;
+pub mod hidden_zeros_world;
+pub mod initial_algebra;
+pub mod inverse_counting_search;
+pub mod irrational_world;
 pub mod learned_allocation;
 pub mod learned_context;
 pub mod locus_world;
 pub mod making_object_world;
-pub mod real_zeta_world;
-pub mod real_rh_ontogenesis;
-pub mod generator_reconstruction;
-pub mod stall_diagnosis;
-pub mod spectral_witness_search;
-pub mod operator_kernel;
-pub mod operator_search;
-pub mod trace_schema_search;
-pub mod prime_trace_search;
-pub mod test_function_trace_search;
-pub mod spectral_counting_obstruction;
-pub mod counting_law_search;
-pub mod inverse_counting_search;
-pub mod counting_nonidentifiability;
-pub mod positive_functional_operator;
-pub mod positive_kernel_search;
-pub mod validated_explicit_formula;
-pub mod validated_archimedean;
-pub mod validated_prime_power;
-pub mod weil_entry_assembly;
-pub mod rh_equivalence_world;
-pub mod rh_making_surrogate_world;
+pub mod math_world;
 pub mod nbe;
 pub mod ontology_guidance;
 pub mod ontology_repair;
-pub mod probe_invention;
 pub mod open_signature;
+pub mod operator_kernel;
+pub mod operator_search;
 pub mod parse;
+pub mod polynomial_world;
+pub mod positive_functional_operator;
+pub mod positive_kernel_search;
+pub mod prime_trace_search;
+pub mod probe_invention;
 pub mod proposition_world;
+pub mod real_rh_ontogenesis;
+pub mod real_zeta_world;
 pub mod recurrence;
 pub mod recursion_search;
 pub mod recursive_signature;
 pub mod representation;
+pub mod rh_equivalence_world;
+pub mod rh_making_surrogate_world;
 pub mod search_accounting;
+pub mod spectral_counting_obstruction;
+pub mod spectral_witness_search;
 pub mod spectral_world;
+pub mod stall_diagnosis;
+pub mod symmetry_world;
 pub mod term;
+pub mod test_function_trace_search;
+pub mod trace_schema_search;
 pub mod transform;
 pub mod typed;
 pub mod universal;
 pub mod universal_property;
+pub mod validated_archimedean;
+pub mod validated_explicit_formula;
+pub mod validated_prime_power;
+pub mod weil_entry_assembly;
+pub mod weil_forcing_object;
+pub mod weil_hermite_gram;
+pub mod weil_jacobi_object;
+pub mod weil_kernel_decomposition;
+pub mod weil_positivity_proof;
+pub mod weil_positive_kernel;
+pub mod weil_reduction_audit;
+pub mod weil_representation_search;
+pub mod weil_scale_search;
 pub mod world_model;
 pub mod zeta_world;
-pub mod math_world;

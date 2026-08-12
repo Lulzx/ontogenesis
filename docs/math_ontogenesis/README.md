@@ -20,11 +20,14 @@ spectral debt, SH2b records a non-amortizing generator reconstruction failure,
 SH3b reconstructs a transferable finite symmetric-witness constructor, and
 SH4c–SH18b build the typed infinite-operator and validated explicit-formula
 path. The first convention-correct four-function Weil Gram replay is
-inconclusive at its zeroth LDL pivot; it is not a positivity claim. SH19 is
-pre-registered to search for a dimension-uniform positive representation with
-a compatible density/continuity bridge. Real M29 remains unreached because
-global Weil positivity, self-adjoint realization, and limiting real-xi
-spectral correspondence are still absent.
+inconclusive at its zeroth LDL pivot; it is not a positivity claim. SH19a
+searched 9 exact Gaussian scales and retained none: `a=1/128` has a positive
+zeroth entry and certified `2x2` LDL, but an inconclusive `4x4` LDL. SH19 searched 2880 representation programs and retained none: 18 restated the
+SH18 integrand and passed identity, but none carried a positivity witness.
+M29c makes the forcing object explicit: the Weil functional, with `P => RH`
+checked and the pole Gram an exact rank-one PSD. `P` itself is unproved; the
+`4x4` Gaussian section at `a=1/128` has pivot width `~5e10`. Real M29 remains
+unreached.
 
 | Milestone | Topic | Status |
 |---|---|---|

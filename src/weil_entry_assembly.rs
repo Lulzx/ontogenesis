@@ -1,7 +1,7 @@
 //! SH18: convention-typed assembly of finite Weil Gram entries.
 
 use crate::validated_archimedean::{archimedean_entries, archimedean_entry};
-use crate::validated_explicit_formula::{Interval, IntervalError, Provenance};
+use crate::validated_explicit_formula::{ExactScale, Interval, IntervalError, Provenance};
 use crate::validated_prime_power::{certified_component, certified_components};
 use rug::float::Round;
 use rug::ops::DivAssignRound;
@@ -49,7 +49,7 @@ pub struct Normalization {
     pub archimedean_coefficient: ArchimedeanCoefficient,
     pub prime_sign: PrimeSign,
     pub reflection: ReflectionMultiplicity,
-    pub gaussian_scale: i32,
+    pub gaussian_scale: ExactScale,
     pub exact_derivation: bool,
 }
 
@@ -62,7 +62,7 @@ impl Normalization {
             archimedean_coefficient: ArchimedeanCoefficient::OneOverTwoPi,
             prime_sign: PrimeSign::Negative,
             reflection: ReflectionMultiplicity::BothTransforms,
-            gaussian_scale: 2,
+            gaussian_scale: ExactScale::integer(2),
             exact_derivation: true,
         }
     }
@@ -74,16 +74,22 @@ impl Normalization {
         }
     }
 
+    pub const fn with_scale(mut self, scale: ExactScale) -> Self {
+        self.gaussian_scale = scale;
+        self
+    }
+
     pub const fn convert_cyclic_to_angular(self) -> Option<Self> {
         if matches!(self.convention, FourierConvention::CyclicFrequency) && self.exact_derivation {
-            Some(Self::angular())
+            Some(Self::angular().with_scale(self.gaussian_scale))
         } else {
             None
         }
     }
 
     fn accepts(self) -> bool {
-        self == Self::angular()
+        let expected = Self::angular().with_scale(self.gaussian_scale);
+        self == expected
     }
 }
 
@@ -101,12 +107,18 @@ fn exact_ratio(numerator: i32, denominator: i32, precision: u32) -> Interval {
     }
 }
 
-fn pole_component(even_power: usize, precision: u32) -> Result<Interval, IntervalError> {
+fn pole_component(
+    even_power: usize,
+    scale: ExactScale,
+    precision: u32,
+) -> Result<Interval, IntervalError> {
     if even_power % 2 != 0 {
         return Err(IntervalError::Domain);
     }
-    let half = exact_ratio(1, 2, precision);
-    let exponential = half.exp()?;
+    let quarter_scale = scale
+        .interval(precision, Provenance::Generic)
+        .div(&Interval::exact_integer(4, precision, Provenance::Generic))?;
+    let exponential = quarter_scale.exp()?;
     let mut coefficient = exact_ratio(2, 1, precision);
     for _ in 0..even_power / 2 {
         coefficient = coefficient.mul(&exact_ratio(-1, 4, precision))?;
@@ -123,10 +135,10 @@ fn one_over_pi(precision: u32) -> Result<Interval, IntervalError> {
 }
 
 #[derive(Clone, Debug)]
-struct EntryComponents {
-    pole: Interval,
-    weighted_archimedean: Interval,
-    weighted_prime: Interval,
+pub(crate) struct EntryComponents {
+    pub(crate) pole: Interval,
+    pub(crate) weighted_archimedean: Interval,
+    pub(crate) weighted_prime: Interval,
 }
 
 impl EntryComponents {
@@ -150,7 +162,7 @@ fn entry_components(
         return Err(IntervalError::Domain);
     }
     Ok(EntryComponents {
-        pole: pole_component(even_power, precision)?,
+        pole: pole_component(even_power, normalization.gaussian_scale, precision)?,
         weighted_archimedean: archimedean_entry(
             even_power,
             normalization.gaussian_scale,
@@ -160,8 +172,13 @@ fn entry_components(
             precision,
         )?
         .mul(&one_over_two_pi(precision)?)?,
-        weighted_prime: certified_component(even_power, cutoff, precision)?
-            .mul(&one_over_pi(precision)?)?,
+        weighted_prime: certified_component(
+            even_power,
+            normalization.gaussian_scale,
+            cutoff,
+            precision,
+        )?
+        .mul(&one_over_pi(precision)?)?,
     })
 }
 
@@ -186,7 +203,7 @@ fn assemble_entry(
     .total()
 }
 
-fn assemble_entries(
+pub(crate) fn assemble_entries(
     powers: &[usize],
     bound: i32,
     cells: usize,
@@ -206,7 +223,7 @@ fn assemble_entries(
         terms,
         precision,
     )?;
-    let primes = certified_components(powers, cutoff, precision)?;
+    let primes = certified_components(powers, normalization.gaussian_scale, cutoff, precision)?;
     let arch_coefficient = one_over_two_pi(precision)?;
     let prime_coefficient = one_over_pi(precision)?;
     powers
@@ -215,11 +232,53 @@ fn assemble_entries(
         .zip(archimedean)
         .zip(primes)
         .map(|((power, arch), prime)| {
-            pole_component(power, precision)?
+            pole_component(power, normalization.gaussian_scale, precision)?
                 .add(&arch.mul(&arch_coefficient)?)?
                 .sub(&prime.mul(&prime_coefficient)?)
         })
         .collect()
+}
+
+pub(crate) fn assemble_component_entries(
+    powers: &[usize],
+    bound: i32,
+    cells: usize,
+    terms: usize,
+    cutoff: u64,
+    precision: u32,
+    normalization: Normalization,
+) -> Result<Vec<EntryComponents>, IntervalError> {
+    if !normalization.accepts() {
+        return Err(IntervalError::Domain);
+    }
+    let archimedean = archimedean_entries(
+        powers,
+        normalization.gaussian_scale,
+        bound,
+        cells,
+        terms,
+        precision,
+    )?;
+    let primes = certified_components(powers, normalization.gaussian_scale, cutoff, precision)?;
+    let arch_coefficient = one_over_two_pi(precision)?;
+    let prime_coefficient = one_over_pi(precision)?;
+    powers
+        .iter()
+        .copied()
+        .zip(archimedean)
+        .zip(primes)
+        .map(|((power, arch), prime)| {
+            Ok(EntryComponents {
+                pole: pole_component(power, normalization.gaussian_scale, precision)?,
+                weighted_archimedean: arch.mul(&arch_coefficient)?,
+                weighted_prime: prime.mul(&prime_coefficient)?,
+            })
+        })
+        .collect()
+}
+
+fn rejects_scale_mismatch(analytic: ExactScale, arithmetic: ExactScale) -> bool {
+    analytic != arithmetic
 }
 
 fn hankel_matrix(entries: &[Interval; 7]) -> Vec<Vec<Interval>> {
@@ -236,10 +295,10 @@ pub enum LdlStatus {
 }
 
 #[derive(Clone, Debug)]
-struct LdlReport {
-    status: LdlStatus,
-    pivot_index: usize,
-    pivot: Interval,
+pub(crate) struct LdlReport {
+    pub(crate) status: LdlStatus,
+    pub(crate) pivot_index: usize,
+    pub(crate) pivot: Interval,
 }
 
 fn interval_ldl(matrix: &[Vec<Interval>]) -> Result<LdlReport, IntervalError> {
@@ -298,6 +357,34 @@ fn interval_ldl(matrix: &[Vec<Interval>]) -> Result<LdlReport, IntervalError> {
     })
 }
 
+pub(crate) fn finite_ldl_report(
+    entries: &[Interval],
+    dimension: usize,
+) -> Result<LdlReport, IntervalError> {
+    if dimension == 0 || entries.len() < 2 * dimension - 1 {
+        return Err(IntervalError::Domain);
+    }
+    let matrix = (0..dimension)
+        .map(|row| {
+            (0..dimension)
+                .map(|column| entries[row + column].clone())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    interval_ldl(&matrix)
+}
+
+pub(crate) fn finite_ldl_status(
+    entries: &[Interval],
+    dimension: usize,
+) -> Result<LdlStatus, IntervalError> {
+    finite_ldl_report(entries, dimension).map(|report| report.status)
+}
+
+pub(crate) fn interval_ldl_matrix(matrix: &[Vec<Interval>]) -> Result<LdlReport, IntervalError> {
+    interval_ldl(matrix)
+}
+
 #[derive(Clone, Debug)]
 pub struct Sh18Experiment {
     pub product_components: usize,
@@ -344,8 +431,6 @@ pub fn sh18b_experiment() -> Sh18Experiment {
     missing_pole.pole = PoleTerm::Omitted;
     let mut unproved = normalization;
     unproved.exact_derivation = false;
-    let mut wrong_scale = normalization;
-    wrong_scale.gaussian_scale = 1;
     let declined = |candidate| {
         matches!(
             assemble_entry(0, 6, 8, 8, 64, 64, candidate),
@@ -358,7 +443,7 @@ pub fn sh18b_experiment() -> Sh18Experiment {
         declined(one_reflection),
         declined(missing_pole),
         declined(unproved),
-        declined(wrong_scale),
+        rejects_scale_mismatch(ExactScale::integer(1), ExactScale::integer(2)),
     ];
     Sh18Experiment {
         product_components: fine.len(),

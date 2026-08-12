@@ -3476,7 +3476,7 @@ controls, and acceptance gate.
 
 **Pre-registration date:** 2026-08-12
 
-**Status:** executed without amendment; finite LDL remains inconclusive
+**Status:** executed; prime-tail audit invalidated the recorded enclosure
 
 Rewrite each digamma-series term with `x=n+1/4`, `y=|t|/2` as
 `-3/(4*x*(x+3/4)) + y^2/(x*(x^2+y^2))`. Bound the first summable series by
@@ -3508,13 +3508,40 @@ typed controls decline. LDL remains inconclusive at pivot zero with enclosure
 `2.7e-48` (pole), `2.45e-2` (archimedean), and `1.68e-2` (prime). No finite or
 infinite positivity claim is made, and `m29_reached=false`.
 
+A subsequent SH19 generalization audit found that SH17's all-integer tail used
+an undocumented factor two as an endpoint cover. Replacing it by the direct
+monotone sum-integral theorem preserves nesting and the inconclusive status but
+changes pivot zero to `[-1.56988741496e-2,1.72390195130e-2]` and the prime
+width to `8.39908e-3`. The original SH18b record is preserved as invalidated;
+SH18c replays the same frozen matrix under the repaired tail theorem.
+
+---
+
+# Next Boundary — SH18c Monotone Prime-Tail Replay
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** tail theorem is the live evaluator; dedicated 4x4 replay not executed
+
+For the all-integer majorant
+`F(x)=C*log(x)/sqrt(x)*(1+log(x)^d)*exp(-log(x)^2/(4*a))`, require the exact
+cutoff certificate `(d+1)/u-1/2-u/(2*a)<0`, `u=log(X)`. Then
+`sum_(n>X) F(n) <= integral_X^infinity F(x) dx` with no endpoint multiplier.
+Replay SH18b without changing its basis, convention, or other budgets.
+
+The monotone cutoff certificate and direct sum-integral comparison are now the
+live prime-tail theorem used by SH19a. A separate seven-product 4x4 SH18c
+replay at scale two was not executed; SH19a already evaluated that scale at
+stage one under the repaired tail and stopped because the certified zeroth
+lower bound is negative.
+
 ---
 
 # Next Boundary — SH19 Uniform Weil-Positivity Representation Search
 
 **Pre-registration date:** 2026-08-12
 
-**Status:** frozen before accepted SH18b output
+**Status:** executed without amendment; no representation retained
 
 Treat the certified SH18 Gram sequence as observations for concept discovery,
 not as the target theorem. Search dimension-parametric representations of the
@@ -3546,3 +3573,407 @@ one explicit-formula term. A valid uniform positivity mechanism advances the
 GNS premise but does not by itself prove essential self-adjointness or exact
 xi spectral-measure correspondence. Negative or inconclusive SH18 matrices
 remain data and trigger convention/tail audit rather than changing this gate.
+
+## SH19a frozen scale-generator experiment
+
+Before implementation or scale output, freeze the first representation-family
+subexperiment as follows. Construct positive rational Gaussian product scales
+from constants `{1,2}` and generic multiplication/division programs of depth at
+most seven; normalize and deduplicate exact rational results, retaining the
+closed interval `[1/128,2]`. No xi evaluation, zero ordinate, spectral count,
+or checker residual participates in generation or ordering.
+
+For `h_(m,a)(t)=t^(2m) exp(-a*t^2)`, derive rather than tabulate the generic
+Fourier program
+`Q_(k+1)=Q'_k-u*Q_k/(2*a)` from
+`sqrt(pi/a) exp(-u^2/(4*a))`. The typed pole program is
+`2*(-1/4)^m*exp(a/4)`. The archimedean and prime-tail certificates carry the
+same exact rational scale tag. Search uses only certified explicit-formula
+intervals and evaluation cost.
+
+Stage one evaluates the zeroth entry at arithmetic-only budgets chosen from
+the scale denominator; it retains a scale only when two disjoint escalation
+levels nest and its certified lower margin is positive. Stage two evaluates
+the frozen dimensions two and four and rejects a scale that works only at one
+dimension. Controls inject a zero-derived scale, mismatch analytic/arithmetic
+scale tags, corrupt the generic Fourier recurrence, rank by an xi ordinate,
+add a dimension-dependent diagonal shift, and reuse a non-nested interval.
+
+SH19a can reconstruct a useful test-family generator and reduce downstream
+evaluation cost, but finite positive margins cannot satisfy SH19's uniform
+identity, nonnegativity, or density/continuity obligations. Any post-output
+change to the grammar, budgets, ranking, or controls creates SH19b and
+preserves this run.
+
+The exact budget map is frozen as
+`B(a)=ceil(6*sqrt(2/a))`, coarse/fine cells `64*B(a)` and `256*B(a)`,
+coarse/fine digamma terms `64/256`, prime cutoffs `4096/16384`, and MPFR
+precision `80/160`. The integer square-root ceiling is computed from the exact
+rational scale and does not evaluate the Weil functional.
+
+## SH19a recorded outcome
+
+The frozen scale grammar emitted 102 multiplication/division programs and 9
+exact rationals in `[1/128,2]`. Every coarse/fine zeroth enclosure nested.
+Scale `1/128` is the only candidate with a strictly positive certified zeroth
+entry (`lower=4.9163521e-1`) and a strictly positive `2x2` LDL; its `4x4` LDL
+is inconclusive. Scale `1/64` has a positive zeroth lower bound
+(`8.2758752e-2`) but inconclusive `2x2` and `4x4` pivots. Every other scale
+has a negative zeroth lower bound and stops at stage one. No scale is
+retained.
+
+All six leakage/overfit controls decline. No dimension-uniform identity or
+density/continuity bridge is obtained. `m29_reached=false`. The claim is
+`bounded_scale_generator_search_only`. Small-scale localization produces a
+real finite margin; scale selection does not produce a uniform positivity
+representation. The stage-two `4x4` gate is unchanged.
+
+A directed-rounding repair in the Gaussian box tail (lower-round `a B^2`
+before negation) was applied before this run. One completed evaluation is
+recorded (`user=25.56s`). A transport-only replay of the same binary is not
+counted as a second mathematical search.
+
+## SH19 frozen executable representation grammar
+
+Before any representation output, freeze programs as 5-tuples
+`(kind, body, remainder, topology, term_cover)` with:
+
+- kind in `{Recurrence, TriangularFactor, PositiveKernel, SumOfSquares,
+  IntegralSplit, BoundedRemainder}`
+- body in `{Zero, One, Two, Dim, PrevPivot, OneOverDim, TwoPrevPlusOne,
+  ThreeTermAssembly, ObservedTable, DiagonalShift}`
+- remainder in `{Zero, InvDim, InvPow2, Constant}`
+- topology in `{FiniteDiscrete, L2, TestFunction}`
+- term_cover in `{AllThree, MissingPole, MissingArchimedean, MissingPrime}`
+
+Enumeration is lexicographic in that order. `ThreeTermAssembly` is the typed
+SH18 integrand, not a positivity certificate. `ObservedTable` and
+`DiagonalShift` exist so the frozen controls lie inside the grammar.
+
+Identity holds only for `body=ThreeTermAssembly`, `term_cover=AllThree`,
+`remainder=Zero`, and a non-control body. Nonnegativity requires that identity
+and a sum-of-squares or positive-kernel witness that this grammar does not
+supply for the Weil form. Finite SH19a LDL margins are observations, not such
+a witness. Dimension-independent bounds require nonnegativity and a remainder
+other than `InvDim`. Density/continuity requires the previous three and
+`topology=TestFunction` on the full generated even Gaussian-polynomial
+algebra. `FiniteDiscrete` and `L2` are incompatible topologies.
+
+No xi ordinate, RH bit, or checker counterexample participates. The `4x4`
+stage-two gate is not weakened. Any post-output change to this grammar or to
+the four independent obligations creates SH19b and preserves this run.
+
+## SH19 recorded outcome
+
+The frozen 5-tuple grammar contains 2880 programs. Eighteen of them restate
+the typed three-term SH18 integrand (`body=ThreeTermAssembly`,
+`term_cover=AllThree`, `remainder=Zero`) and pass the identity obligation.
+None carries a sum-of-squares or positive-kernel witness for that integrand,
+so nonnegativity, uniform remainder, and density/continuity all fail. No
+program is retained.
+
+All six frozen controls decline: observed-dimension interpolation, a
+dimension-dependent diagonal shift, an LDL table with no recurrence, density
+in `L2`, an `InvDim` remainder, and a missing prime term. The stage-two `4x4`
+gate is unchanged. `m29_reached=false`. The claim is
+`bounded_representation_search_only`.
+
+Generic wrappers around the SH18 integrand do not produce the missing
+positivity representation. A later grammar that adds a new witness constructor
+is a separately versioned experiment.
+
+---
+
+# Next Boundary — M29c Real Weil Forcing Object
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; residual is positivity
+
+Reverse the M30 frontier. The only closed real-xi rule is
+`SpectralCorrespondence + SelfAdjointness => RH`. SH13 already derives both
+from `PositiveFunctional(L_weil)` plus the typed explicit formula on a
+separating algebra. The residual object is therefore `X = L_weil` with
+`P = L(f*f) >= 0`. Finite scales, wrappers, and Jacobi counting cannot replace
+`P`.
+
+Freeze `X` as the SH18 three-term functional on even Gaussian-polynomials,
+constructed from pole, archimedean, and prime terms. Zero ordinates are
+forbidden. `X` explains primes by carrying the von Mangoldt term.
+
+Check three independent lemmas, each boolean-only:
+
+1. Pole Hankel identity: `pole_{i+j} = 2 exp(a/4) (-1/4)^{i+j}`, equivalently
+   `r_i r_j = r_{i+j}` for `r_k = (-1/4)^k`. This is rank-one and PSD because
+   `2 exp(a/4) > 0`.
+2. Implication: `P` plus GNS gives self-adjointness; `P` plus the explicit
+   formula on the even Gaussian-polynomial algebra gives correspondence;
+   those two close RH. Missing `P`, a finite class, an omitted prime term, or
+   zero-derived positivity must fail.
+3. Domination attack at the frozen SH19a scale `a=1/128`: if a certified
+   lower bound on `lambda_min(Pole+Arch)` exceeds a certified upper bound on
+   the prime-block Frobenius norm, that finite section is PSD. Budgets are
+   the SH19a fine map. Dimensions 2 and 4 are evaluated. Success at a finite
+   section is finite evidence. It does not certify `P` on the infinite
+   algebra and cannot set `m29_reached`.
+
+Controls: zero-derived `P`, finite-class correspondence, omitted prime,
+pole-only treated as `P`, finite domination promoted to infinite `P`, and
+forcing without `P`. The stage-two `4x4` gate is unchanged.
+
+`m29_reached` is true only if `P` is certified on the separating algebra.
+Otherwise report the residual as `PositiveFunctional(L_weil)`.
+
+## M29c recorded outcome
+
+The pole Hankel identity holds exactly: `r_i r_j = r_{i+j}` for
+`r_k=(-1/4)^k`, and the associated quadratic form is nonnegative. The checked
+implication closes: arithmetic-only `P` plus the typed functional on the
+separating algebra produces self-adjointness and correspondence, and those
+two force RH. All six controls decline.
+
+At the frozen scale `a=1/128`, the `2x2` section nests and is strictly
+positive, with last pivot in `[2.8369935e3, 1.0479309e4]`. Frobenius
+domination fails there (`prime_frob=2.0593908e0`); the sufficient test
+`lambda_min(Pole+Arch) > ||Prime||_F` is stricter than the already-certified
+`2x2` LDL. The `4x4` section nests but is inconclusive, with a later pivot
+enclosed by `[-4.9743875e10, 4.4297432e9]`. That is an exploding high-moment
+enclosure, not a near-zero margin. Domination fails (`prime_frob=1.2769401e11`).
+
+`infinite_positivity=false`, `m29_reached=false`, residual
+`PositiveFunctional(L_weil)`. The forcing object and the implication are in
+place. High even powers of a wide Gaussian do not give a uniform certificate
+for `P`. The stage-two `4x4` gate is unchanged.
+
+---
+
+# Next Boundary — M29d Zeroth Gaussian Positivity
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; local continuum certified, full interval and P open
+
+Full positivity on the separating algebra is RH and is not claimed. Prove
+exact lemmas and one infinite family:
+
+1. Pole of an even Gaussian equals its Fourier-cosh integral by coefficient
+   cancellation `(2/π)√(π/a)√(π a) = 2`.
+2. Prime Fourier amplitudes `a^{-1/2} exp(-(log n)^2/(4a))` increase in `a`
+   on `(0, (log 2)^2/2)`, hence on `(0, 1/128]`.
+3. Binet remainder `|R| ≤ 1/(6y)` for `z = 1/4+iy`, so
+   `κ(t) ≥ log t - log(2π) - 4/(3t)` for `t ≥ 10`.
+4. If the second and fourth archimedean moments at `a=1/128` are positive,
+   then `J(a) = ∫ t^2 κ(t) e^{-a t^2} dt` is decreasing and positive to the
+   left, Archimedean increases as `a` falls, and
+   `L(e^{-a t^2}) ≥ L(e^{-t^2/128}) - 2(e^{1/512}-1) > 0` on `(0, 1/128]`.
+
+`m29_reached` stays false. A 0th-entry family is not `P`.
+
+## M29d recorded outcome
+
+Exact lemmas pass: pole-Fourier coefficient cancellation, Binet measure `1/24`,
+far-field `κ` lower bound at `t=10`, prime-amplitude monotonicity on
+`(0,1/128]`, and `2(e^{1/512}-1) < 1/200`.
+
+Certified at `a=1/128`: zeroth entry `lower=4.9163521e-1`, second archimedean
+moment `lower=7.7413325e2`, fourth moment `lower=2.3065676e5`. Both moments
+are strictly positive, so `J'(a0)<0` and there exists `δ>0` such that
+`L(e^{-a t^2})>0` on `(1/128-δ, 1/128]`. The flag
+`zeroth_on_(0,1/128]` is false: extending to `a=0` needs `M4>0` on the whole
+interval, which was not certified. `separating_algebra=false`,
+`m29_reached=false`. This is a local continuum theorem for one test function,
+not `P`.
+
+---
+
+# Next Boundary — M29e Hermite-Product Gram
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; 2x2 tight positive, 4x4 still inconclusive
+
+P is positivity of L on squares in the even Gaussian-polynomial algebra. That
+is the Gram of L(φ_j φ_k) for any basis of the even polynomials times a
+Gaussian. The monomial Hankel at a=1/128 has an unusable 4x4 width. Replace
+the basis by physicist Hermite products H_{2j}(t√a) H_{2k}(t√a) e^{-a t^2},
+evaluate each cancelled even polynomial as one integrand, and run interval
+LDL at dimensions 2 and 4 with the SH19a fine budgets.
+
+The two bases span the same space, so they have the same exact positivity.
+Only the enclosure can change. A certified negative pivot is either an
+evaluator bug or a counterexample to P; audit the formula before any RH
+claim. Finite positive sections do not set `m29_reached`.
+
+## M29e recorded outcome
+
+The Hermite product basis is exact: `H_2=4u^2-2`, and `H_0 H_0=1`. At `a=1/128`
+the `2x2` section is strictly positive with last pivot `[4.316, 8.851]` and
+`G_00` in `[0.4916, 0.5267]`, matching the monomial zeroth entry. The `4x4`
+is still inconclusive: later pivot `[-2.371e3, 1.060e3]`. That is about `10^7`
+narrower than the monomial `4x4` (`~5e10`) and still contains zero. Finite
+promotion is declined. `m29_reached=false`.
+
+Hermite coordinates improve enclosures. They do not produce a uniform
+certificate for `P`.
+
+---
+
+# Next Boundary — M29f T-Operator / Positive-Kernel Object
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; the missing object is named exactly, not constructed
+
+A uniform certificate for `P` is a rewrite `L(f*f) = ||Tf||^2` valid for every
+even polynomial `f`, with `T` built from the explicit formula. By the GNS
+construction this `T` exists iff `L` is a positive functional; by Hamburger's
+theorem positivity is exactly the existence of a positive measure `mu` (the
+positive kernel) with `L(f*f) = integral |f|^2 dmu`. Both objects are the same
+as `P` and exist iff RH.
+
+This boundary does not run dimension 6 and does not evaluate another finite
+Gram section. It freezes the object and proves the one exact statement the
+basis experiments cannot: finite sections in any basis cannot certify `P`.
+Obligations:
+
+1. GNS square-norm identity (structural, supplied): a positive `L` yields
+   `L(f*f)=||Tf||^2` with `Tf=[f]`.
+2. Hamburger measure criterion (supplied): `L` positive iff a positive kernel
+   measure exists.
+3. Finite-section insufficiency (exact, computed): for every `N`, exhibit an
+   exact rational moment sequence with Hankel sections `H_0..H_N` positive
+   semidefinite and `H_{N+1}` indefinite.
+
+Controls: a falsely declared positive kernel, a finite LDL table treated as a
+kernel, and a dimension-6 run are all declined. `m29_reached` is true only if a
+positive kernel is constructed on the separating algebra; otherwise the
+residual remains `PositiveFunctional(L_weil)` and the missing object is
+reported as `T: GNS operator / positive kernel mu`.
+
+## M29f recorded outcome
+
+The GNS square-norm and Hamburger criteria are stated as the supplied bridge
+(D-debt), not derived. The exact finite-section counterexample holds at every
+level `0..=6`: moments `m_k=1` for `k<=2N+1`, `m_{2N+2}=0` give all-ones
+Hankel sections `H_0..H_N` (rank-one squares, PSD by exact LDL) while
+`H_{N+1}` is indefinite under the witness `x=(1,...,1,-(N+1))`, with
+`x^T H x = -(N+1)^2 < 0`. So no finite Gram section, at any dimension, in any
+basis, certifies `P`.
+
+`dimension6_skipped=true`, `positive_kernel_constructed=false`,
+`m29_reached=false`, residual `PositiveFunctional(L_weil)`, missing object
+`T: GNS operator / positive kernel mu`. The object is the infinite positive
+kernel; it is identified, not constructed. Constructing it is RH.
+
+---
+
+# Next Boundary — M29g Reduction Audit
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; reduction valid with two named theorem obligations
+
+Re-expand the M29c `P ==> RH` chain with every premise explicit and check
+whether the reduction is exact. M29c's `apply_gns` collapsed `P ==> GNS` and
+`GNS ==> self-adjoint` into one rule, and `apply_correspondence` folded the
+spectral-correspondence theorem into a one-step rule. The audit splits these.
+
+Obligations, as a three-rule chain:
+
+1. `P` + full typed functional `=> GNS Hilbert space` (GNS theorem, valid).
+2. `GNS` + essential self-adjointness (ES) `=> self-adjoint operator`
+   (spectral theorem; ES is a determinacy/density theorem, not implied by `P`).
+3. `self-adjoint` + spectral correspondence (SC) on a separating class `=> RH`
+   (spectrum is the zero set, hence real).
+
+Controls: no `P`, zero-derived `P`, an incomplete functional, `GNS` without
+ES, self-adjointness without SC, and a finite non-separating class must all
+decline. `m29_reached` stays false: the audit certifies the reduction, not `P`.
+
+## M29g recorded outcome
+
+The full reduction `P ∧ ES ∧ SC ==> RH` closes; all six controls decline.
+`P` alone produces a GNS space but forces neither self-adjointness
+(`p_alone_forces_self_adjoint=false`) nor correspondence
+(`p_alone_forces_correspondence=false`). The reduction therefore rests on two
+supplied theorems, `EssentialSelfAdjointness` and `SpectralCorrespondence`,
+confirming M30a's open-assumption report rather than upgrading it. The M29c
+fact encoding over-collapsed these; SH13's explicit
+`CoordinateEssentiallySelfAdjoint` premise was the honest form.
+
+`reduction_valid_with_p_es_sc=true`, `m29_reached=false`, claim
+`P_implies_RH_only_with_ES_and_SC`. The chain is exact, and the only genuine
+residual remains `P` (equivalently RH).
+
+---
+
+# Next Boundary — M29h Explicit Kernel Decomposition
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; certificate template identified, not discharged
+
+Write the positive kernel `mu` (M29f) term-by-term and record the exact sign
+structure of the three explicit-formula pieces. This is the template any proof
+of `P` must fill, in the two Fourier-dual pictures:
+
+1. Pointwise square (the code's `P`): the pole term is `2 f(i/2)^2 >= 0` for
+   even `f`, while the archimedean and prime terms are signed.
+2. Convolution square (Weil's form): the prime term is
+   `-(1/pi) sum Lambda(n)/sqrt(n) |fhat(log n)|^2 <= 0`, while the pole and
+   archimedean terms are signed.
+3. Fourier duality: pointwise product maps to convolution of transforms and
+   conversely, so the pole's clean sign lives in one picture and the prime's
+   clean sign in the other; neither picture makes both clean at once.
+
+`P <=> RH` is exactly the cancellation between the positive and negative
+pieces. The template is identified; it is not discharged. `m29_reached` stays
+false and the residual remains `PositiveFunctional(L_weil)`.
+
+## M29h recorded outcome
+
+`pole_positive_pointwise=true` (exact: `f(i/2)` is real for even real `f`, so
+`2 f(i/2)^2 >= 0`), `prime_negative_convolution=true` (exact:
+`hhat(u)=|fhat(u)|^2 >= 0` for `h=f*f~`, scaled by `-1/pi`),
+`fourier_duality=true`, `archimedean_signed=true`,
+`certificate_template_identified=true`, `positive_kernel_constructed=false`,
+`m29_reached=false`. The positive kernel decomposes as positive pole plus
+signed archimedean minus negative prime; discharging `P` is exactly showing
+the positive part wins.
+
+---
+
+# Next Boundary — M29i Weil Jacobi Object
+
+**Pre-registration date:** 2026-08-13
+
+**Status:** executed; the object is the Weil pivot/Jacobi sequence
+
+`P` is an infinite family of Hankel-positivity conditions with no finite
+certificate (M29f). Convert it into one infinite object: the LDL pivot
+sequence `d_n` of the Weil Gram, equivalently the Jacobi coefficients
+`beta_n = d_{n+1}/d_n` of the orthonormal-polynomial recurrence of the Weil
+measure. The tridiagonal Jacobi matrix built from `beta_n` is the
+Hilbert-Polya operator in canonical form.
+
+The object puts both the residual `P` and the hidden premise ES of M29g into
+one computable recurrence:
+
+- `P` iff every pivot `d_n >= 0` (equivalently `beta_n >= 0`);
+- Carleman's condition `sum 1/sqrt(beta_n) = inf` forces determinacy, hence
+  essential self-adjointness (ES).
+
+Exact rational calibrations: a point mass has `beta_0 = 0` (degenerate); the
+uniform measure on `[0,1]` has `beta_n <= 1/(n+1)` hence Carleman divergence;
+the M29f counterexample has a negative pivot. The full Weil pivots are
+interval-enclosed, not computed here, and are the target, not a certificate.
+
+## M29i recorded outcome
+
+`point_mass_degenerate=true`, `uniform_positive=true`,
+`counterexample_negative_pivot=true`, `jacobi_object_is_pivot_sequence=true`,
+`carleman_links_p_to_es=true`, `weil_pivots_computed=false`,
+`m29_reached=false`. The Weil Jacobi object is the one place where `P`
+(positivity) and ES (determinacy) both live, as `beta_n >= 0` and a Carleman
+growth condition on the same sequence. It is identified and calibrated, not
+discharged.

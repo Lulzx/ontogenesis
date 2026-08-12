@@ -46,7 +46,11 @@ impl CanonicalValue {
             // Grids take the top bit (bit63), disjoint from numerals (bit62) and
             // structural hashes (neither). The key is a hash of the compact
             // (width,height,cells) identity — representation only, no semantics.
-            CanonicalValue::Grid { width, height, cells } => {
+            CanonicalValue::Grid {
+                width,
+                height,
+                cells,
+            } => {
                 let mut h = DefaultHasher::new();
                 h.write_u64(*width);
                 h.write_u64(*height);
@@ -231,7 +235,11 @@ fn recognize_compact(v: &Val, fuel: &mut Fuel) -> Result<Option<CanonicalValue>,
     }
     let width = width.unwrap_or(0);
     let height = rows.len() as u64;
-    Ok(Some(CanonicalValue::Grid { width, height, cells }))
+    Ok(Some(CanonicalValue::Grid {
+        width,
+        height,
+        cells,
+    }))
 }
 
 /// Observe `v` (a closed normal form, depth 0) and return its canonical key.
@@ -359,7 +367,11 @@ mod tests {
     #[test]
     fn recognize_plain_numerals() {
         for n in [0u64, 1, 2, 3, 6, 8] {
-            assert_eq!(canon_key(n), CanonicalValue::ChurchNumeral(n), "numeral {n}");
+            assert_eq!(
+                canon_key(n),
+                CanonicalValue::ChurchNumeral(n),
+                "numeral {n}"
+            );
         }
     }
 
@@ -367,7 +379,9 @@ mod tests {
     fn product_normalizes_and_recognizes() {
         // mul applied to two numerals must β-reduce to the product numeral, then
         // be recognized as ChurchNumeral(a*b) — NO arithmetic shortcut.
-        let mul = parse::parse_expr("λa.λb.λc.b(a(c))").and_then(|e| parse::to_term(&e)).unwrap();
+        let mul = parse::parse_expr("λa.λb.λc.b(a(c))")
+            .and_then(|e| parse::to_term(&e))
+            .unwrap();
         let empty: Env = Rc::new(Vec::new());
         let a = num(3);
         let b = num(4);
@@ -389,11 +403,12 @@ mod tests {
         let cons = parse::parse_expr("λc.λs.λf.λz.f(c)(s(f)(z))")
             .and_then(|e| parse::to_term(&e))
             .unwrap();
-        let nil = parse::parse_expr("λf.λz.z").and_then(|e| parse::to_term(&e)).unwrap();
-        items
-            .iter()
-            .rev()
-            .fold(nil, |acc, it| crate::term::app(crate::term::app(cons.clone(), it.clone()), acc))
+        let nil = parse::parse_expr("λf.λz.z")
+            .and_then(|e| parse::to_term(&e))
+            .unwrap();
+        items.iter().rev().fold(nil, |acc, it| {
+            crate::term::app(crate::term::app(cons.clone(), it.clone()), acc)
+        })
     }
 
     /// Build a grid term: a Church list of rows, each a Church list of numerals.
@@ -420,7 +435,11 @@ mod tests {
         let mut h = DefaultHasher::new();
         let cv = canonicalize(&v, &mut fuel, &mut h).unwrap();
         match cv {
-            CanonicalValue::Grid { width, height, ref cells } => {
+            CanonicalValue::Grid {
+                width,
+                height,
+                ref cells,
+            } => {
                 assert_eq!(width, 3);
                 assert_eq!(height, 2);
                 assert_eq!(*cells, vec![1, 2, 3, 3, 1, 2]);
