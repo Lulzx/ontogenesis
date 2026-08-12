@@ -137,3 +137,12 @@ removing the debt entry.
   critical-line/RH labels and hidden-truth information are not.
 - D12 is conditioned, not eliminated: the output is a labeled toy conjecture,
   not a proof.
+
+## M24 entry (pre-registered)
+
+- D12 is reused: the toy conjecture is the left side of the equivalence.
+- New debt D13: the candidate predicate grammar, novelty rule, and exhaustive
+  finite checker are supplied; equivalence labels and reflection/conjugation
+  templates are not.
+- D13 is conditioned, not eliminated: the certificates are finite case
+  analysis over a bounded lattice.

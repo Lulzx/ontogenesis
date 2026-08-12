@@ -81,6 +81,9 @@
 //!   invention and location recovery from exact arithmetic signals.
 //! - [`conjecture_world`]: Direction M23 toy RH-like conjecture -- frozen
 //!   scoring of the strongest supported predicate from partial zero evidence.
+//! - [`equivalence_world`]: Direction M24 toy-RH equivalence -- novel
+//!   equivalent predicate invention with exhaustive bidirectional proof
+//!   certificates.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -95,6 +98,7 @@ pub mod concept_migration;
 pub mod completion_world;
 pub mod coproduct_property;
 pub mod euclid_world;
+pub mod equivalence_world;
 pub mod euler_world;
 pub mod fixpoint;
 pub mod functional_world;

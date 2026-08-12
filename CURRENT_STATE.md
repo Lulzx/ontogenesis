@@ -166,7 +166,20 @@ description falls 48→13 integers. M23 reaches
 `L3_transferred_ontology_with_measured_utility` as a bounded toy conjecture;
 finite agreement is not proof. M24 remains unreached.
 
-Directions G and Mathematical Ontogenesis M1–M23 are implemented. M10 added
+## M24 toy-RH equivalence result
+
+A separately pre-registered experiment freezes a candidate predicate grammar
+and novelty rule, retains `Q: Xi(1-v,1-u)=0`, and checks `D -> Q` and
+`Q -> D` exhaustively on every frozen object. All three downstream objects
+pass both certificates; membership reasoning including the reported proof
+cost is cheaper (baseline 2,378 ops vs 943 Q ops plus 1,014 proof
+comparisons). Paraphrase, vacuous, corrupted, and asymmetric controls are
+declined; description falls 507→13 integers. M24 reaches
+`L3_transferred_ontology_with_measured_utility` as a bounded toy equivalence;
+the proof is finite case analysis, not an unrestricted kernel. M25 remains
+unreached.
+
+Directions G and Mathematical Ontogenesis M1–M24 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -185,6 +198,8 @@ locus as the diagonal zero set `u+v=1`. M22 adds hidden-zero recovery from
 exact oscillation signals using the retained oscillator dictionary and locus.
 M23 adds the frozen-scored toy conjecture that all hidden zeros satisfy
 `u+v=1`, validated on held-out zeros with an explicit falsifier.
+M24 adds a checked equivalent predicate `Q: Xi(1-v,1-u)=0` with exhaustive
+bidirectional certificates and measured membership savings.
 
 ## M12 result
 
@@ -242,5 +257,7 @@ cargo test -p supsearch --lib hidden_zeros_world
 cargo run --release --example hidden_zeros_world
 cargo test -p supsearch --lib conjecture_world
 cargo run --release --example conjecture_world
+cargo test -p supsearch --lib equivalence_world
+cargo run --release --example equivalence_world
 cargo test --workspace
 ```

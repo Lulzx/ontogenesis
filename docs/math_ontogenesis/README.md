@@ -6,9 +6,9 @@ stage was allowed to know, what the system actually searched or inferred,
 what evidence supports the result, and what is explicitly not claimed.
 
 Status is intentionally asymmetric. M1–M12 are reached experiments, M13b,
-M14c, M15b, M16, M17, M18, M19, M20, M21, M22, and M23 have integrity-
+M14c, M15b, M16, M17, M18, M19, M20, M21, M22, M23, and M24 have integrity-
 calibrated L3 results, M15 has an exact L2 result with a failed L3 gate, and
-M24–M30 remain unreached. A complete directory is not a claim of a completed
+M25–M30 remain unreached. A complete directory is not a claim of a completed
 ladder.
 
 | Milestone | Topic | Status |
@@ -37,7 +37,7 @@ ladder.
 | [M21](M21_CRITICAL_LOCUS.md) | Critical symmetry locus | reached — exact L3 toy critical locus |
 | [M22](M22_HIDDEN_ZEROS.md) | Hidden zeros | reached — exact L3 hidden toy zeros |
 | [M23](M23_TOY_RH.md) | Toy RH conjecture | reached — exact L3 toy conjecture (conjectured) |
-| [M24](M24_TOY_RH_EQUIVALENCE.md) | Toy-RH equivalence | not attempted |
+| [M24](M24_TOY_RH_EQUIVALENCE.md) | Toy-RH equivalence | reached — exact L3 toy equivalence |
 | [M25](M25_TOY_RH_OBJECT.md) | RH-making toy object | not attempted |
 | [M26](M26_REAL_ZETA_COMPLETION.md) | Real zeta completion | not attempted |
 | [M27](M27_CRITICAL_LINE.md) | Critical line | not attempted |

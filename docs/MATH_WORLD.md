@@ -322,4 +322,8 @@ retained diagonal, with evaluations falling 6,897→4,779 and description
 51→12. M23 generates the frozen-scored toy conjecture
 `all_zeros_have_u+v=1` from partial zero evidence, validates it on held-out
 zeros with falsifier `(-6,-6)`, and reaches L3 with evaluations falling
-845→374; the result remains conjectured, not proved. M24–M30 are not claimed.
+845→374; the result remains conjectured, not proved. M24 proves the toy-RH
+equivalence with `Q: Xi(1-v,1-u)=0` by exhaustive bidirectional certificates,
+reaches L3 with membership ops falling 2,378→943 plus 1,014 proof
+comparisons, and rejects paraphrases and vacuous predicates. M25–M30 are not
+claimed.
