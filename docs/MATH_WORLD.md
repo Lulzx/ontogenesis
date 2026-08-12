@@ -288,5 +288,7 @@ prime-exponent count modulo 2; an independent checker validates the valuation
 contradiction for `sqrt(2)`. It transfers to six nonsquare radicands, rejects
 perfect squares, lowers reasoning 21→7, and compresses seven proofs 49→14.
 
-The next boundary is M13: unordered root sets and checked multivariable
-polynomial relations are absent. M13–M30 are not claimed.
+M13b constructs permutation-invariant quadratic-root features and checks their
+coefficient laws at L2. M14's unconditional action policy failed its L3 gate;
+the separately frozen M14c conditional action–response schema reaches L3 with
+measured transfer and no negative transfer. M15–M30 are not claimed.

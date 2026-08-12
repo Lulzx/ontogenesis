@@ -53,6 +53,10 @@
 //!   finite-prime-list escape certificate.
 //! - [`irrational_world`]: Direction M12 intermediate-representation invention
 //!   and a checked prime-valuation contradiction for square roots.
+//! - [`polynomial_world`]: Direction M13b permutation-invariant root-feature
+//!   invention with exact multivariable factor-ideal checking.
+//! - [`symmetry_world`]: Direction M14 generic transformation-action invention,
+//!   exact response checking, and measured cross-domain reuse.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -69,6 +73,8 @@ pub mod fixpoint;
 pub mod feature_invention;
 pub mod initial_algebra;
 pub mod irrational_world;
+pub mod polynomial_world;
+pub mod symmetry_world;
 pub mod learned_allocation;
 pub mod learned_context;
 pub mod nbe;

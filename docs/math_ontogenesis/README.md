@@ -5,10 +5,9 @@ Mathematical Ontogenesis ladder. Each file answers four questions: what the
 stage was allowed to know, what the system actually searched or inferred,
 what evidence supports the result, and what is explicitly not claimed.
 
-Status is intentionally asymmetric. M1–M12 are reached experiments. M13–M30
-are unreached milestones whose files document their dependency chain and the
-evidence required before they may be marked complete. A complete directory is
-not a claim of a completed ladder.
+Status is intentionally asymmetric. M1–M12 are reached experiments, M13b and
+M14c has an integrity-calibrated L3 result, and M15–M30 remain unreached. A
+complete directory is not a claim of a completed ladder.
 
 | Milestone | Topic | Status |
 |---|---|---|
@@ -24,8 +23,8 @@ not a claim of a completed ladder.
 | [M10](M10_EQUIVALENT_STATEMENT.md) | Equivalent theorem statement | reached — formally checked modular |
 | [M11](M11_EUCLID_PROOF.md) | Euclid's proof | reached — checked finite-list schema |
 | [M12](M12_SQRT2_CONTRADICTION.md) | Irrationality of sqrt(2) | reached — checked valuation contradiction |
-| [M13](M13_VIETA_RELATIONS.md) | Polynomial root relations | boundary — not reached |
-| [M14](M14_SYMMETRY.md) | Symmetry | not attempted |
+| [M13](M13_VIETA_RELATIONS.md) | Polynomial root relations | M13b reached — exact L2 |
+| [M14](M14_SYMMETRY.md) | Symmetry | M14c reached — exact L3 |
 | [M15](M15_FOURIER.md) | Fourier representation | not attempted |
 | [M16](M16_TOY_SPECTRAL_THEOREM.md) | Toy spectral theorem | not attempted |
 | [M17](M17_EULER_PRODUCT.md) | Finite Euler product | not attempted |
