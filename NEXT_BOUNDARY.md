@@ -571,3 +571,172 @@ control is routed or accepted as exact, aggregate checker calls do not fall,
 or the candidate sets differ between conditions. The already-observed M15
 tasks may be reported only as historical context and cannot be substituted
 into this suite. Any post-output change creates M15c and preserves this run.
+
+---
+
+# Next Boundary — M16 Toy Spectral Regularity
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M16 implementation; executed without amendment
+
+## Recorded outcome
+
+M16 passed the frozen L3 gate. From unlabelled transition observations and a
+generic scalar predicate grammar, the learner retained `a01-a10=0` at
+predicate index 30 (size 3, one of 106,513 semantically unique programs). The
+predicate separates all ten training matrices exactly; every admitted matrix
+has a checked certificate with two orthogonal exact latent directions, and
+every control has no certificate. On the nine frozen downstream tasks, all
+five compatible matrices are admitted and accelerated (aggregate certificate
+checks 109,039→83,182, measured gain 25,857), every rational spectral
+decomposition checks exactly, and all four controls are declined with
+identical exhaustive `no_solution` counts. Long-horizon operation cost falls
+from 180 to 59 on every compatible task. False-positive routes and negative
+transfer are both zero. Claim level is
+`L3_transferred_ontology_with_measured_utility`. No predicate grammar, task,
+threshold, ordering, or candidate space was changed after observing this
+outcome.
+
+## Motivation and intended claim
+
+M9 infers small integer matrices from transitions and invents scaled latent
+directions for individual transforms, but it does not discover why some
+matrices admit two orthogonal latent directions and a checked spectral
+decomposition. M16 asks the system to synthesize an unlabelled structural
+predicate over matrix entries from transition observations, retain it only if
+it separates matrices that admit two exact orthogonal latent directions from
+matrices that do not, and use it to accelerate frozen long-horizon reasoning.
+“Symmetric,” “orthogonal,” “eigenvalue,” “eigenvector,” and
+“spectral decomposition” are not primitives or candidate labels.
+
+Maximum claim: `L3_transferred_ontology_with_measured_utility`, conditional on
+exact validation, a retained structural predicate, acceleration of every
+frozen compatible family, and exact decline of every incompatible control.
+This is not an L4 claim and is not a general real spectral theorem: the toy
+domain is bounded integer matrices with exact integer/rational certificates.
+
+## Frozen substrate
+
+- Hidden objects are integer 2×2 matrices with entries in `[-3,3]`.
+- Observations are one-step vector transitions on the fixed probe order
+  `(1,0),(0,1),(1,1),(1,-1)`.
+- Matrix inference enumerates entries `a00,a01,a10,a11` in `[-3,3]`
+  lexicographically and accepts a task only when exactly one matrix matches
+  every transition exactly.
+- Direction universe: primitive vectors `(x,y)` with `x,y` in `[-3,3]`, not
+  zero, `gcd(|x|,|y|)=1`, and first nonzero coordinate positive, ordered
+  lexicographically.
+- Scale universe: integers `-6..=6`, ordered ascending.
+- A certificate is a pair of distinct directions plus two scales; it is valid
+  exactly when both eigen equations hold, the direction dot product is zero,
+  and every power `n=1..=8` satisfies `A^n d = s^n d` exactly for both
+  directions.
+- Long-horizon probes are horizon 10 on the two latent directions and the
+  generic vector `(1,3)`.
+
+## Frozen predicate language
+
+Structural predicates are scalar programs over the four inferred matrix
+entries, with constants `-2,-1,0,1,2` and operations `+,-,*`. A predicate is
+true exactly when its integer value is zero. Programs are enumerated by AST
+size through 5, then lexicographically, and deduplicated by exact behavior on
+all `7^4=2401` matrices in `[-3,3]^4`. No symmetry, equality-of-entries,
+orthogonality, or spectral constructor exists in the grammar.
+
+## Frozen discovery task
+
+The learner receives transitions for the following matrices in this order,
+without family labels:
+
+- compatible: `[[2,1],[1,2]]`, `[[1,2],[2,1]]`, `[[0,1],[1,0]]`,
+  `[[3,2],[2,3]]`, `[[2,0],[0,3]]`, `[[1,0],[0,1]]`;
+- incompatible: `[[1,1],[0,2]]`, `[[0,-1],[1,0]]`, `[[1,1],[0,1]]`,
+  `[[2,1],[0,2]]`.
+
+For each matrix the checker computes whether a valid certificate exists. The
+retained predicate is the first semantically unique program whose true/false
+split exactly matches the checker outcome on every training matrix. If no such
+predicate exists, the boundary fails. The winner is expected to be equivalent
+to `a01-a10=0`; the grammar may also expose many irrelevant and partially
+separating predicates.
+
+## Retained spectral object
+
+For every admitted matrix, the checker finds a valid certificate and verifies
+the exact rational decomposition
+`A = (s1/(d1·d1)) d1 d1ᵀ + (s2/(d2·d2)) d2 d2ᵀ` entrywise. The predicate,
+the certificate search order, and this decomposition checker are retained;
+no new matrix or direction is learned from downstream tasks.
+
+## Frozen downstream suite
+
+None of these matrices appear in discovery:
+
+1. `[[3,1],[1,3]]`;
+2. `[[3,2],[2,0]]`;
+3. `[[0,2],[2,3]]`;
+4. `[[3,0],[0,1]]`;
+5. `[[2,0],[0,2]]` (repeated eigenvalue, compatible);
+6. `[[0,-1],[1,0]]` (complex-eigenvalue control);
+7. `[[1,1],[0,1]]` (defective control);
+8. `[[2,1],[0,2]]` (repeated defective control);
+9. `[[1,1],[0,2]]` (two latent directions but non-orthogonal control).
+
+## Compared conditions and accounting
+
+Both conditions infer the same hidden matrix from the same transitions;
+common inference checks are reported separately.
+
+- **Baseline:** enumerate every direction-pair/scale certificate in canonical
+  order until a valid certificate or exhaustive `no_solution`.
+- **Acquired:** evaluate the retained predicate on the inferred matrix; if
+  admitted, enumerate every orthogonal direction pair first (preserving
+  baseline order inside each group), otherwise run the identical baseline.
+
+Report per task: common inference checks, baseline certificate checks,
+acquired certificate checks, route, exact winner or `no_solution`,
+decomposition validity, and negative transfer. Long-horizon operation counts
+use a deterministic interpreter in which multiplication and
+addition/subtraction each cost one unit:
+
+- baseline: `6` operations per matrix-vector step, so `60` per vector over
+  horizon 10 and `180` for the three probe vectors;
+- acquired directions: `H+2` operations per direction (power update plus
+  scaling), so `2H+4` total;
+- acquired generic vector: `9` operations for the fixed 2×2 coefficient solve,
+  `2H` power updates, and `6` reconstruction operations, so `2H+15` total;
+- acquired total over the three probes: `4H+19`, or `59` at horizon 10.
+
+Success requires the retained predicate to separate training exactly, every
+compatible downstream matrix to be admitted with strictly fewer acquired
+certificate checks, exact decomposition and long-horizon predictions, every
+control to be declined with identical `no_solution` counts, zero false-positive
+routes, zero negative-transfer tasks, lower aggregate certificate checks, and
+lower long-horizon operations on every compatible task.
+
+## Supplied-ontology ledger
+
+- **Supplied:** addressable matrix-entry observations after inference,
+  transition probes, scalar arithmetic predicate grammar, bounded direction
+  and scale universes, exact certificate checker, exact rational decomposition
+  checker, and the objective that orthogonal-latent regularity is valuable.
+- **Acquired:** the structural predicate and the orthogonal-first certificate
+  ordering over the identical candidate set.
+- **Not supplied:** symmetric/orthogonal/eigen labels, entry-equality
+  constructors, spectral templates, target-shaped predicate shapes, or
+  checker information flow beyond boolean acceptance.
+- **Accounting:** actual checker invocations and deterministic interpreter
+  operations are distinct labeled units.
+
+## Controls and falsification
+
+M16 fails L3 if no exact separating predicate is found, any compatible task is
+not admitted or not accelerated, any control is admitted or accepted as a
+valid certificate, aggregate checks do not fall, candidate sets differ between
+conditions, or the retained decomposition fails on any compatible task. A
+post-output change creates M16b and preserves this run.

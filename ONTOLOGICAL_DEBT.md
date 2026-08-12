@@ -48,3 +48,19 @@ removing the debt entry.
   conditioned, not eliminated.
 - D4 remains supplied: bounded second-order recurrence execution still
   generates the coordinate atoms; M15b learns no new coordinates.
+
+## M16 entry (pre-registered)
+
+- D1 is reused in a new form: the inferred matrix is exposed as four
+  addressable integer entries after transition inference.
+- D2 supplies the conditional route: the retained predicate is evaluated on
+  inferred entries before certificate search, and both conditions share the
+  same transition observations.
+- D3 is extended to spectral regularity: admitting matrices with two exact
+  orthogonal latent directions is an explicit frozen objective.
+- New debt D5: matrix-entry addressability and the bounded integer matrix,
+  direction, and scale universes are supplied. "Symmetric", "orthogonal",
+  "eigenvalue", and "spectral decomposition" are not supplied as labels or
+  constructors.
+- M16 does not eliminate D5; it constructs an exact toy predicate inside the
+  supplied substrate.

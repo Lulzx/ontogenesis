@@ -59,16 +59,33 @@ impulse/ramp/corruption/noise exact controls are rejected, and the constant
 control keeps its one-atom explanation. M15b reaches
 `L3_transferred_ontology_with_measured_utility`; recurrence generation,
 closed-shift preference, and probe routing remain explicitly supplied. M16
-remains unreached.
+remains the next milestone.
 
-Directions G and Mathematical Ontogenesis M1–M15b are implemented. M10 added
+## M16 toy spectral regularity result
+
+A separately pre-registered experiment infers hidden integer matrices from
+transitions and searches unlabelled scalar predicates over the inferred
+entries. The retained predicate `a01-a10=0` exactly separates matrices with
+two orthogonal exact latent directions from complex-eigenvalue, defective,
+repeated-defective, and non-orthogonal controls. On nine frozen downstream
+tasks, all five compatible matrices are admitted and accelerated
+(109,039→83,182 certificate checks), every rational spectral decomposition
+checks exactly, and all four controls are declined with exhaustive
+`no_solution` preserved. Long-horizon operations fall 180→59; false-positive
+routes and negative transfer are zero. M16 reaches
+`L3_transferred_ontology_with_measured_utility`; matrix-entry addressability,
+the predicate grammar, transition probes, and the spectral objective remain
+supplied. M17 remains unreached.
+
+Directions G and Mathematical Ontogenesis M1–M16 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
 exact multivariable factor-ideal certificates. M14/M14c add generic
 transformation-action invention with conditional response routing, and
 M15/M15b add recurrence-generated oscillatory coordinates with conditional
-closed-shift routing.
+closed-shift routing. M16 adds unlabelled structural predicate invention with
+checked orthogonal latent directions and rational spectral decomposition.
 
 ## M12 result
 
@@ -110,5 +127,7 @@ cargo test -p supsearch --lib symmetry_world
 cargo run --release --example symmetry_world
 cargo test -p supsearch --lib fourier_world
 cargo run --release --example fourier_world
+cargo test -p supsearch --lib spectral_world
+cargo run --release --example spectral_world
 cargo test --workspace
 ```

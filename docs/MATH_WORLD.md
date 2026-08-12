@@ -295,4 +295,9 @@ measured transfer and no negative transfer. M15 constructs exact recurrence-
 generated oscillatory coordinates at L2 but fails its L3 M9-transfer gate; the
 separately frozen M15b conditional closed-shift routing repair reaches L3 with
 aggregate proposal checks falling 223,737→102,111 and zero negative transfer.
-M16–M30 are not claimed.
+M16 infers hidden integer matrices from transitions, invents the unlabelled
+structural predicate `a01-a10=0`, verifies two orthogonal latent directions
+and a rational spectral decomposition for every admitted matrix, and reaches
+L3 with certificate checks falling 109,039→83,182 and zero negative transfer.
+It is a bounded exact integer toy spectral theorem, not a general real spectral
+theorem. M17–M30 are not claimed.

@@ -60,6 +60,9 @@
 //! - [`fourier_world`]: Direction M15/M15b recurrence-generated oscillatory
 //!   coordinate invention with exact shift dynamics, M9 meta-transfer, and
 //!   conditional closed-shift routing.
+//! - [`spectral_world`]: Direction M16 toy spectral regularity -- unlabelled
+//!   structural predicate invention with exact orthogonal latent directions,
+//!   rational decomposition checking, and conditional long-horizon routing.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -93,6 +96,7 @@ pub mod recursion_search;
 pub mod recursive_signature;
 pub mod representation;
 pub mod search_accounting;
+pub mod spectral_world;
 pub mod term;
 pub mod transform;
 pub mod typed;
