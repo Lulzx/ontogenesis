@@ -311,4 +311,7 @@ declines corrupted/missing/extra/`s=0` controls; it reaches L3 as a bounded
 toy, not an analytic zeta function. M19 discovers the non-identity reflection
 `T(s)=1-s` and factor `(-1)^k` for the completed toy object, verifies
 `Xi(1-s)=(-1)^k Xi(s)` exactly, and reaches L3 with operations falling
-212→148 and description 72→14. M20–M30 are not claimed.
+212→148 and description 72→14. M20 completes the raw toy object with
+`G(s)=C^{-1}B'`, reaches the maximally simple symmetry `Xi(1-s)=Xi(s)` with
+operations falling 672→432 and description 72→15, and rejects monomial and
+constant rescalings. M21–M30 are not claimed.

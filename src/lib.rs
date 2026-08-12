@@ -72,6 +72,9 @@
 //! - [`functional_world`]: Direction M19 toy functional equation -- affine
 //!   reflection discovery and factor-program invention over exact completed
 //!   object values.
+//! - [`completion_world`]: Direction M20 toy completed object -- auxiliary
+//!   completion-factor invention for the maximally simple symmetry
+//!   Xi(1-s)=Xi(s).
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -82,6 +85,7 @@ pub mod causal_ontology;
 pub mod contextual_allocation;
 pub mod contextual_guidance;
 pub mod concept_migration;
+pub mod completion_world;
 pub mod coproduct_property;
 pub mod euclid_world;
 pub mod euler_world;

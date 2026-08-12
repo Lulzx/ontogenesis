@@ -1205,3 +1205,138 @@ M19 fails L3 if no functional-equation schema is retained, any compatible task
 is not exact or not accelerated, any control is accepted, aggregate
 operations or description cost do not fall, or accounting mixes units. Any
 post-output change creates M19b and preserves this run.
+
+---
+
+# Next Boundary — M20 Toy Completed Object
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M20 implementation; executed without amendment
+
+## Recorded outcome
+
+M20 passed the frozen L3 gate. From exact values of the raw object
+`R(s)=prod_p C(p,s)B(p,s)`, the learner retained the completion
+`G(s)=prod_p C(p,s)^{-1}B'(p,s)` (score `(2,2)`, first of 455 exact
+completions). The checker verifies that `Ξ(s)=G(s)R(s)` satisfies the maximally
+simple symmetry `Ξ(1-s)=Ξ(s)`, is nonconstant on the training grid, and
+rejects monomial/constant rescalings. All three frozen downstream objects are
+exact and accelerated (aggregate operations 672→432, measured gain 240);
+asymmetric-universe and corrupted-raw controls are declined with baseline
+counts preserved. Description cost falls 72→15 stored integers.
+False-positive acceptances and negative-transfer tasks are both zero. Claim
+level is `L3_transferred_ontology_with_measured_utility`. No grammar, task,
+threshold, ordering, or candidate space was changed after observing this
+outcome.
+
+## Motivation and intended claim
+
+M19 retained `Xi(1-s)=(-1)^k Xi(s)` for the toy factor `C(p,s)=p^{1-s}-p^s`.
+M20 asks whether, given a raw toy object with an awkward signed reflection,
+the system can construct auxiliary completion factors so the completed object
+has the maximally simple symmetry `Ξ(1-s)=Ξ(s)`. “Completion,” “factor,”
+“symmetric,” and “normalization” are not supplied as constructors.
+
+Maximum claim: `L3_transferred_ontology_with_measured_utility`, conditional on
+exact validation on every frozen compatible object, lower actual evaluation
+work, exact decline of every control, and zero negative transfer. This is a
+bounded exact toy completion, not an analytic-completion theorem.
+
+## Frozen substrate
+
+- The raw toy object is `R(s)=prod_{p in P} C(p,s)*B(p,s)` with
+  `C(p,s)=p^{1-s}-p^s` and `B(p,s)=p^s+1`, evaluated with exact rational
+  powers for integer `s`. `P` and `k` are inferred from the extensional
+  universe as in M18.
+- Training objects are `P=[2,3,5]` and `P=[2,3,5,7]`; raw values are observed
+  at `s in {-4,-3,-2,2,3,4}`.
+- Completion-factor grammar per prime:
+  - atom `C`: `p^{1-s}-p^s`;
+  - atom `B`: `p^s+1`;
+  - atom `B'`: `p^{1-s}+1`;
+  - monomial atoms `p^{a*s+b}` with `a,b in [-2,2]`;
+  - constants `-1,1`.
+  A candidate completion is `G(s)=prod_p prod_atom atom^{e_atom}` with
+  exponents `e_atom in [-2,2]`, at most four atoms per prime, enumerated
+  deterministically and deduplicated by exact behavior on the training grid.
+
+## Exact checker
+
+For a submitted completion `G`, the checker:
+
+1. infers `P` and verifies the universe equals `U(P,2)`;
+2. recomputes `R` and `G` directly with exact rational powers;
+3. verifies `Ξ(s)=G(s)*R(s)` satisfies `Ξ(1-s)=Ξ(s)` for every integer
+   `s in [-6,6]` on every training object;
+4. rejects completions that are monomial rescalings or constant rescalings,
+   including completions whose completed object is constant over the training
+   grid (they cannot be measured as a genuine completion);
+5. accepts only the lexicographically first candidate by (atom count, total
+   exponent magnitude) among exact completions.
+
+The checker returns boolean acceptance only; no residual, normal form, or
+counterexample flows back into ranking.
+
+## Frozen downstream suite
+
+None of these objects appear in training:
+
+1. `P=[2,3,5,7,11]`;
+2. `P=[3,5,7]`;
+3. `P=[2,5,11]`.
+
+Each downstream object is evaluated on the reflection pairs
+`(s,1-s)` for `s in {-4,-3,6,7}` (eight held-out points).
+
+Controls, all incompatible:
+
+1. monomial completion `G(s)=prod_p p^s` must fail;
+2. corrupted raw value (one `R` value incremented by one) must fail;
+3. asymmetric universe (one element removed from `U(P,E)`) must fail;
+4. incomplete completion (only the `C` atom) must fail.
+
+## Compared conditions and accounting
+
+- **Baseline:** evaluate `R` and `G` at all eight held-out points.
+- **Acquired:** evaluate `R` and `G` on one member of each reflection pair and
+  reuse the completed value on the other member.
+- Cost per `R(s)` evaluation is `2k` rational power evaluations plus `2k-1`
+  multiplications; per `G(s)` evaluation it is the product of its atom
+  evaluations; atom evaluation costs are counted as their arithmetic node
+  counts.
+- Description cost is stored integers: raw stores eight rationals per
+  downstream object plus the raw-object program; acquired stores the
+  completion atoms, exponents, and inferred `P`.
+
+Report per task: irreducible count, inference checks, checker calls, baseline
+operations, acquired operations, exact symmetry, false-positive acceptance,
+and negative transfer. Success requires exact symmetry on every compatible
+task, strictly fewer acquired operations, exact decline of every control,
+zero false-positive acceptances, zero negative-transfer tasks, and lower
+aggregate operations and description cost.
+
+## Supplied-ontology ledger
+
+- **Supplied:** the raw object definition, M19's factor atoms, exact rational
+  powers, the bounded exponent grammar, and the exact checker.
+- **Acquired:** the completion factor and the simple-symmetry schema.
+- **Not supplied:** completion labels, normalization constructors, symmetry
+  templates, or checker information beyond boolean acceptance.
+- **Accounting:** operations, stored integers, inference checks, and checker
+  calls are distinct labeled units.
+
+## Controls and ablations
+
+- Trivial monomial/constant rescalings must fail.
+- A weaker grammar without the `B'` atom must fail to complete the raw object.
+- Corrupted values and asymmetric universes must be declined.
+
+M20 fails L3 if no completion is retained, any compatible task is not exact or
+not accelerated, any control is accepted, aggregate operations or description
+cost do not fall, or accounting mixes units. Any post-output change creates
+M20b and preserves this run.

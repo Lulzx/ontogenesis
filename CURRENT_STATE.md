@@ -116,7 +116,20 @@ description falls 72→14 integers. M19 reaches
 `L3_transferred_ontology_with_measured_utility`; the affine grammar, power
 primitive, and exact checker remain supplied. M20 remains unreached.
 
-Directions G and Mathematical Ontogenesis M1–M19 are implemented. M10 added
+## M20 toy completed object result
+
+A separately pre-registered experiment fixes a bounded completion-factor
+grammar over M19's exact power atoms and retains
+`G(s)=prod_p C(p,s)^{-1}B'(p,s)`. The completed object satisfies
+`Ξ(1-s)=Ξ(s)` exactly, is nonconstant, and is the first non-trivial exact
+completion by score. Three unseen prime sets transfer with operations falling
+672→432; asymmetric-universe and corrupted-raw controls are declined and
+description falls 72→15 integers. M20 reaches
+`L3_transferred_ontology_with_measured_utility`; the raw-object definition,
+factor atoms, power primitive, and exact checker remain supplied. M21 remains
+unreached.
+
+Directions G and Mathematical Ontogenesis M1–M20 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -129,7 +142,8 @@ adds irreducible inference and local-factor invention with exact finite Euler
 product transfer. M18 adds the exponent-parameterized toy zeta object with
 exact integer special values and formal pole/reflection certificates. M19 adds
 the toy functional equation over the completed object with retained
-reflection and factor programs.
+reflection and factor programs. M20 adds the completed-object construction
+with the maximally simple symmetry `Ξ(1-s)=Ξ(s)`.
 
 ## M12 result
 
@@ -179,5 +193,7 @@ cargo test -p supsearch --lib zeta_world
 cargo run --release --example zeta_world
 cargo test -p supsearch --lib functional_world
 cargo run --release --example functional_world
+cargo test -p supsearch --lib completion_world
+cargo run --release --example completion_world
 cargo test --workspace
 ```

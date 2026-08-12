@@ -99,3 +99,14 @@ removing the debt entry.
   reflection constructors are not.
 - D8 is conditioned, not eliminated: the result is a bounded exact toy
   functional equation.
+
+## M20 entry (pre-registered)
+
+- D3 is extended again: maximally simple symmetry is the completion score.
+- D8 is reused: exact rational power atoms and the completed-object checker
+  are supplied.
+- New debt D9: the raw object definition and the bounded exponent grammar are
+  supplied; completion labels, normalization constructors, and symmetry
+  templates are not.
+- D9 is conditioned, not eliminated: the result is a bounded exact toy
+  completion.
