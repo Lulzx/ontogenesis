@@ -75,9 +75,22 @@ checks exactly, and all four controls are declined with exhaustive
 routes and negative transfer are zero. M16 reaches
 `L3_transferred_ontology_with_measured_utility`; matrix-entry addressability,
 the predicate grammar, transition probes, and the spectral objective remain
-supplied. M17 remains unreached.
+supplied. M17 remains the next milestone.
 
-Directions G and Mathematical Ontogenesis M1–M16 are implemented. M10 added
+## M17 finite Euler product result
+
+A separately pre-registered experiment supplies squarefree integer universes
+extensionally, infers irreducibles from multiplication behavior, and retains
+the local factor `1+r` from a generic univariate grammar. The exact checker
+verifies that subset products of `L(p)-1` reproduce every universe element
+exactly once and that `prod_p L(p)` equals the global sum. All three frozen
+unseen universes pass and accelerate (special-value operations 217→59);
+missing-composite, non-squarefree, duplicate, and removed-element controls are
+declined with baseline costs. M17 reaches
+`L3_transferred_ontology_with_measured_utility`; extensional universes, the
+grammar, and the exact checker remain supplied. M18 remains unreached.
+
+Directions G and Mathematical Ontogenesis M1–M17 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -85,7 +98,9 @@ exact multivariable factor-ideal certificates. M14/M14c add generic
 transformation-action invention with conditional response routing, and
 M15/M15b add recurrence-generated oscillatory coordinates with conditional
 closed-shift routing. M16 adds unlabelled structural predicate invention with
-checked orthogonal latent directions and rational spectral decomposition.
+checked orthogonal latent directions and rational spectral decomposition. M17
+adds irreducible inference and local-factor invention with exact finite Euler
+product transfer.
 
 ## M12 result
 
@@ -129,5 +144,7 @@ cargo test -p supsearch --lib fourier_world
 cargo run --release --example fourier_world
 cargo test -p supsearch --lib spectral_world
 cargo run --release --example spectral_world
+cargo test -p supsearch --lib euler_world
+cargo run --release --example euler_world
 cargo test --workspace
 ```

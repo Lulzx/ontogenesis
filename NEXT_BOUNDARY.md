@@ -740,3 +740,158 @@ not admitted or not accelerated, any control is admitted or accepted as a
 valid certificate, aggregate checks do not fall, candidate sets differ between
 conditions, or the retained decomposition fails on any compatible task. A
 post-output change creates M16b and preserves this run.
+
+---
+
+# Next Boundary — M17 Finite Euler Product
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M17 implementation; executed without amendment
+
+## Recorded outcome
+
+M17 passed the frozen L3 gate. From two extensional squarefree universes, the
+learner inferred irreducible factors from raw multiplication behavior and
+retained the local factor `1+r` at candidate index 8 of 2,934 semantically
+unique grammar programs. The exact checker verifies that subset products of
+`L(p)-1` reproduce the universe as a multiset and that `prod_p L(p)` equals the
+global sum. All three frozen compatible universes are accepted and accelerated
+(aggregate special-value operations 217→59, measured gain 158); all four
+incompatible controls (missing composite, non-squarefree, duplicate, and
+removed element) are declined with acquired operations equal to baseline.
+False-positive acceptances and negative-transfer tasks are both zero. Claim
+level is `L3_transferred_ontology_with_measured_utility`. No grammar, task,
+threshold, ordering, or candidate space was changed after observing this
+outcome.
+
+## Motivation and intended claim
+
+M17 asks whether, from an extensional finite arithmetic universe, the system
+can infer primitive factors from multiplication behavior, construct local
+factors in a generic arithmetic grammar, and retain the identity that the
+product of those local factors expands to a globally defined special value,
+accounting for every universe object exactly once. “Prime,” “irreducible,”
+“local factor,” and “Euler product” are not primitives or candidate labels.
+
+Maximum claim: `L3_transferred_ontology_with_measured_utility`, conditional on
+exact validation on every frozen compatible universe, lower actual
+special-value operations, exact decline of every incompatible control, and
+zero negative transfer. This is not an L4 claim: the finite universe and the
+exact checker are supplied meta-ontology.
+
+## Frozen substrate
+
+- A finite universe `U` is a sorted multiset of positive integers supplied
+  extensionally. Generation metadata, primitive sets, and factorizations are
+  not passed to proposal search.
+- Compatible universes are exactly the squarefree products of a hidden set of
+  primitive factors `P` (the factors themselves are not supplied). Training
+  universes are `P=[2,3,5]` (8 elements) and `P=[2,3,5,7]` (16 elements).
+- The global special value is the exact integer `S = sum_{u in U} u`.
+- Primitive-factor inference: `n>1` is irreducible exactly when no pair
+  `a,b` in `U` with `a>1`, `b>1`, and `a*b=n` exists. Inference performs one
+  deterministic multiplication/equality check per pair examined and reports
+  that count separately; it never receives the hidden factors.
+- Local factors are scalar programs over one variable `r`, with constants
+  `1,2,3`, atom `r`, operations `+,-,*`, and AST size through 5. Programs are
+  enumerated by AST size, then deterministic construction order, and
+  deduplicated by exact univariate integer polynomial normal form.
+- The retained local factor is the first semantically unique program whose
+  product identity validates on every training universe.
+
+## Exact checker
+
+For a candidate local factor `L` and a universe `U`, the checker:
+
+1. recomputes the irreducible factors of `U` from raw multiplication
+   behavior;
+2. forms `a_p = L(p)-1` for every irreducible `p`;
+3. expands subset products of the `a_p` values and requires the result to
+   equal `U` as an exact multiset, so every global object is accounted for
+   exactly once;
+4. independently computes `prod_p L(p)` and requires it to equal `S`.
+
+Pre-registration clarification made before the frozen run: the earlier wording
+asked for subset products of `L(p)` directly, which no local factor can satisfy
+while also matching `S`; the corrected checker is the Euler divisor-product
+identity `prod_p L(p) = sum_{u in U} u` with terms `a_p = L(p)-1`. This
+clarification is recorded here and no outcome was observed before it.
+
+The checker returns boolean acceptance only. Normal forms, factors, partial
+expansions, and counterexamples do not flow back into proposal ranking.
+
+## Frozen downstream suite
+
+None of these universes appear in training:
+
+1. `P=[2,3,5,7,11]` (32 elements);
+2. `P=[3,5,7,11,13]` (32 elements, no factor 2);
+3. `P=[2,3,5,7,11,13,17]` (128 elements).
+
+Controls, all incompatible:
+
+1. `missing_composite`: `U={1,2,3,5}`;
+2. `non_squarefree`: `U={1,...,12}`;
+3. `duplicate`: the `P=[2,3,5]` universe with one copy of `6` duplicated;
+4. `one_removed`: the `P=[2,3,5]` universe with `6` removed.
+
+## Compared conditions and accounting
+
+- **Baseline:** compute `S` by summing all universe elements; cost is
+  `|U|-1` addition operations.
+- **Acquired:** infer the irreducibles (reported separately), evaluate the
+  retained local factor on each irreducible (one addition per factor), and
+  multiply the local-factor values (`k-1` multiplications), for
+  `2k-1` special-value operations. The exact checker then accepts or declines
+  the identity; declined tasks fall back to the identical baseline sum and
+  their failed product evaluation is reported as separate checker/probe work.
+
+Report per task: universe cardinality, irreducible count, inference checks,
+checker calls, baseline operations, acquired operations, accepted identity,
+false-positive acceptance, and negative transfer. Probe/checker units are
+never combined numerically with special-value operations.
+
+Success requires:
+
+- a retained local factor found from training alone;
+- exact product identity on all three compatible downstream universes;
+- strictly fewer acquired than baseline special-value operations on every
+  compatible universe;
+- every control declined with acquired operations equal to baseline;
+- zero false-positive acceptances and zero negative-transfer tasks;
+- lower aggregate special-value operations.
+
+## Supplied-ontology ledger
+
+- **Supplied:** extensional integer universe, integer multiplication and
+  addition semantics, the bounded local-factor grammar, the exact expansion
+  checker, and the objective that a product identity accounting for every
+  object is valuable.
+- **Acquired:** the irreducible classification, the local-factor program, and
+  the product/special-value schema.
+- **Not supplied:** prime lists, primality predicates, irreducible labels,
+  Euler-factor templates, exponent bounds, or checker information beyond
+  boolean acceptance.
+- **Accounting:** actual inference checks, checker calls, and special-value
+  operations are distinct labeled units.
+
+## Controls and ablations
+
+- `primes_supplied_ablation`: a stronger substrate that receives the hidden
+  factors directly must pass, but this does not establish invention.
+- `single_atom_grammar`: a weaker substrate restricted to single atoms must
+  fail to find an exact local factor on the frozen training universes.
+- Irrelevant constants and power atoms of matched syntactic cost remain in the
+  enumeration and must not be retained.
+- Shuffled universe order, duplicate elements, missing products, and
+  non-squarefree objects must fail exact expansion.
+
+M17 fails L3 if the retained local factor is not found, any compatible
+universe is not exact or not accelerated, any control is accepted as exact,
+aggregate special-value operations do not fall, or candidate accounting mixes
+units. Any post-output change creates M17b and preserves this run.

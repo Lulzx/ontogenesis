@@ -64,3 +64,14 @@ removing the debt entry.
   constructors.
 - M16 does not eliminate D5; it constructs an exact toy predicate inside the
   supplied substrate.
+
+## M17 entry (pre-registered)
+
+- New debt D6: the finite universe is supplied extensionally, and the exact
+  product/expansion checker is supplied as trusted semantics.
+- The retained local factor `1+r` is constructed from generic arithmetic over
+  an unlabelled irreducible variable, so it is invented rather than supplied.
+- Prime lists, primality predicates, irreducible labels, and Euler-factor
+  templates are not supplied.
+- D6 is conditioned, not eliminated: the toy domain remains a bounded
+  squarefree integer universe with a trusted exact checker.

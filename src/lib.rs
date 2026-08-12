@@ -63,6 +63,9 @@
 //! - [`spectral_world`]: Direction M16 toy spectral regularity -- unlabelled
 //!   structural predicate invention with exact orthogonal latent directions,
 //!   rational decomposition checking, and conditional long-horizon routing.
+//! - [`euler_world`]: Direction M17 finite Euler product -- irreducible
+//!   inference from multiplication behavior, local-factor invention, and
+//!   exact product/special-value transfer.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -75,6 +78,7 @@ pub mod contextual_guidance;
 pub mod concept_migration;
 pub mod coproduct_property;
 pub mod euclid_world;
+pub mod euler_world;
 pub mod fixpoint;
 pub mod feature_invention;
 pub mod initial_algebra;
