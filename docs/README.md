@@ -281,6 +281,19 @@ truth (3 actions, cost 3, information 7) where the passive learner provably
 cannot. Intervention choice never sees the hidden answer. See
 [`ACTIVE_EXPERIMENTATION.md`](ACTIVE_EXPERIMENTATION.md).
 
+
+**Direction F — causal ontology from interventions.** Passive data cannot tell
+causal mechanisms apart: it leaves a whole *Markov-equivalence class* of causal
+models identical (the chain `A → B → C` and the fork `A ← B → C` both yield
+`{000, 111}`). In a tiny deterministic 3-variable system the agent instead
+*intervenes* — forces a variable and reads the downstream response — to
+separate correlation, mechanism, and intervention response. Passive data leaves
+34 candidate models for the chain; the answer-blind first intervention
+(`A=false`) halves the pool to 7, and two further checks pin it to exactly the
+chain (`final_candidates=1, true_recovered=true`). When survivors agree on
+every available intervention the agent stops rather than inventing a
+distinction. See [`CAUSAL_ONTOLOGY.md`](CAUSAL_ONTOLOGY.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

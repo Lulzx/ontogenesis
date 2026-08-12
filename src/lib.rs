@@ -40,12 +40,15 @@
 //!   recursive signature and its carrier, constructor, and mediator generator.
 //! - [`open_signature`]: U5 provisional open-world signature ranking and
 //!   structural ontology revision from a temporal evidence stream.
+//! - [`causal_ontology`]: Direction F causal inference from intervention
+//!   responses on a tiny deterministic 3-variable system.
 
 pub mod acquire;
 pub mod active_experimentation;
 pub mod bank;
 pub mod bootstrap;
 pub mod canon;
+pub mod causal_ontology;
 pub mod contextual_allocation;
 pub mod contextual_guidance;
 pub mod concept_migration;

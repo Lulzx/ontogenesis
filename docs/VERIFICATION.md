@@ -174,3 +174,12 @@ Docs: `docs/PROBE_INVENTION.md`.
 
 New module: `src/active_experimentation.rs`. Example: `examples/active_experimentation.rs`.
 Docs: `docs/ACTIVE_EXPERIMENTATION.md`.
+
+| Causal ontology: interventions separate correlation, mechanism, and intervention response in a Markov-equivalence class | confirmed, asserted | `src/causal_ontology.rs`, 4 tests |
+| Passive baseline: passive data leaves multiple candidates (`passive_distinguished=false` for the chain) | confirmed, asserted | `passive_candidates`/`passive_distinguished`, example |
+| Answer-blind intervention selection (uses only candidate disagreement) | confirmed, asserted | `selection_is_answer_blind_and_terminates_on_indistinguishable_survivors`, example |
+| Honest termination when survivors are indistinguishable under all available interventions | confirmed, asserted | `ndistinct < 2` break, test over all consistent models |
+| Deterministic machine record with exact fallback | confirmed, asserted | `machine_record_is_deterministic_and_complete` |
+
+New module: `src/causal_ontology.rs`. Example: `examples/causal_ontology.rs`.
+Docs: `docs/CAUSAL_ONTOLOGY.md`.

@@ -390,6 +390,22 @@ only on candidate predicted outputs, never on the hidden answer. Protocol:
 `ACTIVE_EXPERIMENTATION.md`.
 
 
+### Direction F — causal ontology from interventions
+
+Causal structure is not observable: passive data leaves a Markov-equivalence
+class of causal models indistinguishable. In a tiny deterministic 3-variable
+system (`A, B, C`, bounded boolean functions, 94 acyclic models), the agent
+distinguishes *correlation*, *mechanism*, and *intervention response* by
+choosing an intervention (`do(x=v)`), observing the downstream response, and
+pruning candidates that predict a different response. With world truth the
+chain `A → B → C`, passive data leaves 34 candidates
+(`passive_distinguished=false`); the answer-blind choice `A=false` halves the
+pool to 7, and two further interventions pin it to exactly the chain
+(`final_candidates=1, true_recovered=true`). Selection uses only candidate
+disagreement; when survivors agree on every available intervention the agent
+stops rather than fabricating a distinction. Protocol: `CAUSAL_ONTOLOGY.md`.
+
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are
@@ -493,4 +509,11 @@ Learned-allocation experiment:
 cargo run --release --example learned_allocation
 cargo test -p supsearch learned_allocation --lib
 cargo test -p supsearch ontology_guidance --lib
+```
+
+Causal ontology (Direction F):
+
+```sh
+cargo run --release --example causal_ontology
+cargo test -p supsearch causal_ontology --lib
 ```
