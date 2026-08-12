@@ -167,3 +167,10 @@ New modules: `src/ontology_repair.rs`, `src/concept_migration.rs`. Examples:
 
 New module: `src/probe_invention.rs`. Example: `examples/probe_invention.rs`.
 Docs: `docs/PROBE_INVENTION.md`.
+
+| Active experimentation: choose intervention that resolves observationally identical environments | confirmed, asserted | `src/active_experimentation.rs`, 4 tests |
+| Crucial-experiment baseline: passive learner provably cannot distinguish | confirmed, asserted | `passive_distinguished` field, example |
+| Answer-blind intervention selection | confirmed, asserted | `action_selection_never_sees_answer` |
+
+New module: `src/active_experimentation.rs`. Example: `examples/active_experimentation.rs`.
+Docs: `docs/ACTIVE_EXPERIMENTATION.md`.

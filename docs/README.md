@@ -270,6 +270,17 @@ measurements (cost 5, information 25), and the agent correctly refuses to invent
 a probe when the survivors are truly indistinguishable. See
 [`PROBE_INVENTION.md`](PROBE_INVENTION.md).
 
+
+**Direction E — active experimentation and the crucial experiment.** Passive
+observation leaves two environments indistinguishable; the agent instead
+chooses an *intervention*, observes the result, and prunes its candidate
+world-models. In a 2-bit-input machine with a hidden boolean function, passive
+data leaves 8 candidate hypotheses; the active learner's first intervention is
+the decisive crucial experiment, and two confirmatory checks recover the world
+truth (3 actions, cost 3, information 7) where the passive learner provably
+cannot. Intervention choice never sees the hidden answer. See
+[`ACTIVE_EXPERIMENTATION.md`](ACTIVE_EXPERIMENTATION.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

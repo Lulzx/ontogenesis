@@ -374,6 +374,22 @@ the agent correctly stops rather than fabricating a distinction. Probe
 selection depends only on candidate disagreement. Protocol: `PROBE_INVENTION.md`.
 
 
+
+### Direction E — active experimentation and the crucial experiment
+
+Passive observation alone can leave environments indistinguishable. An active
+learner chooses an *intervention* (sets an input value), observes the result,
+and prunes its candidate world-models. In the crucial-experiment setup — two
+environments observationally identical under all passive data but differing
+under one intervention — a 2-bit-input machine with a hidden boolean function
+leaves 8 candidate hypotheses after passive data; the active learner's first
+intervention (`x=1`) is the decisive one, and two confirmatory checks recover
+the world truth (3 actions, cost 3, information 7) where the passive learner
+provably cannot (`passive_distinguished=false`). Intervention choice depends
+only on candidate predicted outputs, never on the hidden answer. Protocol:
+`ACTIVE_EXPERIMENTATION.md`.
+
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are

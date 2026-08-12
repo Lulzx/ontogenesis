@@ -42,6 +42,7 @@
 //!   structural ontology revision from a temporal evidence stream.
 
 pub mod acquire;
+pub mod active_experimentation;
 pub mod bank;
 pub mod bootstrap;
 pub mod canon;
