@@ -79,6 +79,8 @@
 //!   invention on an integer lattice under reflection and conjugation.
 //! - [`hidden_zeros_world`]: Direction M22 hidden toy zeros -- oscillator
 //!   invention and location recovery from exact arithmetic signals.
+//! - [`conjecture_world`]: Direction M23 toy RH-like conjecture -- frozen
+//!   scoring of the strongest supported predicate from partial zero evidence.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -88,6 +90,7 @@ pub mod canon;
 pub mod causal_ontology;
 pub mod contextual_allocation;
 pub mod contextual_guidance;
+pub mod conjecture_world;
 pub mod concept_migration;
 pub mod completion_world;
 pub mod coproduct_property;

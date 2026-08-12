@@ -154,7 +154,19 @@ description falls 51→12 integers. M22 reaches
 weight range, exact checker, and retained locus remain supplied. M23 remains
 unreached.
 
-Directions G and Mathematical Ontogenesis M1–M22 are implemented. M10 added
+## M23 toy RH-like conjecture result
+
+A separately pre-registered experiment freezes a conjecture language and
+scoring rule, supplies partial zero evidence, and retains the conjecture
+`all_zeros_have_u+v=1`. Held-out validation passes for three unseen prime
+sets, the primary falsifier `(-6,-6)` is reported, and the output stays
+labeled conjectured (`proof=false`). Prediction evaluations fall 845→374;
+corrupted-training and asymmetric-universe controls are declined and
+description falls 48→13 integers. M23 reaches
+`L3_transferred_ontology_with_measured_utility` as a bounded toy conjecture;
+finite agreement is not proof. M24 remains unreached.
+
+Directions G and Mathematical Ontogenesis M1–M23 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -171,6 +183,8 @@ reflection and factor programs. M20 adds the completed-object construction
 with the maximally simple symmetry `Ξ(1-s)=Ξ(s)`. M21 adds the toy critical
 locus as the diagonal zero set `u+v=1`. M22 adds hidden-zero recovery from
 exact oscillation signals using the retained oscillator dictionary and locus.
+M23 adds the frozen-scored toy conjecture that all hidden zeros satisfy
+`u+v=1`, validated on held-out zeros with an explicit falsifier.
 
 ## M12 result
 
@@ -226,5 +240,7 @@ cargo test -p supsearch --lib locus_world
 cargo run --release --example locus_world
 cargo test -p supsearch --lib hidden_zeros_world
 cargo run --release --example hidden_zeros_world
+cargo test -p supsearch --lib conjecture_world
+cargo run --release --example conjecture_world
 cargo test --workspace
 ```

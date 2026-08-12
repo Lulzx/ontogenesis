@@ -128,3 +128,12 @@ removing the debt entry.
   are not.
 - D11 is conditioned, not eliminated: the result is a bounded integer toy
   hidden-spectrum recovery.
+
+## M23 entry (pre-registered)
+
+- D10 and D11 are reused: the retained locus and oscillator recovery supply
+  the evidence for the conjecture.
+- New debt D12: the conjecture language and scoring rule are supplied;
+  critical-line/RH labels and hidden-truth information are not.
+- D12 is conditioned, not eliminated: the output is a labeled toy conjecture,
+  not a proof.

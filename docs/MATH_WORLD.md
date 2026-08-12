@@ -319,4 +319,7 @@ zeros, verifies conjugation/reflection invariance, and reaches L3 with
 evaluations falling 654→183 and description 96→13. M22 recovers withheld toy
 zeros from exact oscillation signals and completes locations through the
 retained diagonal, with evaluations falling 6,897→4,779 and description
-51→12. M23–M30 are not claimed.
+51→12. M23 generates the frozen-scored toy conjecture
+`all_zeros_have_u+v=1` from partial zero evidence, validates it on held-out
+zeros with falsifier `(-6,-6)`, and reaches L3 with evaluations falling
+845→374; the result remains conjectured, not proved. M24–M30 are not claimed.
