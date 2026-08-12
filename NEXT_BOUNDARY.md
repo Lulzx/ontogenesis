@@ -1,29 +1,23 @@
-# Next Boundary — A Trusted, Searchable Proposition World
+# Next Boundary — Auxiliary Objects and Existential Proofs for M11
 
-The next valid milestone is M10, not M11 or any later ladder item.
+M10 is complete within a formally checked modular proposition fragment. The
+next valid milestone is M11, rediscovering Euclid's proof.
 
-M10 can be attempted only after introducing a domain-general proposition world
-whose primitives are justified independently of the parity example:
+A scientifically valid M11 requires domain-general additions not encoded around
+the historical answer:
 
-1. A typed proposition AST with equality, predicates, implication,
-   conjunction, negation, and bounded/unbounded quantification.
-2. Proof terms for the already-authorized primitive operations: assumption,
-   substitution, equality rewriting, arithmetic normalization, and implication.
-3. A small trusted checker that validates proof terms independently of search.
-4. Fair enumeration of predicates and proof terms with deterministic resource
-   accounting.
-5. Controls that reject finite truth-table agreement as a proof of an
-   unbounded theorem and prevent the target answer from entering proposal
-   generation.
+1. typed finite collections and folds/products;
+2. quantified propositions with explicit universal and existential binders;
+3. proof terms for witness introduction/elimination and contradiction;
+4. trusted integer lemmas connecting factorization, primality, and divisibility;
+5. fair auxiliary-expression enumeration from generic collection/arithmetic
+   operations;
+6. provenance controls proving that `product(elements)+1` was not supplied by
+   the benchmark driver or checker;
+7. transfer showing that the retained construction lowers search on other
+   “escape a finite set of divisors” arguments.
 
-Only after that substrate independently passes generic soundness and transfer
-tests should the system search for `Q` equivalent to “`n` is even iff `n²` is
-even.” M10 succeeds only if both implications are checked and the discovered
-representation lowers downstream proof-search cost.
-
-This boundary compounds through the remaining ladder: M11–M14 require
-auxiliary-object and contradiction proof search, while M15–M29 require new
-analytic, spectral, and functional representations. M30 additionally demands a
-trusted formal proof or a genuinely smaller explicit unresolved reduction of
-the Riemann Hypothesis. It is not scientifically valid to label those stages
-complete using numerical fits or encoded historical solutions.
+The checker must validate the final proof independently of proposal search.
+Finite prime samples cannot establish infinitude, and directly installing
+Euclid's construction would not demonstrate invention. M12 and later stages
+remain downstream of this boundary.

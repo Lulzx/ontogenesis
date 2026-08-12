@@ -566,14 +566,16 @@ cargo run --release --example world_model
 cargo test -p supsearch world_model --lib
 ```
 
-Mathematical ontogenesis (Directions M1–M9):
+Mathematical ontogenesis (Directions M1–M10):
 
 ```sh
 cargo run --release --example math_world
 cargo test -p supsearch math_world --lib
+cargo run --release --example proposition_world
+cargo test -p supsearch proposition_world --lib
 ```
 
 M3–M9 advance from unary concept synthesis through theorem generation,
 successor-closure proof abstraction, cancellation, divisor invariants, formal
-series, and latent linear directions. The next stage, M10, is recorded as a
-genuine architecture boundary in `CURRENT_STATE.md` / `NEXT_BOUNDARY.md`.
+series, and latent linear directions. M10 adds checked modular proposition
+search and invents a cheaper equivalent theorem. M11 is the next boundary.

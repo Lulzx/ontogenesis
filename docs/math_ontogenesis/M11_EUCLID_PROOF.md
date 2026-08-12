@@ -6,10 +6,10 @@ The system must infer infinitude rather than finitude of primes and invent the
 auxiliary construction `product(candidate primes)+1`. The construction must be
 selected because it collapses the proof, not supplied as a template.
 
-## Status: not reached
+## Status: next boundary, not reached
 
-M11 depends on M10's missing proposition and proof-term world. It additionally
-needs quantified finite sets, integer factorization/divisibility lemmas,
+M10 now supplies checked modular propositions, but M11 additionally needs
+quantified finite sets, integer factorization/divisibility lemmas,
 existential witnesses, contradiction, and search over auxiliary objects.
 Current bounded arithmetic evaluators cannot certify “for every finite list of
 primes there exists another prime.”

@@ -8,8 +8,8 @@ The checker and ontology must be trusted independently of the search.
 
 ## Status: not reached
 
-The implemented ladder stops at M9 and documents the M10 proof-architecture
-boundary. No claim about proving RH, reducing RH, discovering a novel
+The implemented ladder currently reaches M10 and documents the M11 auxiliary-
+object/existential-proof boundary. No claim about proving RH, reducing RH, discovering a novel
 equivalence, or constructing an RH-making object is made. Finite verification
 of zeros cannot satisfy M30.
 

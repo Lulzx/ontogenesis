@@ -5,7 +5,7 @@ Mathematical Ontogenesis ladder. Each file answers four questions: what the
 stage was allowed to know, what the system actually searched or inferred,
 what evidence supports the result, and what is explicitly not claimed.
 
-Status is intentionally asymmetric. M1–M9 are reached experiments. M10–M30
+Status is intentionally asymmetric. M1–M10 are reached experiments. M11–M30
 are unreached milestones whose files document their dependency chain and the
 evidence required before they may be marked complete. A complete directory is
 not a claim of a completed ladder.
@@ -21,9 +21,9 @@ not a claim of a completed ladder.
 | [M7](M07_GCD_INVARIANT.md) | GCD invariant | reached — bounded verified |
 | [M8](M08_GENERATING_FUNCTION.md) | Generating function | reached — formal-series verified |
 | [M9](M09_EIGENVECTORS.md) | Eigenvectors | reached — bounded verified |
-| [M10](M10_EQUIVALENT_STATEMENT.md) | Equivalent theorem statement | boundary — not reached |
-| [M11](M11_EUCLID_PROOF.md) | Euclid's proof | blocked by M10 substrate |
-| [M12](M12_SQRT2_CONTRADICTION.md) | Irrationality of sqrt(2) | blocked by M10 substrate |
+| [M10](M10_EQUIVALENT_STATEMENT.md) | Equivalent theorem statement | reached — formally checked modular |
+| [M11](M11_EUCLID_PROOF.md) | Euclid's proof | boundary — not reached |
+| [M12](M12_SQRT2_CONTRADICTION.md) | Irrationality of sqrt(2) | blocked by M11 substrate |
 | [M13](M13_VIETA_RELATIONS.md) | Polynomial root relations | not attempted |
 | [M14](M14_SYMMETRY.md) | Symmetry | not attempted |
 | [M15](M15_FOURIER.md) | Fourier representation | not attempted |

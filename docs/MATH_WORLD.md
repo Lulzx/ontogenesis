@@ -267,16 +267,15 @@ without a telescoping primitive; M7 constructs common-divisor sets from the
 divisibility predicate without a GCD primitive; and M9 searches scaled images
 without supplying eigenvalue/eigenvector terminology.
 
-## Boundary after M9
+## M10 proposition-world continuation
 
-M10 requires candidate propositions and machine-checked proofs of both
-`P -> Q` and `Q -> P`, then proof-cost comparison. The repository currently has
-evaluators, bounded expression synthesis, and a verified proof-schema
-experiment, but it has no proposition language, proof terms, or trusted proof
-kernel. Adding those is a fundamental architecture change, not the minimal
-extension of the arithmetic world. Hard-coding parity lemmas would also make
-M10 nominally pass while violating its discovery restriction.
+M10 adds `src/proposition_world.rs`: typed integer-polynomial/divisibility
+propositions, proof terms, and an independent exact modular checker. From
+`2|n iff 2|n²`, the fixed reformulation search discovers `2|(n²+n)`. Checked
+proof cost falls from 37 to 14, syntax shrinks by two nodes, and the same search
+transfers to `3|(n³-n)`. A forged certificate and a five-point polynomial
+overfit are rejected. See `math_ontogenesis/M10_EQUIVALENT_STATEMENT.md`.
 
-Accordingly the ladder stops at the first proven thesis boundary. M10–M30 are
-not claimed. See `CURRENT_STATE.md` and `NEXT_BOUNDARY.md` for the evidence and
-the requirements for a scientifically valid continuation.
+The next boundary is M11: finite collections, existential witnesses,
+factorization reasoning, contradiction, and auxiliary-object search are not
+expressible in the M10 modular fragment. M11–M30 are not claimed.

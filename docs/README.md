@@ -330,10 +330,11 @@ The agent next invents square as multiplication, generates the odd-sum law,
 retains a transferable successor-closure proof schema, invents cancellation
 for reciprocal sums, discovers maximum common divisor as a transition
 invariant, constructs a rational formal-series representation of Fibonacci,
-and invents scaled latent directions for long-horizon linear dynamics. Each
-stage has deterministic costs, held-out transfer, and controls. The ladder then
-stops honestly at M10: bidirectional theorem-equivalence search requires a
-trusted proposition/proof-term layer absent from the current architecture. See
+and invents scaled latent directions for long-horizon linear dynamics. M10 then
+adds an independently checked modular proposition world and discovers a cheaper
+equivalent theorem representation. Each stage has deterministic costs,
+held-out transfer, and controls. The next honest boundary is M11's auxiliary-
+object and existential-proof search. See
 [`MATH_WORLD.md`](MATH_WORLD.md), [`../CURRENT_STATE.md`](../CURRENT_STATE.md),
 and [`../NEXT_BOUNDARY.md`](../NEXT_BOUNDARY.md).
 

@@ -28,4 +28,5 @@ two-obligation schema costs 6, gain 42.
 
 The record says `proof_schema_verified`, not `formally_proved`. The arithmetic
 identities and implementation guards are checked, but the repository lacks a
-general proof-term kernel. This distinction becomes the decisive M10 boundary.
+general proof-term kernel. M10 later adds a narrow, independently checked
+modular proposition fragment without retroactively strengthening M5's claim.

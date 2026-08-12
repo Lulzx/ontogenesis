@@ -47,6 +47,8 @@
 //!   deterministic world.
 //! - [`math_world`]: Directions M1--M9 mathematical ontogenesis -- arithmetic
 //!   concept/law invention through latent linear representations.
+//! - [`proposition_world`]: Direction M10 answer-blind theorem reformulation
+//!   search with independently checked modular proof certificates.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -69,6 +71,7 @@ pub mod ontology_repair;
 pub mod probe_invention;
 pub mod open_signature;
 pub mod parse;
+pub mod proposition_world;
 pub mod recurrence;
 pub mod recursion_search;
 pub mod recursive_signature;

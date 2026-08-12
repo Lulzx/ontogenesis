@@ -1,10 +1,10 @@
-# Handoff — Mathematical Ontogenesis track (M1–M9 complete; M10 boundary)
+# Handoff — Mathematical Ontogenesis track (M1–M10 complete; M11 boundary)
 
 **Date:** 2026-08-12
 
-> **Superseding update:** M3–M9 are now complete. The ladder reached a genuine
-> architecture stop at M10 because the repository lacks a proposition language,
-> proof terms, and a trusted checker. Read `/CURRENT_STATE.md` and
+> **Superseding update:** M3–M10 are now complete. M10 added a checked modular
+> proposition world; the ladder now stops at M11's auxiliary-object and
+> existential-proof boundary. Read `/CURRENT_STATE.md` and
 > `/NEXT_BOUNDARY.md` before continuing. The earlier M3 suggestion below is
 > retained only as historical context.
 

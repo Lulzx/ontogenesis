@@ -226,7 +226,7 @@ Docs: `docs/MATH_WORLD.md`.
 M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 `docs/MATH_WORLD.md`.
 
-## Addendum (2026-08-12): Directions M3–M9 and M10 boundary
+## Addendum (2026-08-12): Directions M3–M10 and M11 boundary
 
 | Claim | Status | Where |
 |---|---|---|
@@ -237,4 +237,8 @@ M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 | M7 invents maximum common divisor from divisibility as a transition invariant | confirmed, bounded | `discover_divisor_invariant`, `m7_invents_maximum_common_divisor_invariant` |
 | M8 derives a rational formal-series object and predicts three held-out coefficients | confirmed, asserted | `discover_sequence_object`, `m8_invents_fibonacci_formal_series_object` |
 | M9 infers hidden transform and scaled latent directions for exact 10-step prediction | confirmed, bounded | `discover_latent_directions`, `invents_scaled_latent_directions_for_hidden_transform` |
-| M10 cannot be validly attempted without proposition/proof-term architecture | boundary demonstrated, not a milestone claim | `CURRENT_STATE.md`, `NEXT_BOUNDARY.md` |
+| M10 searches a fixed answer-blind reformulation grammar and discovers `2|(n²+n)` | confirmed, asserted | `src/proposition_world.rs`, `m10_discovers_checked_cheaper_equivalent` |
+| Independent checker validates both implications for all integers by exhaustive canonical residues | confirmed within modular fragment | `check_proof`, `ModularCertificate` |
+| Forged certificate and finite-sample overfit controls are rejected | confirmed, asserted | `checker_rejects_forged_modular_certificate`, `finite_sample_fit_is_not_an_unbounded_proof` |
+| M10 alternative lowers checked proof cost (37 to 14), compresses syntax, transfers to `3|(n³-n)` | confirmed, asserted | `m10_experiment`, machine record |
+| M11 needs auxiliary-object/existential proof architecture absent from M10 fragment | boundary demonstrated | `CURRENT_STATE.md`, `NEXT_BOUNDARY.md` |
