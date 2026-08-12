@@ -207,6 +207,17 @@ and pure universal is unsolved after 707. The charged 10,000-use horizon yields
 +271,412 observation checks, while identity reuse records zero benefit. See
 [`COPRODUCT_PROPERTY.md`](COPRODUCT_PROPERTY.md).
 
+**U3 — bounded initial-algebra/catamorphism ontogenesis.** For supplied
+`F(X)=1+X`, independent lambda search discovers an anonymous recursive carrier,
+its constructor, and one mediator generator that satisfies the algebra equation
+for Boolean parity, numeral counting, and Church-list reconstruction. Protected
+depths 5/7/9 commute and have one untruncated semantic mediator class; a hidden
+disconnected chain passes existence and fails uniqueness. Frozen U3 maps carrier
+depth `n` to `2n` in 12 proposals versus uniform 15, with raw/irrelevant failure
+and pure universal unsolved after 707. After a 41,628-check discovery charge,
+the declared 100,000-use horizon nets +258,372 checks. See
+[`INITIAL_ALGEBRA.md`](INITIAL_ALGEBRA.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

@@ -269,6 +269,23 @@ Raw typed and irrelevant conditions fail; pure universal remains unsolved after
 at 10,000 uses. Identity remains zero-benefit evidence. Full protocol and
 limitations are in `COPRODUCT_PROPERTY.md`.
 
+### U3 — initial-algebra/catamorphism ontogenesis
+
+For the supplied finite action `F(X)=1+X`, independent lambda and generic typed
+search discovers an anonymous recursive carrier witness (size 3), carrier step
+(10), expanded constructor (17), and mediator generator (8). It imports no U1,
+U2, recurrence, recursive-search, representation, or fixed-point result.
+Boolean, numeral, and Church-list algebras share the frozen structure; protected
+odd-parity and double-count equations hold at depths 5, 7, and 9. Exhaustive
+mediator enumeration through size 8 is untruncated and yields one semantic class.
+A hidden disconnected chain preserves existence but falsifies uniqueness.
+
+On downstream carrier-to-carrier doubling, learned allocation takes 12
+proposals/29 checks versus uniform 15/32 and oracle 1/10; raw typed and irrelevant
+conditions fail, while pure universal remains unsolved after 707. Discovery costs
+41,628 comparable checks and nets +258,372 at 100,000 uses. Identity remains a
+negative transfer. Exact protocol: `INITIAL_ALGEBRA.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are

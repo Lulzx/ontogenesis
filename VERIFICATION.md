@@ -55,6 +55,8 @@ command but not guarded by any assertion.
 | U1 cost contraction: downstream swap 1 proposal vs raw typed 10/uniform 32/irrelevant 31, charged break-even 378 uses; negative-transfer control preserved | confirmed, asserted, executable | `examples/universal_property.rs`; `UNIVERSAL_PROPERTY.md` |
 | U2: independent pure-lambda search invents anonymous embeddings and mediator generator; heterogeneous protected evidence commutes with one untruncated bounded semantic mediator class | confirmed, asserted, executable | `src/coproduct_property.rs`; `COPRODUCT_PROPERTY.md` |
 | U2 cost contraction: downstream branchwise S->S takes learned 12 proposals vs uniform 39; raw/irrelevant fail and universal is unsolved after 707; charged net +271412 at 10000 uses | confirmed, asserted, executable | `examples/coproduct_property.rs`; `COPRODUCT_PROPERTY.md` |
+| U3: independent discovery for F(X)=1+X yields an anonymous carrier/constructor/mediator generator; protected depth-5/7/9 algebras commute with one untruncated semantic class | confirmed, asserted, executable | `src/initial_algebra.rs`; `INITIAL_ALGEBRA.md` |
+| U3 cost contraction: carrier doubling takes learned 12 proposals vs uniform 15; raw/irrelevant fail, universal is unsolved after 707, and charged net is +258372 at 100000 uses | confirmed, asserted, executable | `examples/initial_algebra.rs`; `INITIAL_ALGEBRA.md` |
 | B3: invented recursion expands proposals to map/append/reverse | confirmed, asserted | `src/typed.rs`; `b3_invented_recursion_expands_proposals_and_recovers_vocabulary` |
 | B3 transfer: invented map(reverse) mirrors unseen 5×4 grid | confirmed, asserted | same B3 regression test |
 
