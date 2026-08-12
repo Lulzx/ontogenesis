@@ -276,6 +276,13 @@ proof cost falls from 37 to 14, syntax shrinks by two nodes, and the same search
 transfers to `3|(n³-n)`. A forged certificate and a five-point polynomial
 overfit are rejected. See `math_ontogenesis/M10_EQUIVALENT_STATEMENT.md`.
 
-The next boundary is M11: finite collections, existential witnesses,
-factorization reasoning, contradiction, and auxiliary-object search are not
-expressible in the M10 modular fragment. M11–M30 are not claimed.
+M11 adds `src/euclid_world.rs`. Generic collection-expression search discovers
+`product(xs)+1` at proposal 19. An independent checker symbolically verifies
+nonzero remainder modulo every arbitrary listed member, proves the value is
+greater than one, and uses a generic prime-divisor lemma to derive a prime
+outside every finite prime list. Three prime-list and three divisor-list
+transfers pass; singleton and corrupted-certificate controls fail honestly.
+
+The next boundary is M12: rational lowest-terms witnesses, coprimality,
+divisibility inference, and contradiction are not expressible in the existing
+proof fragments. M12–M30 are not claimed.

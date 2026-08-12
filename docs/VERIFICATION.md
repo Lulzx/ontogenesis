@@ -226,7 +226,7 @@ Docs: `docs/MATH_WORLD.md`.
 M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 `docs/MATH_WORLD.md`.
 
-## Addendum (2026-08-12): Directions M3–M10 and M11 boundary
+## Addendum (2026-08-12): Directions M3–M11 and M12 boundary
 
 | Claim | Status | Where |
 |---|---|---|
@@ -241,4 +241,8 @@ M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 | Independent checker validates both implications for all integers by exhaustive canonical residues | confirmed within modular fragment | `check_proof`, `ModularCertificate` |
 | Forged certificate and finite-sample overfit controls are rejected | confirmed, asserted | `checker_rejects_forged_modular_certificate`, `finite_sample_fit_is_not_an_unbounded_proof` |
 | M10 alternative lowers checked proof cost (37 to 14), compresses syntax, transfers to `3|(n³-n)` | confirmed, asserted | `m10_experiment`, machine record |
-| M11 needs auxiliary-object/existential proof architecture absent from M10 fragment | boundary demonstrated | `CURRENT_STATE.md`, `NEXT_BOUNDARY.md` |
+| M11 fixed collection grammar discovers `(product(xs)+1)` at proposal 19 | confirmed, asserted | `src/euclid_world.rs`, `invents_product_plus_one_and_checks_arbitrary_prime_list_theorem` |
+| Independent checker proves nonzero member remainder, size, and outside prime witness for arbitrary finite prime lists | confirmed within finite-list schema | `check_escape_certificate` |
+| Singleton, non-prime, and corrupted-certificate controls are rejected | confirmed, asserted | `euclid_world::tests` |
+| M11 transfers to three unseen prime lists and three composite-divisor lists; reuse cost 12 vs 31 | confirmed, asserted | `m11_experiment`, machine record |
+| M12 requires rational/lowest-terms contradiction architecture absent from M11 fragment | boundary demonstrated | `CURRENT_STATE.md`, `NEXT_BOUNDARY.md` |

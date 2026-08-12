@@ -1,10 +1,10 @@
-# Handoff — Mathematical Ontogenesis track (M1–M10 complete; M11 boundary)
+# Handoff — Mathematical Ontogenesis track (M1–M11 complete; M12 boundary)
 
 **Date:** 2026-08-12
 
-> **Superseding update:** M3–M10 are now complete. M10 added a checked modular
-> proposition world; the ladder now stops at M11's auxiliary-object and
-> existential-proof boundary. Read `/CURRENT_STATE.md` and
+> **Superseding update:** M3–M11 are now complete. M11 added auxiliary-object
+> search and a checked finite-list prime witness; the ladder now stops at M12's
+> rational lowest-terms contradiction boundary. Read `/CURRENT_STATE.md` and
 > `/NEXT_BOUNDARY.md` before continuing. The earlier M3 suggestion below is
 > retained only as historical context.
 

@@ -49,6 +49,8 @@
 //!   concept/law invention through latent linear representations.
 //! - [`proposition_world`]: Direction M10 answer-blind theorem reformulation
 //!   search with independently checked modular proof certificates.
+//! - [`euclid_world`]: Direction M11 auxiliary-object invention and a checked
+//!   finite-prime-list escape certificate.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -60,6 +62,7 @@ pub mod contextual_allocation;
 pub mod contextual_guidance;
 pub mod concept_migration;
 pub mod coproduct_property;
+pub mod euclid_world;
 pub mod fixpoint;
 pub mod feature_invention;
 pub mod initial_algebra;

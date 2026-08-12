@@ -333,8 +333,10 @@ invariant, constructs a rational formal-series representation of Fibonacci,
 and invents scaled latent directions for long-horizon linear dynamics. M10 then
 adds an independently checked modular proposition world and discovers a cheaper
 equivalent theorem representation. Each stage has deterministic costs,
-held-out transfer, and controls. The next honest boundary is M11's auxiliary-
-object and existential-proof search. See
+held-out transfer, and controls. M11 then adds auxiliary-object and existential-
+proof search: it invents `product(primes)+1` and checks the arbitrary
+finite-list escape proof. The next boundary is M12's rational lowest-terms
+contradiction. See
 [`MATH_WORLD.md`](MATH_WORLD.md), [`../CURRENT_STATE.md`](../CURRENT_STATE.md),
 and [`../NEXT_BOUNDARY.md`](../NEXT_BOUNDARY.md).
 

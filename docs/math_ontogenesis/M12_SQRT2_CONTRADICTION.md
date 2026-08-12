@@ -6,12 +6,12 @@ M12 asks whether `sqrt(2)` is rational and requires a formal proof. The parity
 and lowest-terms representation must be invented; the classical proof may not
 be provided.
 
-## Status: not reached
+## Status: next boundary, not reached
 
-The current system can evaluate squares and discover finite invariants, but it
-cannot express coprimality assumptions, quantify over integer ratios, derive
-parity from divisibility, or check a contradiction proof. Those are precisely
-the proposition/proof capabilities missing at M10.
+M10 can check universal modular propositions and M11 can validate a finite-list
+existential witness schema. The system still cannot express normalized rational
+witnesses, derive lowest terms, carry divisibility through `p²=2q²`, or check a
+contradiction that invalidates an assumed rational representation.
 
 ## Completion criteria
 

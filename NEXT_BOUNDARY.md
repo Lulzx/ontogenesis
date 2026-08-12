@@ -1,23 +1,25 @@
-# Next Boundary — Auxiliary Objects and Existential Proofs for M11
+# Next Boundary — Rational Witnesses and Contradiction for M12
 
-M10 is complete within a formally checked modular proposition fragment. The
-next valid milestone is M11, rediscovering Euclid's proof.
+M11 is complete within a checked finite-list schema. The next valid milestone
+is M12, proving that `sqrt(2)` is irrational while inventing the useful parity
+and lowest-terms representation.
 
-A scientifically valid M11 requires domain-general additions not encoded around
-the historical answer:
+A scientifically valid M12 requires domain-general additions:
 
-1. typed finite collections and folds/products;
-2. quantified propositions with explicit universal and existential binders;
-3. proof terms for witness introduction/elimination and contradiction;
-4. trusted integer lemmas connecting factorization, primality, and divisibility;
-5. fair auxiliary-expression enumeration from generic collection/arithmetic
-   operations;
-6. provenance controls proving that `product(elements)+1` was not supplied by
-   the benchmark driver or checker;
-7. transfer showing that the retained construction lowers search on other
-   “escape a finite set of divisors” arguments.
+1. explicit integer-pair witnesses for rationals and nonzero-denominator
+   conditions;
+2. normalization to lowest terms with a checked coprimality certificate;
+3. proof terms for assumption, existential witness use, negation, falsehood,
+   and contradiction elimination;
+4. checked divisibility lemmas connecting `p²` divisible by a prime to `p`
+   divisible by that prime;
+5. answer-blind search over intermediate predicates such as divisibility,
+   parity, valuation, and common-factor structure;
+6. controls preventing the classical parity proof from entering proposal order
+   or checker axioms;
+7. transfer to related `sqrt(d)` irrationality problems with honest failure on
+   perfect squares.
 
-The checker must validate the final proof independently of proposal search.
-Finite prime samples cannot establish infinitude, and directly installing
-Euclid's construction would not demonstrate invention. M12 and later stages
-remain downstream of this boundary.
+The trusted checker must validate each derivation independently. Decimal
+approximations, bounded denominator searches, or a prewritten classical proof
+do not satisfy M12.

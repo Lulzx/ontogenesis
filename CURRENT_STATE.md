@@ -2,39 +2,40 @@
 
 **Date:** 2026-08-12
 
-Directions G and Mathematical Ontogenesis M1–M10 are implemented. M3–M9 grow
-the arithmetic ontology from unary concepts through latent linear directions.
-M10 crosses the earlier proof boundary with a small independently checked
-proposition world.
+Directions G and Mathematical Ontogenesis M1–M11 are implemented. M10 added a
+checked modular proposition fragment. M11 adds generic finite collections,
+auxiliary-object enumeration, and a checked existential prime-witness schema.
 
-## M10 result
+## M11 result
 
-From `forall n, (2|n iff 2|n²)`, answer-blind reformulation search discovers
-`forall n, 2|(n²+n)`. Both implications and the alternative theorem are
-accepted by an independent modular checker that exhausts the canonical residue
-period. Direct proof cost falls from 37 to 14, syntax shrinks by two nodes, and
-the same search transfers to `3|(n³-n)`. Forged-certificate and finite-sample
-controls are rejected.
+From finite prime-list behavior, a fixed grammar over `product`, `sum`,
+`length`, constants, and arithmetic discovers `(product(xs)+1)` at proposal 19.
+The independent checker does not recognize that syntax. It symbolically proves
+that the construction has constant nonzero remainder modulo every arbitrary
+listed member and is greater than one; the trusted generic prime-divisor lemma
+then supplies a prime witness outside the list. Hence every finite prime list
+is incomplete and there are infinitely many primes.
 
-The status is `formally_checked_modular`, not general formal proof. The checker
-is sound for the implemented integer-polynomial/divisibility fragment and its
-implicitly universally closed integer variable.
+Three unseen prime lists and three composite-divisor lists pass. A singleton
+control rejects `product-1`, non-prime evidence cannot claim the theorem, and a
+corrupted derivation is rejected. Reuse costs 12 reasoning units versus 31 with
+rediscovery; training compression gain is six tokens. The exact status is
+`formally_checked_finite_list_schema`.
 
-## New boundary at M11
+## New boundary at M12
 
-Euclid's proof needs first-class finite collections of primes, products over a
-collection, existential witnesses for prime divisors, factorization lemmas,
-contradiction, and auxiliary-object search. These cannot be represented in the
-M10 modular fragment. Supplying `product(primes)+1` would leak M11's required
-discovery, so the strict ladder stops before that experiment until a general,
-answer-blind witness/object proposal layer is justified.
+The square-root-of-two problem needs rational witnesses in lowest terms,
+coprimality, parity/divisibility inference through a squared equality, and
+proof by contradiction. These are not expressible in the M10 modular checker
+or M11 finite-list witness schema. Encoding the classical parity chain directly
+would violate M12's discovery restriction.
 
 ## Reproduce
 
 ```sh
 cargo test -p supsearch --lib math_world
 cargo test -p supsearch --lib proposition_world
-cargo run --release --example math_world
-cargo run --release --example proposition_world
+cargo test -p supsearch --lib euclid_world
+cargo run --release --example euclid_world
 cargo test --workspace
 ```
