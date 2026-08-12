@@ -71,3 +71,12 @@ SH7b transfers it to obtain the exact finite identity
 The normalization is divergent or a degenerate scalar. It supplies no
 separating-class distribution identity and therefore no equality with the xi
 zero measure. The exact limiting xi-spectrum correspondence remains open.
+
+SH9b then eliminates the selected prime-Jacobi family by spectral counting
+growth. SH11 reconstructs a generic Lambert-W inverse and produces the smooth
+xi quantile, but SH12b proves that such counting information is
+non-identifying. SH13 transfers a generic positive-functional/GNS constructor
+across three non-zeta domains. Its real application stops at the missing
+positivity certificate for the Weil arithmetic functional. SH14 calibrates
+exact rational LDL certificates but lacks validated intervals for the
+archimedean term. No RH-equivalent positivity premise is assumed.

@@ -262,3 +262,8 @@ M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 | SH5b prime Jacobi proof closure | confirmed 1,600 candidates; essential-self-adjoint frontier | `src/operator_search.rs`, `NEXT_BOUNDARY.md` |
 | SH6b finite trace-schema calibration | confirmed cross-domain transfer and amortized utility | `src/trace_schema_search.rs`, `NEXT_BOUNDARY.md` |
 | SH7b exact prime-Jacobi second trace | confirmed finite identity; degenerate scalar limit, real M29 unreached | `src/prime_trace_search.rs`, `NEXT_BOUNDARY.md` |
+| SH8 even test-function traces | confirmed exact finite degrees 2/4/6; analytic limit uncertified | `src/test_function_trace_search.rs`, `NEXT_BOUNDARY.md` |
+| SH9b spectral-counting obstruction | confirmed derived mismatch; selected family eliminated | `src/spectral_counting_obstruction.rs`, `NEXT_BOUNDARY.md` |
+| SH10–SH12b counting repair and audit | confirmed smooth-count model; counting route non-identifying | `src/counting_law_search.rs`, `src/inverse_counting_search.rs`, `src/counting_nonidentifiability.rs` |
+| SH13 positive-functional operator constructor | confirmed generic transfer; real Weil positivity missing | `src/positive_functional_operator.rs`, `NEXT_BOUNDARY.md` |
+| SH14 exact LDL positivity search | confirmed rational calibration; archimedean intervals unavailable | `src/positive_kernel_search.rs`, `NEXT_BOUNDARY.md` |

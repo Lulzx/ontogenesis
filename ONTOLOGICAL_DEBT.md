@@ -302,3 +302,62 @@ removing the debt entry.
 - D28 permits an exact finite prime-to-spectrum identity claim. A scalar moment
   or degenerate normalized limit does not establish equality of spectral and
   xi-zero measures and cannot reach M29.
+
+## SH8–SH9 entries (pre-registered)
+
+- New debt D29: the even polynomial class `{x^2,x^4,x^6}`, symbolic matrix
+  engine, truncation sizes, and `J_N/p_N` normalization proposal are supplied.
+  The class is finite and nonseparating.
+- New debt D30: bounded-perturbation/min-max rules, the prime number theorem,
+  Riemann-von Mangoldt asymptotic, and growth-class incompatibility checker are
+  supplied. SH9 can rigorously eliminate the selected family but cannot count
+  those classical analytic inputs as discovered concepts.
+
+## SH10 counting-law repair entry (pre-registered)
+
+- New debt D31: the six diagonal growth forms, four scale constants, PNT
+  asymptotic algebra, Riemann-von Mangoldt leading target, and first-correction
+  comparison are supplied.
+- Selecting a growth-compatible family inside D31 is representation search,
+  not discovery of the xi operator. A leading counting-law match is necessary
+  but far from a spectral correspondence.
+
+## SH11 inverse-counting entry (pre-registered)
+
+- New debt D32: Lambert `W` semantics, the parameterized logarithmic counting
+  family, expression grammar, branch interface, and rewrite checker are
+  supplied.
+- Generic reconstruction may mark the inverse schema `reconstructed`; its xi
+  instance remains a smooth count model. The zero-count remainder and
+  prime-to-spectrum trace identity remain unproved.
+
+## SH12 non-identifiability entry (pre-registered)
+
+- New debt D33: interlacing perturbation families, strict-increase
+  certificates, and the invariant-counting theorem are supplied.
+- SH12 can eliminate an entire information class, not merely a candidate. It
+  does not discover the required separating trace formula; that remains the
+  next load-bearing debt.
+
+## SH13 positive-functional constructor entry (pre-registered)
+
+- New debt D34: star-algebra, GNS, null-ideal, cyclic-vector, coordinate
+  multiplication, and spectral-representation rules are supplied.
+- The constructor may be reconstructed and transferred, but real-xi positivity
+  is not supplied. Supplying it would encode an RH-equivalent obligation and
+  cannot count as an M29 discovery.
+
+## SH14 positive-kernel entry (pre-registered)
+
+- New debt D35: Hankel moment representation, LDL certificate format,
+  Gaussian-polynomial test vectors, and interval-pivot checker are supplied.
+- Finite Gram positivity is nonseparating evidence. Retiring D35 requires a
+  uniform degree/scale argument, not an arbitrary number of positive minors.
+
+## SH15 validated-evaluation entry (pre-registered)
+
+- New debt D36: outward-rounded intervals, special-function identities,
+  Gaussian basis, prime-tail bounds, and explicit-formula term decomposition
+  are supplied.
+- Validated finite entries remove an engineering blocker only; infinite
+  positivity still needs a uniform certificate.

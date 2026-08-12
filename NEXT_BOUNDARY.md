@@ -3006,7 +3006,7 @@ identity, so the certified frontier is a degenerate scalar limit and
 
 **Pre-registration date:** 2026-08-12
 
-**Status:** frozen before implementation
+**Status:** executed without amendment; finite identities pass, limit uncertified
 
 Extend the retained closed-walk schema to even polynomial test functions of
 degrees two, four, and six for the SH5b prime Jacobi family. Candidate
@@ -3020,3 +3020,299 @@ three-function class. This class is explicitly nonseparating, so even a pass
 cannot produce measure equality or M29. Controls permute one walk weight, omit
 boundary terms, introduce zero-derived normalization, and attempt finite-class
 measure promotion. Record divergence before any class expansion.
+
+## SH8 recorded outcome
+
+Independent symbolic matrix multiplication and closed-walk enumeration agree
+for degrees two, four, and six on all training sizes and held-out size five.
+The held-out polynomials contain 9, 24, and 67 monomials. All four controls
+decline. The common proposed scaling is the empirical spectrum of `J_N/p_N`,
+with candidate moments `1/3`, `1/5`, and `1/7`, but SH8 contains no analytic
+certificate for those limits. It therefore records exact finite identities
+only; `m29_reached=false`.
+
+---
+
+# Next Boundary — SH9 Spectral-Counting Obstruction
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; invalidated by derivation audit
+
+Audit SH5b's selected infinite operator before expanding its trace language.
+Decompose `J=D+K`, where `D=diag(p_n)` and `K` is the unit off-diagonal path
+operator. The checker receives exact certificates that `D` is self-adjoint
+with compact resolvent, `K` is bounded self-adjoint with norm at most two, and
+`J` is their self-adjoint sum. A min-max perturbation rule may conclude
+`|lambda_n(J)-p_n|<=2`.
+
+The only supplied analytic asymptotics are the prime number theorem
+`pi(T)~T/log T` and the Riemann-von Mangoldt zero count
+`N_xi(T)~(T/(2*pi))log(T/(2*pi))-T/(2*pi)`. The checker normalizes these to
+growth classes `T/log T` and `T log T`, proves the ratio tends to zero, and
+derives that the two multisets cannot be equal up to finite shifts or bounded
+perturbation. It must reject a missing compact-resolvent premise, an unbounded
+perturbation, big-O without a leading asymptotic, finite sampled counts, and
+zero-derived operator construction.
+
+SH9 is a falsification milestone. Passing rules out this selected Jacobi family
+as an exact xi-spectrum object; it does not rule out other operator grammars or
+prove anything about RH. The real search must use the obstruction to revise
+the coefficient growth language rather than continue optimizing this family.
+
+## SH9 recorded outcome
+
+The checker certifies `|lambda_n(J)-p_n|<=2`, hence spectral counting growth
+`T/log T`. Riemann-von Mangoldt gives xi-zero counting growth `T log T`; their
+ratio tends to zero. All five malformed controls decline. The selected
+`a_n=1,b_n=p_n` family is therefore eliminated as an exact xi-spectrum object.
+This falsifies one family only and leaves real M29 unreached.
+
+Post-run audit found that the implementation asserted the `J` counting
+asymptotic after proving bounded eigenvalue displacement, rather than deriving
+it through a kernel rule. Preserve SH9 as invalidated and correct only this
+missing inference in SH9b.
+
+---
+
+# Next Boundary — SH9b Counting-Law Transfer Rule
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; selected family eliminated
+
+Add one rule: a bounded eigenvalue-displacement certificate from reference
+operator `D` to operator `J`, plus a leading counting asymptotic for `D`,
+derives the same growth class for `J`. Operator names must match. The real proof
+must use the derived judgment, not a replacement axiom. Add controls for name
+mismatch and an explicitly unbounded perturbation. All other SH9 facts, rules,
+asymptotic inputs, and outcomes remain frozen.
+
+## SH9b recorded outcome
+
+The added rule derives the counting law of `J(1,p_n)` from the diagonal prime
+count and eigenvalue displacement. The incompatibility proof then passes with
+all seven controls. The SH5b family is eliminated; real M29 remains unreached.
+
+---
+
+# Next Boundary — SH10 Counting-Law-Guided Grammar Repair
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; leading law repaired, correction fails
+
+Replace SH5b's diagonal grammar only after the SH9 falsification. Candidate
+diagonal asymptotic forms, in frozen order, are `n`, `p_n`, `n log n`,
+`n/log n`, `n^2/p_n`, and `p_n^2/n`, each scaled by `1`, `2`, `pi`, or `2*pi`.
+Off-diagonal programs remain the SH5b grammar and must independently earn
+Carleman self-adjointness. Individual zero locations and finite zero counts are
+forbidden in construction and ranking.
+
+All logarithmic forms apply for `n>=2`; the first diagonal coefficient is
+fixed to zero and treated as a finite-prefix choice. First corrections are
+coefficients in `log n + c log log n + O(1)`: `n/log n` has `c=0`,
+`n^2/p_n` has `c=+1`, and inverse Riemann-von Mangoldt requires `c=-1`.
+
+The target filter is only the leading Riemann-von Mangoldt counting class
+`N(T)~T log T/(2*pi)`. A symbolic asymptotic checker derives each candidate's
+inverse counting exponent and leading coefficient from the supplied PNT. It
+must reject exponent-only matches, coefficient-only matches, finite sampled
+count fits, and zero-derived candidates. Search reports every leading-law
+survivor and then compares the first `log log` correction. A leading-law match
+cannot establish xi correspondence, and a correction mismatch is recorded as
+a new obstruction rather than optimized away after output.
+
+## SH10 recorded outcome
+
+All 24 pairs are checked. The leading-law survivors are `2*pi*n/log n` and
+`2*pi*n^2/p_n`; frozen order selects the former. Their correction coefficients
+are zero and plus one, while inverse Riemann-von Mangoldt requires minus one.
+All controls decline. The leading density is repaired but the first correction
+fails, so `m29_reached=false`.
+
+---
+
+# Next Boundary — SH11 Generic Inverse-Counting Constructor
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; generic inverse transfers, exact xi remainder open
+
+Calibrate inversion away from xi on
+`F_{a,b}(x)=a*x*(log(b*x)-1)` for positive symbolic `a,b`. Candidate inverse
+schemas use `n,a,b,e`, arithmetic, `exp`, and Lambert `W`, in frozen size-first
+order. An independent checker substitutes each proposal into `F`, rewrites
+only `W(z)*exp(W(z))=z`, and requires exact simplification to `n`.
+
+The retained schema must work for generic `a,b`, transfer to `x log x`,
+`2x(log(3x)-1)`, and `x(log(x/5)-1)/7`, reject wrong branch, missing `e`,
+sign-flipped, and sampled-only controls, and amortize acquisition.
+
+Only afterward instantiate the Riemann-von Mangoldt main term, obtaining the
+smooth quantile `q_n=2*pi*n/W(n/e)`. Its diagonal operator may earn
+self-adjointness, compact resolvent, and exact inversion of the smooth counting
+main term. It cannot earn exact xi spectrum: the counting remainder and
+individual zero displacement remain uncontrolled, and no prime trace identity
+is supplied.
+
+## SH11 recorded outcome
+
+The generic inverse is retained at schema 5/5 and transfers symbolically to all
+three held-out logarithmic counting families. Acquisition plus three retained
+checks costs 8 versus 15 cold checks. The xi instantiation yields the smooth
+quantile `2*pi*n/W(n/e)` and a self-adjoint diagonal compact-resolvent model of
+the two-term main count. It does not control the Riemann-von Mangoldt remainder
+or individual zeros; `m29_reached=false`.
+
+---
+
+# Next Boundary — SH12 Counting Non-Identifiability Certificate
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; invalidated by perturbation-type audit
+
+Test whether any finite-order counting asymptotic can identify an exact
+spectrum. Starting from an arbitrary strictly increasing unbounded quantile
+`q_n`, perturb alternately by one quarter of the smaller adjacent gap. The new
+sequence stays strictly increasing, interlaces the original, and differs from
+it. Also test `q_n+1/(n+1)` when a local-gap comparison is supplied. The
+checker must certify self-adjoint compact-resolvent realizations and counting
+functions differing by at most one.
+
+The conclusion is a typed non-identifiability fact: any counting expansion
+whose admitted remainder is stable under an `O(1)` count error cannot imply
+measure equality or pointwise spectral correspondence. Controls use an
+unbounded perturbation, an equal sequence disguised syntactically, a base
+lacking strict-increase evidence, and attempted promotion to xi correspondence.
+
+Passing SH12 retires counting-law optimization as a route to exact M29. The
+next search must construct a trace identity on a separating infinite test
+class, with its prime side and archimedean normalization checked independently.
+
+## SH12 recorded outcome
+
+Two distinct interlacing perturbation families receive self-adjoint
+compact-resolvent realizations and counting functions differing by at most one.
+All four controls decline. Thus every admitted count expansion stable under an
+`O(1)` error is non-identifying. Further count refinement is retired as a route
+to exact M29; a separating trace functional is required.
+
+The implementation typed quarter-local-gap displacement as uniformly bounded,
+which need not hold for arbitrary quantiles. Preserve SH12 as invalidated.
+
+---
+
+# Next Boundary — SH12b Interlacing Non-Identifiability Correction
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; counting-only route eliminated
+
+Replace `BoundedDisplacement` by `OrderPreservingInterlacing` for the local-gap
+construction. Count difference at most one is derived from interlacing, not a
+norm bound. The reciprocal example, controls, and non-promotion conclusion are
+otherwise unchanged.
+
+## SH12b recorded outcome
+
+The corrected proof uses order-preserving interlacing and certifies two
+distinct spectra whose counting functions differ by at most one. All four
+controls decline. No norm-displacement claim is made. Counting expansions
+stable under an `O(1)` error are therefore non-identifying.
+
+---
+
+# Next Boundary — SH13 Positive-Functional Operator Constructor
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; generic constructor transfers, Weil positivity absent
+
+Build a generic typed constructor independent of zeta. Inputs are a unital
+commutative star algebra `A` of test functions, a normalized linear functional
+`L`, a positivity certificate `L(f* f)>=0`, a null-ideal certificate, and an
+essential-self-adjointness certificate for multiplication by the real
+coordinate. Checked rules construct the GNS Hilbert space, its cyclic vector,
+the coordinate operator, and a spectral measure satisfying
+`L(f)=<Omega,f(T)Omega>` on `A`.
+
+Calibrate on three exact domains: finitely supported functions on integers with
+a positive weighted sum, Laurent polynomials on the unit circle with Haar
+coefficient functional, and finite graph adjacency moments. Transfer to a
+signed functional must decline at positivity. Missing star closure, a null set
+that is not an ideal, a merely symmetric coordinate, and equality on a finite
+nonseparating class are controls.
+
+For the real retry, instantiate `A` as an infinite even test algebra and expose
+a `WeilExplicitFunctional` interface with separately typed archimedean, pole,
+and prime-power terms. The search may construct the GNS xi operator only after
+proving positivity of that arithmetic functional and essential
+self-adjointness of its coordinate. The explicit formula itself, sampled-zero
+positivity, or RH-equivalent positivity may not be assumed. SH13 reports the
+first missing premise and cannot claim M29 from the calibrated domains.
+
+## SH13 recorded outcome
+
+The GNS/operator constructor completes on all three calibration domains and
+declines all five malformed controls. The real explicit functional is
+well-formed with archimedean, pole, and prime-power components, but no
+arithmetic-only positivity judgment exists. Construction stops before GNS at
+`PositiveFunctional(L_weil)`; `m29_reached=false`.
+
+---
+
+# Next Boundary — SH14 Exact Positive-Kernel Certificate Search
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; exact LDL calibrated, Weil entries unavailable
+
+Reconstruct finite positivity certificates without domain names. Given exact
+rational moments `m_0,...,m_{2d}`, construct the Hankel Gram matrix
+`G_{ij}=m_{i+j}` and search exact `L D L^T` decompositions with nonnegative
+rational diagonal. Calibration sequences are point masses, positive finite
+mixtures, and uniform moments on `[-1,1]`; signed mixtures and a corrupted
+moment are negative controls. Hold out degrees four and five.
+
+For the Weil functional, candidate test vectors are even Gaussian-polynomial
+functions represented by rational polynomial coefficients and a symbolic
+Gaussian scale. Each matrix entry must be assembled independently from typed
+pole, archimedean, and prime-power terms. An exact positivity result requires
+closed exact values or certified rational intervals whose LDL pivots remain
+strictly positive under interval propagation. Sampled zeros are forbidden.
+
+SH14 reports whether failure occurs at term evaluation, interval decisiveness,
+or a negative pivot. Finite positive minors never promote to positivity on the
+infinite algebra. Passing calibration with a real-term failure is useful
+infrastructure but leaves SH13's premise open.
+
+## SH14 recorded outcome
+
+Exact rational LDL certificates pass for point masses, positive mixtures, and
+uniform moments through held-out degrees four and five. Signed and corrupted
+moments decline, as does finite-to-infinite promotion. The zero-free real retry
+stops before its four-by-four Gram matrix because certified archimedean-term
+intervals are unavailable. No Weil positivity claim is made.
+
+---
+
+# Next Boundary — SH15 Validated Explicit-Formula Evaluation
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** frozen before implementation
+
+Add a reusable outward-rounded interval backend before evaluating real Weil
+Gram entries. Calibrate elementary `exp`, `log`, Gaussian integrals, and real
+digamma/gamma-log combinations against exact identities and disjoint precision
+escalations. Every result carries precision and a rigorous tail bound; ordinary
+`f64` values cannot enter a certificate.
+
+The evaluator separately returns intervals for pole, archimedean, and
+prime-power terms. Prime sums require a proven tail enclosure uniform over the
+frozen basis. Controls corrupt one round direction, truncate without a tail,
+omit the pole term, reuse an interval at higher precision, and inject
+zero-derived values. Positive finite pivots remain finite evidence and cannot
+discharge infinite Weil positivity.

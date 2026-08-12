@@ -290,6 +290,16 @@ finite closed-walk trace schema. SH7b then discovers and symbolically verifies
 one scalar, so no separating trace identity or xi spectral correspondence is
 obtained. Real M29 remains unreached.
 
+SH8–SH14 sharpen that frontier. SH9b eliminates the selected prime-Jacobi
+family by its `T/log T` spectral count. SH11 reconstructs a generic Lambert-W
+inverse and obtains the smooth xi quantile `2*pi*n/W(n/e)`, but SH12b proves
+counting expansions stable under an `O(1)` count error are non-identifying.
+SH13 reconstructs a generic positive-functional/GNS operator constructor, and
+SH14 calibrates exact rational LDL positivity certificates. The real chain
+stops before Weil Gram evaluation because validated archimedean intervals are
+absent. No Weil positivity or exact xi spectrum is claimed; real M29 remains
+open.
+
 Directions G and Mathematical Ontogenesis M1–M28 plus M29b surrogate are
 implemented, and real M30 has been attempted. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
