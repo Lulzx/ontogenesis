@@ -2209,3 +2209,89 @@ The fourth control is not a translated copy and breaks the supplied
 reflection. It uses the same Newton iterations, finite-difference derivative,
 height band, residual tolerance, and deduplication rule. M27b fails if any
 corrected control fails. Any further post-output change creates M27c.
+
+---
+
+# Next Boundary — M28 Reflection-Orbit Equivalence
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M28 implementation; executed without amendment
+
+## Recorded outcome
+
+The exact checker found two equivalent affine predicates, `I=RC` and `R=C`.
+Only `I(rho)=RC(rho)` passed the frozen local-novelty rule because it uses the
+generated composition. Its certificate residuals are `[X-1,0]`; both
+implications and universal lifting certify. Cold/transferred candidate tests
+fell 3→1. Four predicate controls and the corrupted composition declined, and
+exact downstream orbit work fell 110→47 with no false-positive routing or
+negative transfer.
+
+M28 reaches `L2_invented_feature_in_supplied_meta_ontology`. The record states
+`rh_proved=false` and `global_novelty=false`: this is an exact reformulation of
+the M27 conjecture predicate inside a supplied affine-transform theory, not a
+proof of RH or a literature-novel RH equivalence.
+
+## Intended claim and ceiling
+
+M28 searches for a structurally distinct predicate `Q(rho)` exactly equivalent
+to `P(rho): 2 Re(rho)-1=0`, then lifts the pointwise certificate to
+`forall zero rho, P(rho)` iff `forall zero rho, Q(rho)`. This proves
+equivalence of formulations, not either formulation and not RH. The maximum
+claim is `L2_invented_feature_in_supplied_meta_ontology`.
+
+No global novelty claim is permitted. “Locally novel” means only absent from
+the frozen repository reference set and not a direct polynomial paraphrase.
+
+## Frozen symbolic substrate and candidates
+
+- Raw coordinates are symbolic real variables `(x,y)` for `rho=x+iy`.
+- Transformations are `I(s)=s`, `R(s)=1-s`, `C(s)=conj(s)`, and generated
+  composition `RC=R compose C`, represented as exact integer affine maps.
+- Candidates are equality predicates `A(rho)=B(rho)` for each unordered pair
+  of distinct transformations, exactly six candidates. Same-transform
+  tautologies and direct `2x-1=0` are excluded.
+- Cold order is lexicographic over pairs in `[I,R,C,RC]`. Transferred order
+  prioritizes equality with a composed transformation, then uses the same tie
+  break. Candidate sets are identical.
+
+## Exact checker and certificate
+
+The checker subtracts the two affine maps into two integer linear equations.
+It certifies `P -> Q` only when all equations are multiples of `2x-1`; it
+certifies `Q -> P` only when at least one equation is a nonzero multiple and
+the rest are compatible multiples. The certificate contains the two normalized
+residual equation vectors. The lifting from pointwise equivalence under
+`forall rho in Zeros` is a supplied logical congruence lemma. No coefficient
+hints flow back during search.
+
+## Frozen novelty and controls
+
+The local reference set contains `2x-1=0`, `x=1/2`, and scalar multiples. A
+transform equality is locally novel only if its rendered syntax is absent and
+it uses a non-identity generated transformation. Controls `I=R`, `I=C`,
+`R=RC`, and `C=RC` must each fail at least one implication. A corrupted
+composition `RC_bad=R` must not certify the selected equality.
+
+## Frozen downstream utility
+
+Compatible point families use doubled coordinates `X=2x=1`, with `Y=2y` in
+`{2,4,6}`, `{3,7,11}`, and `{-8,-2,10}`. Two off-locus controls use
+`X in {0,2}` and must be declined.
+
+- Baseline constructs all four `I,R,C,RC` images and performs all six pair
+  comparisons to deduplicate the orbit: 10 counted operations per point.
+- Acquired reasoning checks the certificate, constructs only `I,C`, and
+  returns the two-element orbit: 3 counted operations per point.
+- Exact orbit-set equality is required on compatible tasks; negative transfer
+  and false-positive routing must both be zero.
+
+M28 passes if both exact implications and universal lifting certify, local
+novelty passes, all controls decline, both conditions select semantically
+equivalent predicates with fewer candidate tests, and downstream work is lower
+with exact orbit equality. Any post-output change creates M28b.

@@ -333,4 +333,6 @@ completion from a supplied analytic grammar at L2, with measured search
 falling 954→2 and separate held-out/exact gates. M27b selects the finite-data
 conjecture `2 Re(rho)-1=0` at L2 with search
 falling 18→8; M27a is preserved as invalidated and the result is not a proof.
-M28–M30 are not claimed.
+M28 proves the exact predicate equivalence
+`2 Re(rho)-1=0 iff rho=1-conj(rho)` at L2, with orbit work falling 110→47;
+neither RH nor global novelty is claimed. M29–M30 are not claimed.

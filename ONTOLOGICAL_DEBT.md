@@ -178,3 +178,13 @@ removing the debt entry.
   reflection-fixed-set preference, and held-out/control protocol are supplied.
 - D17/D18 cap M27 at L2. A passing run is finite-data conjecture selection and
   measured search transfer, not proof that all nontrivial zeros lie on a line.
+
+## M28 entry (pre-registered)
+
+- D15/D16/D18 are reused: reflection, conjugation semantics, and the M27 locus
+  predicate are supplied.
+- New debt D19: the four-element transformation closure, equality-predicate
+  grammar, affine ideal checker, universal-lifting lemma, local novelty corpus,
+  and orbit-cost downstream tasks are supplied.
+- D19 caps M28 at L2. Exact equivalence does not prove either side, and local
+  novelty is not novelty relative to mathematical literature.

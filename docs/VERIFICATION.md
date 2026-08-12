@@ -252,3 +252,4 @@ M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 | M13 requires unordered-root/multivariable polynomial architecture | boundary demonstrated | `CURRENT_STATE.md`, `NEXT_BOUNDARY.md` |
 | M26 real-zeta completion selection and transfer | confirmed, exact within supplied identity theory | `src/real_zeta_world.rs`, `NEXT_BOUNDARY.md` |
 | M27b real-zeta zero-locus conjecture and corrected controls | confirmed, finite numerical conjecture | `src/critical_line_world.rs`, `NEXT_BOUNDARY.md` |
+| M28 reflection-orbit predicate equivalence | confirmed, exact affine certificate | `src/rh_equivalence_world.rs`, `NEXT_BOUNDARY.md` |

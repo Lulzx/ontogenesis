@@ -90,6 +90,8 @@
 //!   held-out analytic and exact reflection-certificate gates.
 //! - [`critical_line_world`]: Direction M27 finite-data real-zeta zero-locus
 //!   conjecture with independent height holdouts.
+//! - [`rh_equivalence_world`]: Direction M28 exact reflection-orbit
+//!   reformulation of the M27 conjecture predicate.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -121,6 +123,7 @@ pub mod learned_context;
 pub mod locus_world;
 pub mod making_object_world;
 pub mod real_zeta_world;
+pub mod rh_equivalence_world;
 pub mod nbe;
 pub mod ontology_guidance;
 pub mod ontology_repair;

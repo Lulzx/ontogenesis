@@ -218,9 +218,21 @@ conjugates, the primary falsifier, both algebraic-factor exclusions, translated
 roots, and independently recovered zeros of `F(s)+0.2F(s+0.11)` pass. M27b
 reaches `L2_invented_feature_in_supplied_meta_ontology` with `proof=false`.
 Root finding, the locus grammar, scoring, and reflection preference remain
-D17/D18 debt. M28 remains unreached.
+D17/D18 debt.
 
-Directions G and Mathematical Ontogenesis M1–M27 are implemented. M10 added
+## M28 reflection-orbit equivalence result
+
+A separately pre-registered exact affine checker searches six transformation
+equalities and retains `I(rho)=R(C(rho))`. Its residual equations normalize to
+`[X-1,0]`, proving both pointwise directions with the M27 predicate
+`2 Re(rho)-1=0`; a supplied congruence lemma lifts this equivalence over any
+zero set. Candidate tests fall 3→1 and exact orbit reasoning falls 110→47
+operations. Four predicate controls and a corrupted composition decline, with
+no false-positive routing or negative transfer. M28 reaches
+`L2_invented_feature_in_supplied_meta_ontology`; `rh_proved=false` and
+`global_novelty=false`. D19 remains active. M29 remains unreached.
+
+Directions G and Mathematical Ontogenesis M1–M28 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -247,6 +259,8 @@ M26 adds real-zeta completion selection in a supplied analytic grammar, with
 measured cold-versus-transferred search and separate numerical and exact gates.
 M27b adds the finite-data real-zeta zero-locus conjecture `2 Re(rho)-1=0`,
 with corrected negative controls and an explicit non-proof label.
+M28 adds the exact reflection-orbit reformulation `rho=1-conj(rho)`, with
+bidirectional affine certificates and explicit no-RH/no-global-novelty labels.
 
 ## M12 result
 
