@@ -88,6 +88,8 @@
 //!   signal-derived Hankel object whose rank-one property forces toy-RH.
 //! - [`real_zeta_world`]: Direction M26 real-zeta completion selection with
 //!   held-out analytic and exact reflection-certificate gates.
+//! - [`critical_line_world`]: Direction M27 finite-data real-zeta zero-locus
+//!   conjecture with independent height holdouts.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -98,6 +100,7 @@ pub mod causal_ontology;
 pub mod contextual_allocation;
 pub mod contextual_guidance;
 pub mod conjecture_world;
+pub mod critical_line_world;
 pub mod concept_migration;
 pub mod completion_world;
 pub mod coproduct_property;

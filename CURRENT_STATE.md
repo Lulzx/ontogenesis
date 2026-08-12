@@ -202,10 +202,25 @@ certificate, and four controls pass. M26 reaches
 `L2_invented_feature_in_supplied_meta_ontology`, not L3: analytic continuation,
 special-function semantics, the factor grammar, reflection objective, and
 checker lemmas are D15/D16 debt. Both numerical settings use binary64, so the
-increased-work check is not arbitrary-precision validation. M27 remains
-unreached.
+increased-work check is not arbitrary-precision validation.
 
-Directions G and Mathematical Ontogenesis M1–M26 are implemented. M10 added
+## M27 real-zeta zero-locus conjecture result
+
+M27a recovered 3 training and 7 held-out roots and selected `2 Re(rho)-1=0`,
+but a post-run audit invalidated its control gate because two controls were
+extensionally redundant and the algebraic check used the wrong quantifier.
+That run is preserved and not counted.
+
+M27b changed only the pre-registered controls and reproduced the result over
+58,095 normalized integer quadratic loci. Cold versus M21–M26-informed search
+falls 18→8 candidate tests; increased-work recovery, disjoint higher roots,
+conjugates, the primary falsifier, both algebraic-factor exclusions, translated
+roots, and independently recovered zeros of `F(s)+0.2F(s+0.11)` pass. M27b
+reaches `L2_invented_feature_in_supplied_meta_ontology` with `proof=false`.
+Root finding, the locus grammar, scoring, and reflection preference remain
+D17/D18 debt. M28 remains unreached.
+
+Directions G and Mathematical Ontogenesis M1–M27 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -230,6 +245,8 @@ M25 adds the signal-derived Hankel object whose exact rank-one property
 forces toy-RH over a frozen family with provenance controls.
 M26 adds real-zeta completion selection in a supplied analytic grammar, with
 measured cold-versus-transferred search and separate numerical and exact gates.
+M27b adds the finite-data real-zeta zero-locus conjecture `2 Re(rho)-1=0`,
+with corrected negative controls and an explicit non-proof label.
 
 ## M12 result
 

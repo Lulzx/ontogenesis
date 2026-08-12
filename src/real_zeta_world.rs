@@ -184,6 +184,21 @@ fn evaluate(candidate: Candidate, s: Complex64, escalated: bool) -> Complex64 {
     value
 }
 
+pub(crate) fn completed_value(s: Complex64, escalated: bool) -> Complex64 {
+    evaluate(
+        Candidate {
+            s_power: 1,
+            sm1_power: 1,
+            pi_s_half_power: -1,
+            pi_constant_power: 0,
+            gamma_shift: 0,
+            gamma_power: 1,
+        },
+        s,
+        escalated,
+    )
+}
+
 fn relative_residual(left: Complex64, right: Complex64) -> f64 {
     (left - right).norm() / left.norm().max(right.norm()).max(1.0)
 }

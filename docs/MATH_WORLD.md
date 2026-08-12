@@ -330,4 +330,7 @@ signal-derived Hankel object whose exact rank-one property forces ToyRH over
 a frozen 270-member family, reaches L3 with evaluations falling 1,183→730,
 and enforces signal-only provenance. M26 selects the standard real-zeta
 completion from a supplied analytic grammar at L2, with measured search
-falling 954→2 and separate held-out/exact gates. M27–M30 are not claimed.
+falling 954→2 and separate held-out/exact gates. M27b selects the finite-data
+conjecture `2 Re(rho)-1=0` at L2 with search
+falling 18→8; M27a is preserved as invalidated and the result is not a proof.
+M28–M30 are not claimed.

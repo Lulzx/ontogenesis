@@ -2085,4 +2085,127 @@ any held-out/precision/conjugation gate fails, the exact certificate fails, or
 any control is certified. Transfer is reported as zero if its ordering does
 not beat cold search. Any post-output change creates M26b and preserves this
 run.
-run.
+
+---
+
+# Next Boundary — M27 Real-Zeta Zero Locus Conjecture
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** executed; M27a claim gate invalidated by post-run control audit
+
+## M27a recorded outcome
+
+The run recovered 3 training and 7 held-out roots, selected `2x-1=0`, passed
+precision and held-out checks, and reduced candidate tests 18→8. It remained
+labeled conjectured. However, the corrupted-evaluator control `F(s+0.08)` has
+the same translated roots as the all-roots-shifted control, and the
+implementation accepted the algebraic-factor control when either rather than
+both of `s=0,1` was excluded. The reported `4/4` was therefore not four valid
+independent declines. M27a does not establish the intended L2 gate.
+
+## Intended claim and ceiling
+
+M27 asks whether finite nontrivial zeros recovered from the M26 completed
+object support a simple retained locus and whether M21–M26 ontology reduces
+search over one fixed locus language. The output is always labeled
+`conjectured`; finite zero agreement is not a proof and no RH theorem is
+claimed. Because zero finding, the locus grammar, and its objective are
+supplied, the claim ceiling is
+`L2_invented_feature_in_supplied_meta_ontology`.
+
+## Frozen zero recovery
+
+- The evaluated object is the M26 selection
+  `s(s-1) pi^(-s/2) Gamma(s/2) zeta(s)`, without an `xi` library call.
+- Complex Newton iteration uses central finite-difference derivatives and
+  starts from every point of rectangular two-dimensional seed grids with
+  `Re(s) in {-0.25,0,0.25,0.5,0.75,1,1.25}`. The real coordinate is not
+  fixed to a proposed locus.
+- Training seeds use `Im(s)=10,10.5,...,30`; held-out seeds use
+  `Im(s)=30.5,31,...,55`. Converged roots must remain in the corresponding
+  height band, have scale-invariant Newton residual `|F/F'|` at most `2e-8`,
+  and deduplicate within `1e-5`.
+- Each retained root must reconverge under increased Euler–Maclaurin work with
+  residual at most `2e-10` and displacement at most `2e-6`.
+- At least three distinct training roots and three distinct held-out roots are
+  required. Trivial real zeros are excluded only by the positive-height bands.
+
+## Frozen locus language and scoring
+
+- Coordinates are raw `(x,y)=(Re(rho),Im(rho))`; no critical-strip or
+  critical-line type is supplied.
+- Candidates are nonzero integer polynomials
+  `a*x^2+b*x*y+c*y^2+d*x+e*y+f=0`, coefficients in `[-3,3]`, normalized by
+  coefficient gcd and first-nonzero sign. At least one of `a..e` is nonzero.
+- Candidate complexity is `(degree, nonzero coefficient count, L1 norm,
+  lexicographic coefficients)`. A candidate fits when its scale-normalized
+  residual is at most `2e-6` for every training root.
+- Vacuous constant predicates and predicates accepting every point are absent.
+  The primary falsifier is the first point in the frozen grid
+  `x in {-1,-0.5,0,0.5,1,1.5,2}`, `y in {0,1,2}` that fails the candidate.
+
+## Compared conditions and accounting
+
+- **Cold:** normalized candidates in the declared complexity order, without
+  reflection-fixed-set preference.
+- **Transferred:** the identical candidate set ordered by generic retained
+  motifs: lower degree, fewer terms, lower coefficient norm, and compatibility
+  with the fixed set of the acquired reflection `s -> 1-s`. The final item is
+  declared D18 objective debt; no zero residual or held-out root enters order.
+- Search stops at the first training-fitting non-vacuous candidate. Candidate
+  tests and polynomial evaluations are separately counted.
+- Transfer requires equivalent cold/transferred selections and fewer candidate
+  tests. No gain is reported if those conditions fail.
+
+## Held-out gates and controls
+
+The selected locus must accept every independently recovered held-out root and
+its conjugate. It must reject the primary falsifier and four controls: one
+training root shifted by `+0.08` in real part, all training roots shifted by
+`+0.08`, roots of the completion's known algebraic factors at `s=0,1`, and a
+corrupted analytic evaluator `F(s+0.08)`. The latter two controls must not be
+admitted as evidence for the nontrivial-zero conjecture.
+
+M27 fails if root recovery or precision escalation fails, the conditions do
+not select equivalent loci, held-out validation fails, any control is
+accepted, the result is labeled proved, or the selected predicate has no
+falsifier. Any post-output change creates M27b and preserves this run.
+
+---
+
+# Next Boundary — M27b Corrected Real-Zeta Zero Locus Conjecture
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** frozen after M27a invalidation; executed without amendment
+
+## M27b recorded outcome
+
+M27b reproduced the M27a search result while passing the corrected controls.
+It recovered 3 training roots and 7 higher held-out roots, searched 58,095
+normalized loci, and selected `2x-1=0`. Candidate tests fell 18→8. Precision
+recovery, held-out roots, conjugates, primary falsifier, both algebraic-factor
+exclusions, translated-root controls, and the independently recovered
+perturbed-function control passed. The output has `proof=false` and reaches
+`L2_invented_feature_in_supplied_meta_ontology`; it is finite numerical support
+for a conjecture, not a proof of RH.
+
+M27b preserves every M27a candidate, ordering, seed, tolerance, scoring, and
+claim rule. It changes only the flawed control gate:
+
+1. one training root shifted by `+0.08` in real part must be rejected;
+2. the whole training set shifted by `+0.08` must be rejected;
+3. both algebraic-factor zeros `s=0` and `s=1` must be rejected;
+4. at least three zeros independently recovered from the perturbed analytic
+   object `F(s)+0.2 F(s+0.11)` on the training seed grid must exist, and every
+   recovered perturbed zero must be rejected by the selected locus.
+
+The fourth control is not a translated copy and breaks the supplied
+reflection. It uses the same Newton iterations, finite-difference derivative,
+height band, residual tolerance, and deduplication rule. M27b fails if any
+corrected control fails. Any further post-output change creates M27c.

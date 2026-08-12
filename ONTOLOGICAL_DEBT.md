@@ -166,3 +166,15 @@ removing the debt entry.
 - These debts cap M26 at L2. It can show completion selection and measured
   transfer inside a privileged grammar, not invention of completed zeta or its
   analytic semantics.
+
+## M27 entry (pre-registered)
+
+- D15/D16 are reused: the completed object, analytic evaluator, and reflection
+  law remain supplied.
+- New debt D17: rectangular Newton search, numerical zero acceptance,
+  deduplication tolerances, height bands, and precision-escalation semantics are
+  supplied.
+- New debt D18: the bounded quadratic locus grammar, simplicity score,
+  reflection-fixed-set preference, and held-out/control protocol are supplied.
+- D17/D18 cap M27 at L2. A passing run is finite-data conjecture selection and
+  measured search transfer, not proof that all nontrivial zeros lie on a line.
