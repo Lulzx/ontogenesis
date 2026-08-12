@@ -155,3 +155,14 @@ removing the debt entry.
   self-adjoint labels are not.
 - D14 is conditioned, not eliminated: the forcing theorem is a finite
   enumeration certificate over a bounded family.
+
+## M26 entry (pre-registered)
+
+- New debt D15: analytic continuation through Euler–Maclaurin evaluation, complex
+  special-function semantics, the factor/exponent language, and exact
+  zeta/Gamma identity lemmas are supplied.
+- New debt D16: reflection symmetry is supplied as the objective, and the
+  transferred condition receives a motif ordering distilled from M17–M25.
+- These debts cap M26 at L2. It can show completion selection and measured
+  transfer inside a privileged grammar, not invention of completed zeta or its
+  analytic semantics.

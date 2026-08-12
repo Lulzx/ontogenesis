@@ -9,6 +9,7 @@
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::OnceLock;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rational {
@@ -215,7 +216,6 @@ fn enumerate_completions() -> Vec<Completion> {
             visit(atoms, index + 1, current, output);
             current.remove(&atoms[index]);
         }
-        visit(atoms, index + 1, current, output);
     }
     visit(&atoms, 0, &mut BTreeMap::new(), &mut completions);
     completions
@@ -226,6 +226,87 @@ fn completion_score(completion: &Completion) -> (usize, i64) {
         completion.len(),
         completion.values().map(|value| value.abs()).sum(),
     )
+}
+
+const ALL_ATOMS: [Atom; 7] = [
+    Atom::C,
+    Atom::B,
+    Atom::BPrime,
+    Atom::PowS,
+    Atom::PowOneMinusS,
+    Atom::PowTwoSMinusOne,
+    Atom::MinusOne,
+];
+
+#[derive(Clone)]
+struct ReflectionScreen {
+    log_difference: f64,
+    atom_log_differences: [f64; 7],
+    sign_ratio: i8,
+    atom_sign_ratios: [i8; 7],
+}
+
+fn rational_log_sign(value: &Rational) -> (f64, i8) {
+    let numerator = value.numerator.to_string().parse::<f64>().unwrap();
+    let denominator = value.denominator.to_string().parse::<f64>().unwrap();
+    (
+        (numerator.abs() / denominator).ln(),
+        if numerator < 0.0 { -1 } else { 1 },
+    )
+}
+
+fn reflection_screens(training: &[Task]) -> Vec<ReflectionScreen> {
+    let mut screens = Vec::new();
+    for task in training {
+        let factors = infer_irreducibles(&task.universe);
+        for s in -6..=6 {
+            let reflected = 1 - s;
+            let (raw_log, raw_sign) = rational_log_sign(&raw_value(&factors, s));
+            let (reflected_log, reflected_sign) =
+                rational_log_sign(&raw_value(&factors, reflected));
+            let mut atom_log_differences = [0.0; 7];
+            let mut atom_sign_ratios = [1; 7];
+            for (index, atom) in ALL_ATOMS.iter().enumerate() {
+                for p in &factors {
+                    let (log, sign) = rational_log_sign(&atom_eval(*atom, *p, s));
+                    let (other_log, other_sign) =
+                        rational_log_sign(&atom_eval(*atom, *p, reflected));
+                    atom_log_differences[index] += log - other_log;
+                    atom_sign_ratios[index] *= sign * other_sign;
+                }
+            }
+            screens.push(ReflectionScreen {
+                log_difference: raw_log - reflected_log,
+                atom_log_differences,
+                sign_ratio: raw_sign * reflected_sign,
+                atom_sign_ratios,
+            });
+        }
+    }
+    screens
+}
+
+fn passes_reflection_screen(completion: &Completion, screens: &[ReflectionScreen]) -> bool {
+    let exponents = ALL_ATOMS.map(|atom| completion.get(&atom).copied().unwrap_or(0));
+    screens.iter().all(|screen| {
+        let log_difference = exponents
+            .iter()
+            .zip(screen.atom_log_differences)
+            .fold(screen.log_difference, |total, (exponent, difference)| {
+                total + *exponent as f64 * difference
+            });
+        let sign_ratio = exponents.iter().zip(screen.atom_sign_ratios).fold(
+            screen.sign_ratio,
+            |sign, (exponent, atom_ratio)| {
+                if exponent.abs() % 2 == 1 {
+                    sign * atom_ratio
+                } else {
+                    sign
+                }
+            },
+        );
+        sign_ratio == 1 && log_difference.abs() <= 1e-7
+    })
 }
 
 fn completion_value(completion: &Completion, factors: &[i64], s: i64) -> Rational {
@@ -386,12 +467,30 @@ fn control_tasks() -> Vec<Task> {
 }
 
 fn find_retained_completion(training: &[Task]) -> Option<(Completion, usize, usize)> {
+    static RETAINED: OnceLock<Option<(Completion, usize, usize)>> = OnceLock::new();
+    debug_assert_eq!(
+        training.iter().map(|task| task.name).collect::<Vec<_>>(),
+        training_tasks()
+            .iter()
+            .map(|task| task.name)
+            .collect::<Vec<_>>()
+    );
+    RETAINED
+        .get_or_init(|| search_retained_completion(training))
+        .clone()
+}
+
+fn search_retained_completion(training: &[Task]) -> Option<(Completion, usize, usize)> {
     let mut candidates = enumerate_completions();
     candidates.sort_by_key(completion_score);
+    let screens = reflection_screens(training);
     let mut seen = BTreeSet::new();
     let mut valid = Vec::new();
     for completion in candidates {
         if !seen.insert(completion.clone()) {
+            continue;
+        }
+        if !passes_reflection_screen(&completion, &screens) {
             continue;
         }
         if training
@@ -604,6 +703,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn completion_enumeration_is_unique_and_complete() {
+        let completions = enumerate_completions();
+        assert_eq!(completions.len(), 5usize.pow(7) - 1);
+        assert_eq!(
+            completions.iter().cloned().collect::<BTreeSet<_>>().len(),
+            completions.len()
+        );
+    }
+
+    #[test]
     fn discovers_simple_symmetry_completion() {
         let training = training_tasks();
         let (completion, _, _) = find_retained_completion(&training).expect("completion");
@@ -613,6 +722,10 @@ mod tests {
         assert!(training
             .iter()
             .all(|task| checker_accept(task, &completion)));
+        assert!(passes_reflection_screen(
+            &completion,
+            &reflection_screens(&training)
+        ));
     }
 
     #[test]

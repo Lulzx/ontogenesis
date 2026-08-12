@@ -189,10 +189,23 @@ zero-coordinate construction. Three downstream diagonal sets are exact and
 accelerated (lattice evaluations 1,183→730); off-diagonal, circular,
 corrupted-signal, and asymmetric-universe controls are declined; description
 falls 507→13 integers. M25 reaches
-`L3_transferred_ontology_with_measured_utility` as a bounded toy. M26 remains
+`L3_transferred_ontology_with_measured_utility` as a bounded toy.
+
+## M26 real-zeta completion result
+
+A separately pre-registered experiment searches the same 2,025-member analytic
+factor grammar under cold and M17–M25-informed orderings. Both select
+`s(s-1) pi^(-s/2) Gamma(s/2) zeta(s)`, up to scalar normalization. Candidate
+evaluations fall 954→2; disjoint held-out regions, near-pole and large-imaginary
+points, conjugation, increased Euler–Maclaurin work, the exact reflection
+certificate, and four controls pass. M26 reaches
+`L2_invented_feature_in_supplied_meta_ontology`, not L3: analytic continuation,
+special-function semantics, the factor grammar, reflection objective, and
+checker lemmas are D15/D16 debt. Both numerical settings use binary64, so the
+increased-work check is not arbitrary-precision validation. M27 remains
 unreached.
 
-Directions G and Mathematical Ontogenesis M1–M25 are implemented. M10 added
+Directions G and Mathematical Ontogenesis M1–M26 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -215,6 +228,8 @@ M24 adds a checked equivalent predicate `Q: Xi(1-v,1-u)=0` with exhaustive
 bidirectional certificates and measured membership savings.
 M25 adds the signal-derived Hankel object whose exact rank-one property
 forces toy-RH over a frozen family with provenance controls.
+M26 adds real-zeta completion selection in a supplied analytic grammar, with
+measured cold-versus-transferred search and separate numerical and exact gates.
 
 ## M12 result
 

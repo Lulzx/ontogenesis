@@ -8,7 +8,8 @@ what evidence supports the result, and what is explicitly not claimed.
 Status is intentionally asymmetric. M1–M12 are reached experiments, M13b,
 M14c, M15b, M16, M17, M18, M19, M20, M21, M22, M23, and M24 have integrity-
 calibrated L3 results, M25 has a toy RH-making object result, M15 has an exact
-L2 result with a failed L3 gate, and M26–M30 remain unreached. A complete
+L2 result with a failed L3 gate, M26 has an exact L2 real-zeta completion
+selection result, and M27–M30 remain unreached. A complete
 directory is not a claim of a completed ladder.
 
 | Milestone | Topic | Status |
@@ -39,7 +40,7 @@ directory is not a claim of a completed ladder.
 | [M23](M23_TOY_RH.md) | Toy RH conjecture | reached — exact L3 toy conjecture (conjectured) |
 | [M24](M24_TOY_RH_EQUIVALENCE.md) | Toy-RH equivalence | reached — exact L3 toy equivalence |
 | [M25](M25_TOY_RH_OBJECT.md) | RH-making toy object | reached — exact L3 toy RH-making object |
-| [M26](M26_REAL_ZETA_COMPLETION.md) | Real zeta completion | not attempted |
+| [M26](M26_REAL_ZETA_COMPLETION.md) | Real zeta completion | reached — exact L2 completion selection |
 | [M27](M27_CRITICAL_LINE.md) | Critical line | not attempted |
 | [M28](M28_RH_EQUIVALENCES.md) | New RH equivalences | not attempted |
 | [M29](M29_RH_MAKING_OBJECT.md) | RH-making object | not attempted |

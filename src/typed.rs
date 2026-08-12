@@ -6,7 +6,7 @@
 //! reverse, append, fold, or reduce.
 
 use crate::term::{self, Term};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -107,9 +107,10 @@ pub fn enumerate_closed(
         truncated: false,
     };
     let mut terms = Vec::new();
+    let mut seen = HashSet::new();
     for size in 1..=max_size {
         for candidate in e.terms(target, &[], size) {
-            if !terms.contains(&candidate) {
+            if seen.insert(candidate.clone()) {
                 terms.push(candidate);
             }
         }
@@ -135,12 +136,13 @@ impl Enumerator<'_> {
         }
 
         let mut out = Vec::new();
+        let mut seen = HashSet::new();
         if let Type::Arrow(arg, result) = target {
             if size >= 2 {
                 let mut inner = context.to_vec();
                 inner.push((**arg).clone());
                 for body in self.terms(result, &inner, size - 1) {
-                    if !push_unique(&mut out, term::lam(body), self.per_cell_cap) {
+                    if !push_unique(&mut out, &mut seen, term::lam(body), self.per_cell_cap) {
                         self.truncated = true;
                     }
                 }
@@ -200,7 +202,7 @@ impl Enumerator<'_> {
                     }
                     for product in products {
                         let candidate = product.into_iter().fold(head.clone(), term::app);
-                        if !push_unique(&mut out, candidate, self.per_cell_cap) {
+                        if !push_unique(&mut out, &mut seen, candidate, self.per_cell_cap) {
                             self.truncated = true;
                         }
                         if out.len() >= self.per_cell_cap {
@@ -251,10 +253,16 @@ fn positive_compositions(total: u32, parts: usize) -> Vec<Vec<u32>> {
     out
 }
 
-fn push_unique(out: &mut Vec<Rc<Term>>, term: Rc<Term>, cap: usize) -> bool {
-    if out.contains(&term) {
+fn push_unique(
+    out: &mut Vec<Rc<Term>>,
+    seen: &mut HashSet<Rc<Term>>,
+    term: Rc<Term>,
+    cap: usize,
+) -> bool {
+    if seen.contains(&term) {
         true
     } else if out.len() < cap {
+        seen.insert(term.clone());
         out.push(term);
         true
     } else {
@@ -286,11 +294,19 @@ mod tests {
         assert!(first.terms.iter().all(|term| term.size() <= 4));
 
         let capped = enumerate_closed(
+            &Type::arrow(a.clone(), Type::arrow(a.clone(), a.clone())),
+            &[],
+            3,
+            1,
+        );
+        let capped_replay = enumerate_closed(
             &Type::arrow(a.clone(), Type::arrow(a.clone(), a)),
             &[],
             3,
             1,
         );
         assert!(capped.truncated);
+        assert_eq!(capped.terms, capped_replay.terms);
+        assert_eq!(capped.generated, capped_replay.generated);
     }
 }

@@ -250,3 +250,4 @@ M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 | Six nonsquare transfers pass; perfect-square and corrupt-obstruction/proof controls reject | confirmed, asserted | `irrational_world::tests`, `m12_experiment` |
 | M12 lowers reasoning 21→7 and compresses seven proofs 49→14 | confirmed, asserted | M12 machine record |
 | M13 requires unordered-root/multivariable polynomial architecture | boundary demonstrated | `CURRENT_STATE.md`, `NEXT_BOUNDARY.md` |
+| M26 real-zeta completion selection and transfer | confirmed, exact within supplied identity theory | `src/real_zeta_world.rs`, `NEXT_BOUNDARY.md` |

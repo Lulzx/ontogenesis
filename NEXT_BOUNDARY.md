@@ -1988,3 +1988,101 @@ members. Circular construction is rejected by provenance. M25 fails L3 if the
 forcing certificate is missing, ToyRH members do not satisfy P, any control is
 accepted, acquired work is not cheaper, or accounting mixes units. Any
 post-output change creates M25b and preserves this run.
+
+---
+
+# Next Boundary — M26 Real Zeta Completion
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M26 implementation; executed without amendment
+
+## Recorded outcome
+
+Both conditions selected the standard completion up to scalar normalization,
+`s(s-1) pi^(-s/2) Gamma(s/2) zeta(s)`. Cold enumeration required 954
+candidate-region evaluations; ontology ordering required 2, a measured gain of
+952 within the identical 2,025-member grammar. Normal and increased-work
+held-out checks passed at all five frozen points; conjugation passed; the exact
+certificate passed; and all four controls were rejected. M26 reaches
+`L2_invented_feature_in_supplied_meta_ontology`.
+
+The increased-work gate uses more Euler–Maclaurin terms and a tighter residual
+threshold, but both runs use binary64 arithmetic. It is a convergence check,
+not independent arbitrary-precision validation. D15/D16 remain fully active,
+and this is completion selection from a privileged grammar, not invention of
+xi or of the analytic machinery.
+
+## Intended claim and ceiling
+
+M26 tests selection of a real-zeta completion from a supplied analytic factor
+language and asks whether the ontology retained in M17–M25 reduces that fixed
+search cost. It does not test invention of analytic continuation, the Gamma
+factor, the zeta functional equation, or the candidate language. The claim
+ceiling is `L2_invented_feature_in_supplied_meta_ontology`; a lower L1 result
+is reported if the transfer ordering does not reduce search.
+
+M26 has three mandatory gates: completion selection, held-out analytic
+validity with precision escalation, and a boolean-only exact reflection
+certificate. Numerical agreement alone cannot complete M26.
+
+## Frozen analytic substrate
+
+- Values use a local complex implementation, Lanczos Gamma, and zeta obtained
+  from Euler–Maclaurin continuation. No library `xi` call exists.
+- Candidates are `s^a (s-1)^b pi^(c*s+d) Gamma((s+e)/2)^g zeta(s)`, with
+  `a,b in {0,1,2}`, `c in {-1,-1/2,0,1/2,1}`, `d in {-1,0,1}`,
+  `e in {-2,-1,0,1,2}`, and `g in {-1,0,1}`. Undefined candidates fail.
+- Multiplication is canonicalized by the exponent tuple. Overall nonzero
+  scalar multiples are equivalent because the test cannot identify
+  normalization.
+- Cold and transferred search enumerate exactly this same 2,025-member space.
+
+## Frozen regions and numerical gates
+
+- Training points are `0.23+0.71i`, `0.37+3.25i`, `-1.4+2.2i`, and
+  `1.8+0.9i`, paired with reflections and conjugates.
+- Held-out points are `1+0.02i`, `-0.8+0.4i`, `0.12+14i`, `1.3+9i`, and
+  `0.5+21i`, covering near-pole, both strip sides, large imaginary part, and
+  conjugation.
+- Reflection and conjugation relative residuals must be at most `2e-8` in the
+  normal setting and `2e-10` with increased series work. Values must be finite.
+
+## Frozen search and compared conditions
+
+- **Cold:** lexicographic exponent-tuple enumeration.
+- **Transferred:** the same tuples are ordered by generic M17–M25 motifs:
+  cancel a simple pole with affine factors, prefer one special-function factor
+  over its reciprocal, then prefer lower description length. Target
+  coefficients, residuals, checker results, and held-out values do not enter
+  ordering.
+- Search stops at the first candidate passing training numerics and the exact
+  checker. Held-out data are used only after selection.
+- Actual candidate-region evaluations, checker calls, and point evaluations
+  are separate accounting units. Transfer requires fewer candidate
+  evaluations while selecting an equivalent certificate.
+
+## Exact checker and certificate
+
+The checker receives only an exponent tuple and returns booleans. It
+independently rewrites `F(s)/F(1-s)` using declared zeta functional equation,
+Euler reflection, Gamma recurrence, and duplication lemmas in a fixed symbolic
+normalizer. Trusted lemmas are supplied ontology (D15). The checker returns no
+residual, counterexample, coefficient hint, or normal form. A certificate
+records lemma identifiers and a zero canonical residual. Malformed tuples and
+four target-shaped false controls must be rejected.
+
+## Controls and falsification
+
+Controls are raw `zeta(s)`, pole cancellation without Gamma, Gamma completion
+without pole cancellation, and sign-corrupted `s(s+1)` completion. M26 fails
+if either search finds no candidate, selected candidates are not equivalent,
+any held-out/precision/conjugation gate fails, the exact certificate fails, or
+any control is certified. Transfer is reported as zero if its ordering does
+not beat cold search. Any post-output change creates M26b and preserves this
+run.
+run.

@@ -328,4 +328,6 @@ reaches L3 with membership ops falling 2,378→943 plus 1,014 proof
 comparisons, and rejects paraphrases and vacuous predicates. M25 constructs a
 signal-derived Hankel object whose exact rank-one property forces ToyRH over
 a frozen 270-member family, reaches L3 with evaluations falling 1,183→730,
-and enforces signal-only provenance. M26–M30 are not claimed.
+and enforces signal-only provenance. M26 selects the standard real-zeta
+completion from a supplied analytic grammar at L2, with measured search
+falling 954→2 and separate held-out/exact gates. M27–M30 are not claimed.
