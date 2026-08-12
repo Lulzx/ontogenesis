@@ -1,6 +1,6 @@
 # Legacy: the 120/120 semantic engine (frozen)
 
-Before the [ontology-bootstrap](../README.md) pivot, supsearch was a program
+Before the [ontology-bootstrap](../docs/README.md) pivot, supsearch was a program
 synthesis engine that solved all 120 tasks of
 [LamBench](https://github.com/VictorTaelin/LamBench) with a hand-built
 semantic vocabulary: a typed DSL (~70 operations) over decoded Church/Scott
