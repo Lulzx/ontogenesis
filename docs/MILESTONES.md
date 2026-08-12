@@ -434,6 +434,18 @@ compresses the observations (24 raw tokens -> 8-node expression, gain 16). A
 non-Pythagorean control honestly reports no generalizing fit. Protocol:
 `MATH_WORLD.md`.
 
+### Direction M2 — invent the circle invariant
+
+The second problem of the Mathematical Ontogenesis track. Given member points
+on a hidden circle and non-member points, the agent invents the invariant
+`x² + y² = 25` (the circle of radius 5, size 7, discovery_cost 57,883) which
+generalizes to all held-out members and non-members. The invariant is
+reusable: classifying a held-out point costs 1 evaluation
+(`concept_reasoning_cost=8`) versus re-discovering the invariant from scratch
+(`baseline_reasoning_cost=57,891`), a saving of 57,883 expressions. It also
+compresses the class (16 raw tokens -> 8 tokens, gain 8). A non-circular
+control honestly reports no generalizing invariant. Protocol: `MATH_WORLD.md`.
+
 
 ## B3 — recursive law to reasoning vocabulary
 

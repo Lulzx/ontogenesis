@@ -212,3 +212,16 @@ Docs: `docs/WORLD_MODEL.md`.
 
 New module: `src/math_world.rs`. Example: `examples/math_world.rs`.
 Docs: `docs/MATH_WORLD.md`.
+
+## Addendum (2026-08-12): Direction M2 circle invariant
+
+| Claim | Status | Where |
+|---|---|---|
+| Discovers the invariant `x²+y²=25` from member/non-member points, generalizes to held-out | confirmed, asserted | `discover_invariant`, `m2_tests::discovers_circle_invariant` |
+| Invariant cheaper than re-discovery (transfer saving) | confirmed, asserted | `invariant_transfer`, `m2_tests::invariant_is_cheaper_than_rediscovery` |
+| Invariant compresses the class | confirmed, asserted | `invariant_compression`, `m2_tests::invariant_compresses_the_class` |
+| Non-circular control honestly reports no generalizing invariant | confirmed, asserted | `m2_tests::non_circular_class_has_no_invariant` |
+| Deterministic machine record (`deterministic=true`) | confirmed, asserted | `machine_record_m2_is_deterministic` |
+
+M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
+`docs/MATH_WORLD.md`.

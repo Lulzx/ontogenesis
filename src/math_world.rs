@@ -357,3 +357,223 @@ mod tests {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Direction M2: invent the circle invariant.
+// ---------------------------------------------------------------------------
+
+/// A discovered invariant: an expression `f` and a constant `c` such that all
+/// members satisfy `f(x, y) = c` and all non-members satisfy `f(x, y) != c`.
+#[derive(Clone, Debug)]
+pub struct Invariant {
+    pub expr: Expr,
+    pub constant: f64,
+    pub discovery_cost: usize,
+    pub generalizes: bool,
+}
+
+/// Search for the simplest expression `f` (by size, then enumeration order)
+/// that is constant on all members and distinguishes them from non-members.
+/// Uses the concepts acquired in M1 (the base arithmetic language) plus basic
+/// equality. The concept of circle / radius / origin is never supplied.
+pub fn discover_invariant(
+    members: &[(f64, f64)],
+    non_members: &[(f64, f64)],
+    held_members: &[(f64, f64)],
+    held_non_members: &[(f64, f64)],
+    max_size: usize,
+) -> Option<Invariant> {
+    let mut inputs: Vec<(f64, f64)> = members.to_vec();
+    inputs.extend_from_slice(non_members);
+    let table = build_table(&inputs, max_size);
+    let mut enumerated = 0usize;
+    for size in 1..=max_size {
+        for e in &table[size] {
+            enumerated += 1;
+            // All members must share a common (non-NaN) value.
+            let vals: Vec<f64> = members.iter().map(|&(x, y)| e.eval(x, y)).collect();
+            if vals.iter().any(|v| v.is_nan()) {
+                continue;
+            }
+            let c = vals[0];
+            if !vals.iter().all(|v| (v - c).abs() < 1e-6) {
+                continue;
+            }
+            // Non-members must differ from c.
+            let non_ok = non_members.iter().all(|&(x, y)| {
+                let v = e.eval(x, y);
+                v.is_nan() || (v - c).abs() >= 1e-6
+            });
+            if !non_ok {
+                continue;
+            }
+            // Held-out generalization.
+            let generalizes = held_members.iter().all(|&(x, y)| {
+                let v = e.eval(x, y);
+                !v.is_nan() && (v - c).abs() < 1e-6
+            }) && held_non_members.iter().all(|&(x, y)| {
+                let v = e.eval(x, y);
+                v.is_nan() || (v - c).abs() >= 1e-6
+            });
+            return Some(Invariant {
+                expr: e.clone(),
+                constant: c,
+                discovery_cost: enumerated,
+                generalizes,
+            });
+        }
+    }
+    None
+}
+
+/// Cost report for classifying held-out points with vs. without the invariant.
+#[derive(Clone, Debug)]
+pub struct InvariantTransfer {
+    pub held_points: usize,
+    pub concept_reasoning_cost: usize, // one evaluation per held-out point
+    pub baseline_reasoning_cost: usize, // re-discover the invariant + evaluate
+    pub transfer_saving: usize,
+}
+
+pub fn invariant_transfer(inv: &Invariant, held_points: usize) -> InvariantTransfer {
+    let concept_cost = held_points;
+    let baseline_cost = inv.discovery_cost + held_points;
+    InvariantTransfer {
+        held_points,
+        concept_reasoning_cost: concept_cost,
+        baseline_reasoning_cost: baseline_cost,
+        transfer_saving: baseline_cost - concept_cost,
+    }
+}
+
+/// Compression report: how much the invariant shortens the description of the
+/// class it covers.
+#[derive(Clone, Debug)]
+pub struct InvariantCompression {
+    pub raw_points: usize,
+    pub raw_tokens: usize,       // 2 tokens per (x, y) point
+    pub concept_tokens: usize,   // expression nodes + 1 for the constant
+    pub compression_gain: usize,
+}
+
+pub fn invariant_compression(
+    inv: &Invariant,
+    members: &[(f64, f64)],
+    held_members: &[(f64, f64)],
+) -> InvariantCompression {
+    let raw_points = members.len() + held_members.len();
+    let raw_tokens = 2 * raw_points;
+    let concept_tokens = inv.expr.size() + 1;
+    InvariantCompression {
+        raw_points,
+        raw_tokens,
+        concept_tokens,
+        compression_gain: raw_tokens.saturating_sub(concept_tokens),
+    }
+}
+
+/// Deterministic machine-readable record for the M2 experiment.
+pub fn machine_record_m2(
+    inv: &Invariant,
+    transfer: &InvariantTransfer,
+    compression: &InvariantCompression,
+    members: usize,
+    non_members: usize,
+    held_members: usize,
+    held_non_members: usize,
+) -> String {
+    format!(
+        "experiment=math_world_m2,invariant={},constant={:.0},size={},discovery_cost={},generalizes={},members={},non_members={},held_members={},held_non_members={},concept_reasoning_cost={},baseline_reasoning_cost={},transfer_saving={},raw_points={},raw_tokens={},concept_tokens={},compression_gain={},proof_status=empirical,deterministic=true,fallback=exact",
+        inv.expr.to_string(),
+        inv.constant,
+        inv.expr.size(),
+        inv.discovery_cost,
+        inv.generalizes,
+        members,
+        non_members,
+        held_members,
+        held_non_members,
+        transfer.concept_reasoning_cost,
+        transfer.baseline_reasoning_cost,
+        transfer.transfer_saving,
+        compression.raw_points,
+        compression.raw_tokens,
+        compression.concept_tokens,
+        compression.compression_gain,
+    )
+}
+
+#[cfg(test)]
+mod m2_tests {
+    use super::*;
+
+    fn members() -> Vec<(f64, f64)> {
+        vec![(3.0, 4.0), (4.0, 3.0), (-3.0, 4.0), (0.0, 5.0)]
+    }
+    fn non_members() -> Vec<(f64, f64)> {
+        vec![(1.0, 1.0), (2.0, 2.0), (5.0, 5.0), (1.0, 3.0)]
+    }
+    fn held_members() -> Vec<(f64, f64)> {
+        vec![(0.0, -5.0), (-4.0, -3.0), (3.0, -4.0), (-5.0, 0.0)]
+    }
+    fn held_non_members() -> Vec<(f64, f64)> {
+        vec![(6.0, 1.0), (2.0, 7.0), (4.0, 4.0), (7.0, 2.0)]
+    }
+
+    #[test]
+    fn discovers_circle_invariant() {
+        let inv = discover_invariant(&members(), &non_members(), &held_members(), &held_non_members(), 7)
+            .expect("must discover");
+        // The invariant must be x^2 + y^2 = 25 (or equivalent).
+        assert!((inv.constant - 25.0).abs() < 1e-6, "constant must be 25, got {}", inv.constant);
+        assert!(inv.generalizes, "invariant must generalize to held-out points");
+        assert!(inv.expr.size() <= 7, "must be found within size 7");
+        // Verify on a fresh member / non-member of the radius-5 circle.
+        assert!((inv.expr.eval(3.0, -4.0) - inv.constant).abs() < 1e-6, "3,-4 is on the radius-5 circle");
+        assert!((inv.expr.eval(1.0, 1.0) - inv.constant).abs() >= 1e-6, "1,1 is not on the circle");
+    }
+
+    #[test]
+    fn invariant_is_cheaper_than_rediscovery() {
+        let inv = discover_invariant(&members(), &non_members(), &held_members(), &held_non_members(), 7).unwrap();
+        let held = held_members().len() + held_non_members().len();
+        let tr = invariant_transfer(&inv, held);
+        assert!(tr.transfer_saving > 0);
+        assert_eq!(tr.concept_reasoning_cost, held);
+        assert_eq!(tr.baseline_reasoning_cost, inv.discovery_cost + held);
+    }
+
+    #[test]
+    fn invariant_compresses_the_class() {
+        let inv = discover_invariant(&members(), &non_members(), &held_members(), &held_non_members(), 7).unwrap();
+        let comp = invariant_compression(&inv, &members(), &held_members());
+        assert!(comp.compression_gain > 0);
+        assert_eq!(comp.raw_points, members().len() + held_members().len());
+        assert_eq!(comp.concept_tokens, inv.expr.size() + 1);
+    }
+
+    #[test]
+    fn machine_record_m2_is_deterministic() {
+        let inv = discover_invariant(&members(), &non_members(), &held_members(), &held_non_members(), 7).unwrap();
+        let held = held_members().len() + held_non_members().len();
+        let tr = invariant_transfer(&inv, held);
+        let comp = invariant_compression(&inv, &members(), &held_members());
+        let a = machine_record_m2(&inv, &tr, &comp, members().len(), non_members().len(), held_members().len(), held_non_members().len());
+        let b = machine_record_m2(&inv, &tr, &comp, members().len(), non_members().len(), held_members().len(), held_non_members().len());
+        assert_eq!(a, b);
+        assert!(a.contains("experiment=math_world_m2"));
+        assert!(a.contains("deterministic=true"));
+    }
+
+    #[test]
+    fn non_circular_class_has_no_invariant() {
+        // A control: points that do NOT lie on a common circle. The search
+        // must honestly report no invariant within the bound.
+        let bad_members = vec![(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0)];
+        let inv = discover_invariant(&bad_members, &non_members(), &held_members(), &held_non_members(), 7);
+        match inv {
+            None => {}
+            Some(i) => assert!(!i.generalizes, "a non-circular class must not generalize"),
+        }
+    }
+}

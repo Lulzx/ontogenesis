@@ -53,4 +53,72 @@ fn main() {
     );
 
     println!("{}", machine_record(&concept, &tr, &comp));
+    m2();
+}
+
+// ---------------------------------------------------------------------------
+// Direction M2: invent the circle invariant.
+// ---------------------------------------------------------------------------
+use supsearch::math_world::{
+    discover_invariant, invariant_compression, invariant_transfer, machine_record_m2,
+};
+
+fn m2() {
+    // Members: points on a circle of radius 5 (hidden class).
+    let members = vec![(3.0, 4.0), (4.0, 3.0), (-3.0, 4.0), (0.0, 5.0)];
+    // Non-members: points not on the circle.
+    let non_members = vec![(1.0, 1.0), (2.0, 2.0), (5.0, 5.0), (1.0, 3.0)];
+    // Held-out members / non-members for generalization.
+    let held_members = vec![(0.0, -5.0), (-4.0, -3.0), (3.0, -4.0), (-5.0, 0.0)];
+    let held_non_members = vec![(6.0, 1.0), (2.0, 7.0), (4.0, 4.0), (7.0, 2.0)];
+
+    println!();
+    println!("ontogenesis: mathematical ontogenesis (M2)");
+    println!(
+        "world: points on a hidden circle; members={} non-members={} held-members={} held-non-members={}",
+        members.len(),
+        non_members.len(),
+        held_members.len(),
+        held_non_members.len()
+    );
+
+    // 1. Invent the circle invariant.
+    let inv = discover_invariant(&members, &non_members, &held_members, &held_non_members, 7)
+        .expect("must discover");
+    println!(
+        "discovered invariant: {} = {:.0} (size {}, discovery_cost {})",
+        inv.expr.to_string(),
+        inv.constant,
+        inv.expr.size(),
+        inv.discovery_cost
+    );
+    println!("generalizes to held-out: {}", inv.generalizes);
+
+    // 2. Transfer: classifying held-out points with vs. without the invariant.
+    let held = held_members.len() + held_non_members.len();
+    let tr = invariant_transfer(&inv, held);
+    println!(
+        "transfer: concept_reasoning_cost={} baseline_reasoning_cost={} saving={}",
+        tr.concept_reasoning_cost, tr.baseline_reasoning_cost, tr.transfer_saving
+    );
+
+    // 3. Compression: the invariant compresses the class.
+    let comp = invariant_compression(&inv, &members, &held_members);
+    println!(
+        "compression: raw_points={} raw_tokens={} concept_tokens={} gain={}",
+        comp.raw_points, comp.raw_tokens, comp.concept_tokens, comp.compression_gain
+    );
+
+    println!(
+        "{}",
+        machine_record_m2(
+            &inv,
+            &tr,
+            &comp,
+            members.len(),
+            non_members.len(),
+            held_members.len(),
+            held_non_members.len()
+        )
+    );
 }

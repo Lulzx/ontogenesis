@@ -315,6 +315,16 @@ distance costs 1 evaluation versus re-synthesizing from scratch (saving
 nodes, gain 16). A non-Pythagorean control honestly reports no generalizing
 fit. See [`MATH_WORLD.md`](MATH_WORLD.md).
 
+**Direction M2 — invent the circle invariant.** The second problem of the
+Mathematical Ontogenesis track. Given member points on a hidden circle and
+non-member points, the agent invents the invariant `x² + y² = 25` (the circle
+of radius 5), which generalizes to all held-out members and non-members. The
+invariant is reusable: classifying a held-out point costs 1 evaluation versus
+re-discovering the invariant from scratch (saving 57,883 expressions), and it
+compresses the class (16 raw tokens -> 8 tokens, gain 8). A non-circular
+control honestly reports no generalizing invariant. See
+[`MATH_WORLD.md`](MATH_WORLD.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

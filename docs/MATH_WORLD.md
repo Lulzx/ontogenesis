@@ -139,3 +139,103 @@ cargo test --workspace
 
 The example ends with
 `experiment=math_world_m1,...deterministic=true,fallback=exact` machine output.
+
+---
+
+# Direction M2: invent the circle invariant
+
+## Problem 2: Invent the Circle Invariant
+
+**Given** sets of points that all belong to the same hidden class (a circle of
+unknown radius), plus other points that do not:
+
+```text
+members:      (3, 4), (4, 3), (-3, 4), (0, 5)
+non-members:  (1, 1), (2, 2), (5, 5), (1, 3)
+```
+
+**Primitive language**: the concepts acquired in Problem 1 (the base arithmetic
+language) plus basic arithmetic and equality.
+
+**Task**: discover the simplest property distinguishing members from
+non-members.
+
+**Desired discovery**: something equivalent to `x² + y² = constant` or
+`distance(x, y) = constant`.
+
+**Restriction**: the concepts of circle, radius, and origin are **not**
+supplied.
+
+## Algorithm
+
+1. **Enumerate** candidate expressions `f` by size over the base arithmetic
+   language, deduplicating by behavior on the member + non-member points.
+2. **Invariant check**: for each `f`, if all members share a common value `c`
+   (within epsilon) and all non-members differ from `c`, then `f(x,y) = c` is a
+   candidate invariant.
+3. **Generalize**: the simplest such invariant is checked against held-out
+   members and non-members.
+4. **Reuse**: the invariant compresses the entire class — classifying a new
+   point is a single evaluation and comparison.
+
+## Observed result
+
+```text
+ontogenesis: mathematical ontogenesis (M2)
+world: points on a hidden circle; members=4 non-members=4 held-members=4 held-non-members=4
+discovered invariant: ((x*x)+(y*y)) = 25 (size 7, discovery_cost 57883)
+generalizes to held-out: true
+transfer: concept_reasoning_cost=8 baseline_reasoning_cost=57891 saving=57883
+compression: raw_points=8 raw_tokens=16 concept_tokens=8 gain=8
+experiment=math_world_m2,invariant=((x*x)+(y*y)),constant=25,size=7,discovery_cost=57883,generalizes=true,members=4,non_members=4,held_members=4,held_non_members=4,concept_reasoning_cost=8,baseline_reasoning_cost=57891,transfer_saving=57883,raw_points=8,raw_tokens=16,concept_tokens=8,compression_gain=8,proof_status=empirical,deterministic=true,fallback=exact
+```
+
+The agent invents the invariant `x² + y² = 25` — the circle of radius 5 — from
+the four member points, and it generalizes to all held-out members and
+non-members. The invariant is **reusable**: classifying a held-out point costs
+1 evaluation (`concept_reasoning_cost=8` for 8 points), versus re-discovering
+the invariant from scratch (`baseline_reasoning_cost=57,891`), a saving of
+57,883 expressions. The invariant also compresses the class: 16 raw tokens
+(8 `(x,y)` points) become a 7-node expression plus a constant (8 tokens), a
+gain of 8 tokens.
+
+## Controls and honest fine print
+
+- **Generalization is checked, not assumed**: the invariant must hold on all
+  held-out members and fail on all held-out non-members.
+- **Non-circular control**: a class of points that do *not* lie on a common
+  circle yields either no invariant within the bound or one that does not
+  generalize — the search honestly reports this rather than forcing a fit.
+- **Trivial-constant rejection**: an expression constant on *all* points cannot
+  distinguish members from non-members, so it is rejected by the non-member
+  check.
+- **Deterministic**: the enumeration order and dedup are deterministic, and
+  the machine record is reproducible (`deterministic=true`).
+- **proof_status = empirical**: the invariant fits the examples and generalizes
+  to held-out points, but this is not a formal proof that it is the unique or
+  intended invariant.
+
+## Claim and limits
+
+Supported claim:
+
+> In an arithmetic world, an agent that observes member and non-member points
+> can invent a persistent invariant (`x² + y² = c`) that compresses the entire
+> class and makes classifying new points measurably cheaper than re-discovering
+> the invariant from scratch.
+
+Limits: the primitive language is supplied; the search is bounded by expression
+size 7; the domain is two-variable real arithmetic; no claim of general
+invariant discovery, higher-order concepts, or formal proof. The discovered
+invariant is not claimed to be the unique latent encoding.
+
+## Reproduce
+
+```sh
+cargo test -p supsearch --lib math_world
+cargo run --release --example math_world
+cargo test --workspace
+```
+
+The example ends with
+`experiment=math_world_m2,...deterministic=true,fallback=exact` machine output.
