@@ -2295,3 +2295,117 @@ M28 passes if both exact implications and universal lifting certify, local
 novelty passes, all controls decline, both conditions select semantically
 equivalent predicates with fewer candidate tests, and downstream work is lower
 with exact orbit equality. Any post-output change creates M28b.
+
+---
+
+# Next Boundary — M29a Coefficient-Derived Forcing Object Surrogate
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** executed; M29a control gate invalidated by post-run audit
+
+## M29a recorded outcome
+
+M29a selected `diag(a,b,a^2-4b)` with exact bidirectional certificates over
+training and both held-out families. Search fell 39→1 and the frozen workload
+fell 28,368→17,730 operations. However, the implementation counted the
+root-coordinate oracle, cubic, and degree-six controls as literal constants
+rather than executing provenance/domain routing. Therefore `controls=7/7` was
+not a valid checked result. M29a is preserved as invalidated and does not pass
+its surrogate gate.
+
+## Intended claim and hard stop
+
+M29a tests whether the M25 object/property pattern transfers to an exact
+analytic surrogate without using zero coordinates. It does not claim a
+real-zeta RH-making object. Even if every gate passes, M29 remains unreached:
+the result covers bounded even quartics, not xi, and explains no independent
+prime phenomenon. Maximum claim is L2 for the surrogate.
+
+## Frozen family and target
+
+- Write `z=s-1/2` and use `p(z)=z^4+a z^2+b`, with exact integer
+  coefficients. Reflection/conjugation symmetry is built in and is D20 debt.
+- Training family: all `a in [-6,6]`, `b in [-6,12]`.
+- Held-out families: `a in [-12,-7] union [7,12]`, `b in [-12,24]`; and
+  `a in [-20,20]`, `b in [13,30]`.
+- Target `T(p)` means all four roots lie on the imaginary axis. The checker
+  reduces `w=z^2` and proves the exact criterion
+  `a>=0`, `b>=0`, `a^2-4b>=0` by quadratic sign analysis.
+
+## Frozen object grammar and provenance
+
+- Features are `1`, `a`, `b`, `-a`, `-b`, `a+b`, `a^2-4b`.
+  Candidate objects are diagonal `3x3` matrices whose entries are unordered
+  multisets of three features: exactly 84 objects.
+- `P(X)` is exact positive semidefiniteness: all diagonal entries nonnegative.
+  Search retains the first object with checker proofs of `P->T` and `T->P`
+  over the complete training family, with true and false members.
+- Allowed provenance is coefficient features only. A root-real-part oracle is
+  a control and must be rejected before checking. No M27 zero coordinate may
+  enter an allowed object.
+
+## Compared conditions and accounting
+
+- Cold order is lexicographic over feature multisets in the listed order.
+- Transferred order uses the same 84 objects and prioritizes three distinct
+  entries, then a discriminant-like derived feature, then raw coefficients,
+  with lexicographic tie break. No checker result enters ordering.
+- Candidate tests and family checks are separate. Transfer requires the same
+  retained object and fewer candidate tests.
+- On both held-out families, baseline recomputes the three inequalities per
+  query. Acquired construction stores three diagonal entries once and each PSD
+  query reads three signs. Success requires lower total for four frozen queries
+  per polynomial, with construction and query work reported separately.
+
+## Controls and falsification
+
+Controls must decline: each one-entry ablation; `a^2+4b` replacing the
+discriminant; root-coordinate oracle by provenance; asymmetric cubic family;
+and degree-six even family, reported out of scope. False-positive routing and
+negative transfer must be zero.
+
+M29a passes only with exact bidirectional certificates over training and both
+held-out families, provenance enforcement, non-vacuity, all controls declined,
+and lower workload cost. Regardless of outcome, `rh_proved=false`,
+`real_zeta_object=false`, and `m29_reached=false`. Any post-output change
+creates M29b.
+
+---
+
+# Next Boundary — M29b Corrected Surrogate Control Routing
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** frozen after M29a invalidation; executed without amendment
+
+## M29b recorded outcome
+
+M29b reproduced the retained object `diag(a,b,a^2-4b)`. Exact checker results
+prove `PSD(X) iff all roots of z^4+a z^2+b are imaginary` across the complete
+training family and both held-out families. Search fell 39→1; the four-query
+workload fell 28,368→17,730 operations, with construction 3,546 and queries
+14,184. All seven executed control booleans are true, including provenance and
+unsupported-degree routing.
+
+The surrogate reaches `L2_invented_feature_in_supplied_meta_ontology`, but the
+hard stop remains: `real_zeta_object=false`, `rh_proved=false`, and
+`m29_reached=false`. M29 is attempted but unreached.
+
+M29b preserves all M29a search, family, feature, object, theorem, ordering,
+and accounting definitions. Only the three unevaluated controls are corrected:
+
+1. constructors carry `CoefficientOnly` or `RootCoordinates` provenance, and
+   the checker must reject `RootCoordinates` before family evaluation;
+2. domain requests carry degree and evenness, and degree-three/asymmetric input
+   must return `OutOfScope`;
+3. degree-six/even input must independently return `OutOfScope`.
+
+The machine record must expose all seven individual control booleans, not only
+a total. M29b otherwise has the same hard stop: a passing surrogate leaves
+`real_zeta_object=false`, `rh_proved=false`, and `m29_reached=false`. Any
+further post-output change creates M29c.

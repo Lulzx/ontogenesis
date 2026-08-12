@@ -188,3 +188,13 @@ removing the debt entry.
   and orbit-cost downstream tasks are supplied.
 - D19 caps M28 at L2. Exact equivalence does not prove either side, and local
   novelty is not novelty relative to mathematical literature.
+
+## M29 surrogate entry (pre-registered for M29a; retained by M29b)
+
+- D15–D19 remain unresolved for the real-zeta track.
+- New debt D20: the even-quartic surrogate family, coefficient coordinates,
+  target root criterion, seven-feature grammar, diagonal-matrix object type,
+  PSD property, and quadratic sign-analysis checker are supplied.
+- D20 caps the corrected M29b result at L2 and prevents promotion to real M29.
+  It tests noncircular coefficient-derived forcing in a bounded surrogate
+  family; it neither constructs an object for xi nor proves RH.

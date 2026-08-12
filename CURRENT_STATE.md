@@ -232,7 +232,23 @@ no false-positive routing or negative transfer. M28 reaches
 `L2_invented_feature_in_supplied_meta_ontology`; `rh_proved=false` and
 `global_novelty=false`. D19 remains active. M29 remains unreached.
 
-Directions G and Mathematical Ontogenesis M1–M28 are implemented. M10 added
+## M29 forcing-object surrogate result
+
+M29a selected the coefficient-derived object `diag(a,b,a^2-4b)` for the
+surrogate family `z^4+a z^2+b`, but its control gate was invalidated because
+three provenance/scope controls were counted rather than executed. That run is
+preserved and not counted.
+
+M29b changes only control routing and reproduces the exact bidirectional
+forcing certificate over training and two held-out coefficient families.
+Search falls 39→1 and the frozen four-query workload falls 28,368→17,730
+operations; all seven executed controls decline. M29b reaches L2 as a bounded
+surrogate. It is not an object for xi and explains no prime phenomenon:
+`real_zeta_object=false`, `rh_proved=false`, and `m29_reached=false`. D20
+remains active. Real M29 and M30 remain unreached.
+
+Directions G and Mathematical Ontogenesis M1–M28 plus M29b surrogate are
+implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -261,6 +277,8 @@ M27b adds the finite-data real-zeta zero-locus conjecture `2 Re(rho)-1=0`,
 with corrected negative controls and an explicit non-proof label.
 M28 adds the exact reflection-orbit reformulation `rho=1-conj(rho)`, with
 bidirectional affine certificates and explicit no-RH/no-global-novelty labels.
+M29b adds a noncircular coefficient-derived forcing object for an even-quartic
+surrogate, with an explicit hard stop before real M29.
 
 ## M12 result
 

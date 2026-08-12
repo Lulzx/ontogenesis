@@ -9,8 +9,9 @@ Status is intentionally asymmetric. M1–M12 are reached experiments, M13b,
 M14c, M15b, M16, M17, M18, M19, M20, M21, M22, M23, and M24 have integrity-
 calibrated L3 results, M25 has a toy RH-making object result, M15 has an exact
 L2 result with a failed L3 gate, M26 has an exact L2 real-zeta completion
-selection result, M27b has a finite-data L2 critical-locus conjecture, and
-M28 has an exact L2 reflection-orbit equivalence. M29–M30 remain unreached. A
+selection result, M27b has a finite-data L2 critical-locus conjecture, M28 has
+an exact L2 reflection-orbit equivalence, and M29b has an L2 forcing-object
+surrogate while real M29 remains unreached. M30 remains unreached. A
 complete directory is not a claim of a completed ladder.
 
 | Milestone | Topic | Status |
@@ -44,7 +45,7 @@ complete directory is not a claim of a completed ladder.
 | [M26](M26_REAL_ZETA_COMPLETION.md) | Real zeta completion | reached — exact L2 completion selection |
 | [M27](M27_CRITICAL_LINE.md) | Critical line | M27b reached — finite-data L2 conjecture |
 | [M28](M28_RH_EQUIVALENCES.md) | RH equivalence | reached — exact L2 local reformulation |
-| [M29](M29_RH_MAKING_OBJECT.md) | RH-making object | not attempted |
+| [M29](M29_RH_MAKING_OBJECT.md) | RH-making object | M29b surrogate reached — real M29 unreached |
 | [M30](M30_RIEMANN_HYPOTHESIS.md) | Riemann Hypothesis | not reached |
 
 Reproduce reached stages with:
@@ -52,5 +53,7 @@ Reproduce reached stages with:
 ```sh
 cargo test -p supsearch --lib math_world
 cargo run --release --example math_world
+cargo test -p supsearch --lib rh_making_surrogate_world
+cargo run --release --example rh_making_surrogate_world
 cargo test --workspace
 ```

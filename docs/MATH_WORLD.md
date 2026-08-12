@@ -335,4 +335,6 @@ conjecture `2 Re(rho)-1=0` at L2 with search
 falling 18→8; M27a is preserved as invalidated and the result is not a proof.
 M28 proves the exact predicate equivalence
 `2 Re(rho)-1=0 iff rho=1-conj(rho)` at L2, with orbit work falling 110→47;
-neither RH nor global novelty is claimed. M29–M30 are not claimed.
+neither RH nor global novelty is claimed. M29b retains
+`diag(a,b,a^2-4b)` as an exact forcing object for a supplied even-quartic
+surrogate, but explicitly leaves real M29, M30, and RH unreached.

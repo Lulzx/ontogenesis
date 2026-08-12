@@ -92,6 +92,8 @@
 //!   conjecture with independent height holdouts.
 //! - [`rh_equivalence_world`]: Direction M28 exact reflection-orbit
 //!   reformulation of the M27 conjecture predicate.
+//! - [`rh_making_surrogate_world`]: Direction M29b coefficient-derived
+//!   forcing object in a bounded even-quartic surrogate.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -124,6 +126,7 @@ pub mod locus_world;
 pub mod making_object_world;
 pub mod real_zeta_world;
 pub mod rh_equivalence_world;
+pub mod rh_making_surrogate_world;
 pub mod nbe;
 pub mod ontology_guidance;
 pub mod ontology_repair;
