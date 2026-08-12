@@ -3302,7 +3302,7 @@ intervals are unavailable. No Weil positivity claim is made.
 
 **Pre-registration date:** 2026-08-12
 
-**Status:** frozen before implementation
+**Status:** executed; special functions validated, full-entry gate failed
 
 Add a reusable outward-rounded interval backend before evaluating real Weil
 Gram entries. Calibrate elementary `exp`, `log`, Gaussian integrals, and real
@@ -3316,3 +3316,233 @@ frozen basis. Controls corrupt one round direction, truncate without a tail,
 omit the pole term, reuse an interval at higher precision, and inject
 zero-derived values. Positive finite pivots remain finite evidence and cannot
 discharge infinite Weil positivity.
+
+## SH15 recorded outcome
+
+The MPFR backend validates directed interval arithmetic, `exp`, `log`, square
+root, Gaussian normalization, and positive-real digamma recurrence at 80 and
+160 bits. Widths shrink and all five controls decline. The complete real Gram
+entry gate fails before evaluation because validated quadrature is absent.
+Prime tails and all positivity claims remain open; `m29_reached=false`.
+
+---
+
+# Next Boundary — SH16 Validated Archimedean Quadrature
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; product-scale audit invalidated the real-assembly claim
+
+Implement adaptive dyadic interval quadrature for even functions on a finite
+box. Each cell is evaluated as an interval over its full coordinate range; no
+point sample is accepted as an enclosure. Calibrate on Gaussian moments whose
+whole-line values are exact. The box-complement tail is bounded analytically
+by repeated integration by parts.
+
+For the archimedean kernel, evaluate
+`Re psi(1/4+i*t/2)` through the convergent real series
+`-gamma + sum_{n>=0}(1/(n+1) - (n+1/4)/((n+1/4)^2+(t/2)^2))`.
+Truncation requires a uniform interval tail obtained from an integral bound.
+Combine it with Gaussian-polynomial basis products and the constant
+`-log(pi)` term using SH15 intervals.
+
+Controls accept no midpoint-only cells, missing box tails, missing digamma
+series tails, precision reuse, or asymmetric treatment of an even integrand.
+SH16 passes only if Gaussian calibration contains exact values, widths shrink
+under box/subdivision/precision escalation, and all frozen archimedean Gram
+entries receive rigorous intervals. Prime-power terms remain out of scope.
+
+## SH16 recorded outcome
+
+Dyadic interval quadrature contains the exact zeroth and second Gaussian
+moments, shrinks from 512 to 2,048 cells and 80 to 160 bits, and certifies four
+archimedean basis entries using a real-digamma series with an explicit uniform
+tail. All five controls decline. Complete Gram entries remain unavailable
+because prime-power intervals are missing; `m29_reached=false`.
+
+Post-run SH18 assembly audit found that these four components used
+`t^(2m) exp(-t^2)`, while the frozen SH17 components and the actual products
+of the SH14 basis use `t^(2m) exp(-2t^2)`. The Gaussian calibration remains
+valid, but the reported components cannot enter a real Weil Gram matrix. SH16
+is therefore preserved as an invalidated evaluator run; SH18 must recompute
+all seven distinct product degrees at scale two and must reject mismatched
+scale tags.
+
+---
+
+# Next Boundary — SH17 Validated Prime-Power Tail
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; four prime-power components certified
+
+For basis products `t^(2m) exp(-2t^2)`, derive the Fourier transform by the
+generic recurrence `Q_{k+1}=Q'_k-(u/4)Q_k` from
+`sqrt(pi/2) exp(-u^2/8)`. Coefficients remain exact rationals and evaluation
+uses SH15 intervals. Calibrate the recurrence at `u=0` against exact Gaussian
+moments and under Fourier differentiation identities.
+
+Enumerate prime powers `p^k<=X` exactly and enclose each term
+`log(p)/sqrt(p^k) * hat_f(k log p)`. Bound the omitted sum without PNT by
+`Lambda(n)<=log n` and an all-integer majorant. Past a certified monotonicity
+threshold, transform the integral with `u=log x` and use the log-Gaussian
+derivative bound to obtain a closed positive tail enclosure. Run disjoint
+cutoffs and precisions; the larger enclosure must lie inside the smaller.
+
+Controls corrupt one Fourier coefficient, omit repeated prime powers, use PNT
+as an exact tail, drop the tail, and inject zero-derived terms. SH17 passes only
+if all four frozen basis prime-power components receive shrinking rigorous
+intervals. It does not assemble the full Weil functional or infer positivity.
+
+## SH17 recorded outcome
+
+The exact Fourier recurrence passes its origin-moment checks. Prime powers are
+enumerated through 4,096 and 16,384, and an all-integer log-Gaussian majorant
+provides the omitted tail without PNT. All four component enclosures nest under
+cutoff/precision escalation and all five controls decline. Formula convention,
+term assembly, and positivity remain open; `m29_reached=false`.
+
+---
+
+# Next Boundary — SH18 Convention-Typed Weil Entry Assembly
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; tail-proof audit requires SH18b replay
+
+Freeze the Fourier convention
+`hat h(u)=integral_R h(t) exp(-iut) dt` with no `2*pi` prefactor. Represent the
+Guinand-Weil identity as a typed normalization record containing the spectral
+argument, pole term, archimedean kernel/coefficient, prime-power sign,
+reflection multiplicity, and transform convention. SH16 and SH17 intervals
+may assemble only when their convention tags equal this record exactly.
+
+The frozen record is the symbolic conversion of Lemma 4 in Carneiro and
+Milinovich, arXiv:2403.17803, from its
+`integral h(t) exp(-2*pi*i*x*t) dt` convention. With the convention above it is
+
+`L(h) = h(i/2)+h(-i/2)
+        +(1/(2*pi))*integral h(t)*(Re psi(1/4+i*t/2)-log(pi)) dt
+        -(1/(2*pi))*sum_{n>=2} Lambda(n)/sqrt(n)
+             *(hat h(log n)+hat h(-log n))`.
+
+For the frozen real-even products, reflection reduces the last coefficient to
+`-1/pi` times the one-sided prime-power component. This reduction is accepted
+only after an exact evenness certificate; it is not a numerical rewrite.
+
+Calibrate assembly on scaled Gaussian identities under two independently
+converted Fourier conventions. Controls mix conventions, flip the prime sign,
+omit reflection multiplicity, omit the pole, and substitute a numerically
+equivalent but unproved normalization.
+
+The assembly type also carries the Gaussian scale. The SH18 checker requires
+scale two on both analytic and arithmetic components and declines the audited
+SH16 scale-one output. This is an implementation of the already frozen
+same-test-function requirement, not a change to the candidate family.
+
+For the frozen four-function basis, construct every symmetric Gram entry from
+the pole, archimedean, and prime-power components at two precision/cutoff
+levels. Require nested intervals and run interval LDL. A positive finite matrix
+is reported only as finite evidence; a negative pivot is a falsifier for the
+chosen functional/basis, while an interval containing zero is inconclusive.
+No finite result can discharge positivity on the infinite algebra or reach
+M29.
+
+## SH18 recorded outcome
+
+The typed conversion from the published cyclic-frequency formula to the frozen
+angular-frequency convention passes symbolically. All seven distinct products
+`t^(2m) exp(-2t^2)`, `m=0..6`, receive nested total intervals across the
+frozen precision, quadrature, series, and prime-cutoff escalation. All six
+normalization and scale controls decline.
+
+Interval LDL is inconclusive at its first pivot: the scale-two zeroth entry is
+enclosed by `[-1.98984149884e-2, 2.14385603517e-2]`. This is preserved as a
+negative computational result, not reported as finite positivity. The test is
+localized near zero while the xi spectral mass is remote, forcing cancellation
+between explicit-formula components and making the certified margin much
+smaller than the current enclosure. Infinite positivity and M29 remain false.
+
+Post-run proof audit found that the archimedean box complement used
+`|Re psi(1/4+i*t/2)-log(pi)| <= |t|+4` without encoding its derivation. The
+finite-box and prime intervals remain reproducible, but SH18 is not accepted
+as a complete rigorous enclosure. SH18b changes only this bound and evaluator
+reuse; it preserves the basis, formula, normalization, cutoffs, precision,
+controls, and acceptance gate.
+
+---
+
+# Next Boundary — SH18b Derived Archimedean Tail Replay
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; finite LDL remains inconclusive
+
+Rewrite each digamma-series term with `x=n+1/4`, `y=|t|/2` as
+`-3/(4*x*(x+3/4)) + y^2/(x*(x^2+y^2))`. Bound the first summable series by
+an integral comparison. Split the second at `x=y`, bound its head by a
+harmonic integral and its tail by a cubic integral. For `|t|>=6`, the resulting
+deliberately loose certified kernel envelope is `|t|+32`. Use it, rather than
+the unproved constant four, for every Gaussian box complement.
+
+Concretely, the absolute first series is at most five. For `y>=3`, the second
+series is bounded by `4+log(4*y)+1/y+1/2`: use `1/x` through `x<=y` and
+`y^2/x^3` afterward. Since `log(4*y)<=y`, `gamma<1`, and `log(pi)<2`, this is
+strictly below `2*y+32=|t|+32`. These rational/integral comparisons are the
+tail certificate; no sampled kernel values enter it.
+
+Batch all seven degrees so a cell's digamma interval and a prime power's log
+argument are computed once. Scalar and batch outputs must agree by mutual
+interval containment. SH18b succeeds only if the corrected total intervals
+nest, all normalization controls still decline, and its LDL outcome is
+reported without promotion to infinite positivity.
+
+## SH18b recorded outcome
+
+The derived `|t|+32` kernel envelope replaces the unproved SH18 tail constant.
+Scalar and batched archimedean and prime-power components agree by mutual
+interval containment. Shared evaluation reduces a full seven-product replay
+to 3.5 seconds on the recorded machine. All total intervals nest and all six
+typed controls decline. LDL remains inconclusive at pivot zero with enclosure
+`[-1.98984149884e-2, 2.14385603517e-2]`; component widths are approximately
+`2.7e-48` (pole), `2.45e-2` (archimedean), and `1.68e-2` (prime). No finite or
+infinite positivity claim is made, and `m29_reached=false`.
+
+---
+
+# Next Boundary — SH19 Uniform Weil-Positivity Representation Search
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** frozen before accepted SH18b output
+
+Treat the certified SH18 Gram sequence as observations for concept discovery,
+not as the target theorem. Search dimension-parametric representations of the
+entry and pivot programs using a generic grammar of recurrences, triangular
+factorizations, positive kernels, sums of squares, integral decompositions,
+and bounded remainder terms. The search receives interval entries and basis
+indices but no zero ordinates, RH truth value, named winning representation,
+or checker counterexamples.
+
+The grammar may also construct rational Gaussian scales and translations from
+arithmetic-only summaries. Its utility objective is certified pivot margin per
+evaluation cost, not raw positivity count. Parameters selected from tabulated
+or evaluated xi-zero ordinates are forbidden by provenance; a parameter that
+only fits the frozen four-dimensional matrix is an overfitting control.
+
+A candidate earns no milestone credit merely by fitting or certifying every
+finite matrix observed. It must emit one symbolic program valid for arbitrary
+dimension and a proof-obligation bundle containing: an exact identity with
+the Weil form on the full generated algebra; manifest nonnegativity or a
+uniform nonnegative remainder; bounds independent of truncation dimension;
+and a continuity/closability theorem in a topology for which the generated
+union is dense in the separating test class. The checker validates each item
+independently and returns only accept/reject to search.
+
+Frozen controls include interpolation of the observed dimensions, a
+dimension-dependent positive shift, an LDL table with no recurrence, density
+in the wrong topology, a non-uniform remainder, and a decomposition that omits
+one explicit-formula term. A valid uniform positivity mechanism advances the
+GNS premise but does not by itself prove essential self-adjointness or exact
+xi spectral-measure correspondence. Negative or inconclusive SH18 matrices
+remain data and trigger convention/tail audit rather than changing this gate.

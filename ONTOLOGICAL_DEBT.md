@@ -361,3 +361,48 @@ removing the debt entry.
   are supplied.
 - Validated finite entries remove an engineering blocker only; infinite
   positivity still needs a uniform certificate.
+
+## SH16 quadrature entry (pre-registered)
+
+- New debt D37: dyadic interval subdivision, Gaussian tail inequalities,
+  real-digamma series, its uniform remainder, and the frozen integration box
+  policy are supplied.
+- Validated archimedean entries retire only one evaluator component. The prime
+  sum and infinite positivity remain independent obligations.
+
+## SH17 prime-tail entry (pre-registered)
+
+- New debt D38: Gaussian Fourier recurrence, prime-power enumeration cutoff,
+  the elementary von Mangoldt bound, monotonicity threshold, and log-Gaussian
+  integral majorant are supplied.
+- Certified prime components complete another evaluator layer only. Formula
+  normalization and uniform infinite-algebra positivity remain open.
+
+## SH18 normalized-assembly entry (pre-registered)
+
+- New debt D39: the Fourier convention, exact Guinand-Weil normalization,
+  reflection multiplicity, pole/archimedean coefficients, and interval-LDL
+  policy are supplied.
+- Finite Gram results remain bounded evidence. An infinite positivity theorem
+  and coordinate essential self-adjointness are still required for real M29.
+- Post-run SH18 audit found SH16 evaluated Gaussian scale one while SH17
+  evaluated the scale-two SH14 basis products. D37 is not retired by SH16;
+  corrected scale-two quadrature must be independently rerun before assembly.
+
+## SH19 uniform-representation entry (pre-registered)
+
+- New debt D40: the representation categories, arbitrary-dimension syntax,
+  proof-obligation bundle, topology compatibility interface, and controls are
+  supplied. Which representation, if any, explains the real Weil form is not
+  supplied.
+- More positive finite minors cannot retire D40. Retirement requires one
+  independently checked dimension-uniform identity, nonnegative bound, and
+  compatible density/continuity bridge on an infinite separating test class.
+
+## SH18b tail-proof replay entry (pre-registered)
+
+- D37 remains active because SH18 used an undocumented archimedean tail
+  constant. SH18b supplies the algebraic digamma-term split and integral
+  comparisons leading to the looser `|t|+32` envelope.
+- Batching is accounting infrastructure only. It does not strengthen the
+  finite positivity claim or reduce any analytic proof obligation.

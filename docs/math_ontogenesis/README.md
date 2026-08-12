@@ -17,9 +17,14 @@ of a completed ladder.
 
 The post-stall self-hosting track has also begun: SH1 isolates load-bearing
 spectral debt, SH2b records a non-amortizing generator reconstruction failure,
-and SH3b reconstructs a transferable finite symmetric-witness constructor.
-Real M29 remains unreached because the limiting real-xi correspondence is
-still absent.
+SH3b reconstructs a transferable finite symmetric-witness constructor, and
+SH4c–SH18b build the typed infinite-operator and validated explicit-formula
+path. The first convention-correct four-function Weil Gram replay is
+inconclusive at its zeroth LDL pivot; it is not a positivity claim. SH19 is
+pre-registered to search for a dimension-uniform positive representation with
+a compatible density/continuity bridge. Real M29 remains unreached because
+global Weil positivity, self-adjoint realization, and limiting real-xi
+spectral correspondence are still absent.
 
 | Milestone | Topic | Status |
 |---|---|---|

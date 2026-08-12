@@ -295,10 +295,16 @@ family by its `T/log T` spectral count. SH11 reconstructs a generic Lambert-W
 inverse and obtains the smooth xi quantile `2*pi*n/W(n/e)`, but SH12b proves
 counting expansions stable under an `O(1)` count error are non-identifying.
 SH13 reconstructs a generic positive-functional/GNS operator constructor, and
-SH14 calibrates exact rational LDL positivity certificates. The real chain
-stops before Weil Gram evaluation because validated archimedean intervals are
-absent. No Weil positivity or exact xi spectrum is claimed; real M29 remains
-open.
+SH14 calibrates exact rational LDL positivity certificates. SH15–SH18b add an
+MPFR interval backend, real-digamma quadrature, prime-power tails, and a typed
+Guinand–Weil normalization. A scale audit invalidates SH16's real-assembly
+claim; SH18b corrects it and derives the archimedean box tail. Its seven
+scale-two product entries nest, but interval LDL is inconclusive at pivot zero
+(`[-1.9898e-2,2.1439e-2]`). The dominant widths are archimedean and prime-tail,
+not MPFR rounding. No finite or infinite Weil positivity or exact xi spectrum
+is claimed; real M29 remains open. The next frozen search targets a
+dimension-uniform positive representation with compatible density and
+continuity, not additional finite minors as an endpoint.
 
 Directions G and Mathematical Ontogenesis M1–M28 plus M29b surrogate are
 implemented, and real M30 has been attempted. M10 added
