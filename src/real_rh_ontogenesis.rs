@@ -111,6 +111,17 @@ pub struct M30aExperiment {
     pub claim_level: &'static str,
 }
 
+#[derive(Clone, Debug)]
+pub struct AblationResult {
+    pub name: &'static str,
+    pub programs_enumerated: usize,
+    pub frontier_survives: bool,
+    pub frontier_rank: Option<usize>,
+    pub open_assumptions: BTreeSet<Statement>,
+    pub proof_found: bool,
+    pub reduction_found: bool,
+}
+
 fn is_open(statement: Statement) -> bool {
     matches!(
         statement,
@@ -199,6 +210,54 @@ fn programs(order: &[Statement]) -> Vec<ProofProgram> {
         }
     }
     output
+}
+
+pub fn ablation_run(
+    name: &'static str,
+    disabled_statements: &[Statement],
+    disabled_inference: Option<Inference>,
+) -> AblationResult {
+    let order: Vec<_> = ACQUIRED_STATEMENTS
+        .iter()
+        .copied()
+        .filter(|statement| !disabled_statements.contains(statement))
+        .collect();
+    let candidates: Vec<_> = programs(&order)
+        .into_iter()
+        .filter(|program| Some(program.inference) != disabled_inference)
+        .collect();
+    let mut proof_found = false;
+    let mut reduction_found = false;
+    let mut best: Option<(usize, CheckResult)> = None;
+    for (index, program) in candidates.iter().enumerate() {
+        let checked = exact_checker(program);
+        proof_found |= checked.derives_target
+            && checked.domain == Domain::RealXi
+            && checked.universal
+            && checked.open_assumptions.is_empty();
+        reduction_found |= checked.valid_strict_reduction;
+        if checked.derives_target && checked.domain == Domain::RealXi {
+            let replace = best
+                .as_ref()
+                .is_none_or(|(_, incumbent)| frontier_score(&checked) < frontier_score(incumbent));
+            if replace {
+                best = Some((index + 1, checked));
+            }
+        }
+    }
+    let frontier_rank = best.as_ref().map(|(rank, _)| *rank);
+    let open_assumptions = best
+        .map(|(_, checked)| checked.open_assumptions)
+        .unwrap_or_default();
+    AblationResult {
+        name,
+        programs_enumerated: candidates.len(),
+        frontier_survives: frontier_rank.is_some(),
+        frontier_rank,
+        open_assumptions,
+        proof_found,
+        reduction_found,
+    }
 }
 
 fn frontier_score(check: &CheckResult) -> (usize, usize, usize) {

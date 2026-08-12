@@ -15,6 +15,12 @@ surrogate while real M29 remains unreached. M30a runs bounded ontogenesis on
 real RH and returns `attempted_unreached`. A complete directory is not a claim
 of a completed ladder.
 
+The post-stall self-hosting track has also begun: SH1 isolates load-bearing
+spectral debt, SH2b records a non-amortizing generator reconstruction failure,
+and SH3b reconstructs a transferable finite symmetric-witness constructor.
+Real M29 remains unreached because the limiting real-xi correspondence is
+still absent.
+
 | Milestone | Topic | Status |
 |---|---|---|
 | [M1](M01_INVENT_DISTANCE.md) | Distance | reached — empirical |
@@ -58,5 +64,8 @@ cargo test -p supsearch --lib rh_making_surrogate_world
 cargo run --release --example rh_making_surrogate_world
 cargo test -p supsearch --lib real_rh_ontogenesis
 cargo run --release --example real_rh_ontogenesis
+cargo run --release --example stall_diagnosis
+cargo run --release --example generator_reconstruction
+cargo run --release --example spectral_witness_search
 cargo test --workspace
 ```

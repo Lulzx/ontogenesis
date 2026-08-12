@@ -207,3 +207,41 @@ removing the debt entry.
   length four, frontier score, and strict-reduction criterion are supplied.
 - D21 means failure is only failure within this bounded search. Success would
   still require independent review of the checker and every trusted lemma.
+
+## SH1 stall-diagnosis entry (pre-registered)
+
+- D15–D21 are tested as candidate dependencies rather than treated uniformly.
+- New debt D22: the ablation intervention, survival criterion, and frontier
+  score are supplied. SH1 can identify load-bearing items only relative to the
+  frozen M30a grammar; it cannot establish global causal necessity.
+
+## SH2 generator-reconstruction entry (pre-registered)
+
+- Targeted debt: the human-written spectral-bridge candidate generator within
+  D21.
+- New debt D23: anonymous proof-graph typing, the three training traces, schema
+  size bound, graph-closure checker, and transfer task interfaces are supplied.
+- A passing SH2 can mark the generator `reconstructed`; it cannot retire D21
+  until the human generator is removed across broader domains, and it cannot
+  reach M29 without independently proving the generated real-xi obligations.
+
+## SH3 witness-construction entry (pre-registered)
+
+- Targeted debts: the `SpectralCorrespondence` and `SelfAdjointness`
+  obligations isolated by SH1.
+- New debt D24: finite sequence observations, generic matrix-entry program
+  bound, exact finite characteristic-polynomial checker, graph transfer tasks,
+  prime-derived real input, and numerical spectrum comparison are supplied.
+- D24 prevents finite spectral agreement from counting as real M29. Retirement
+  requires an exact limiting correspondence, independent of sampled zeros.
+
+## Status after SH1–SH3b
+
+- D21 spectral-bridge generator: SH2/SH2b failed reconstruction because its
+  acquisition cost does not amortize against the two-check cold baseline;
+  status remains `supplied`.
+- D24 generic finite symmetric-witness constructor: SH3b reconstructs it from
+  asymmetric encodings and transfers it to unseen graph spectra; status is
+  `reconstructed`, not retired.
+- Load-bearing real-xi spectral correspondence remains `supplied/unproved`.
+  Finite symmetry does not retire the limiting operator obligation.

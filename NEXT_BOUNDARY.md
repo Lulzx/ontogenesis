@@ -2479,3 +2479,224 @@ the best frontier, and any ordering gain in reaching that frontier. M30 is
 reached only by a closed real-RH proof or valid strict reduction. Otherwise the
 scientific outcome is `attempted_unreached`, not an audit milestone or a
 surrogate M30. Any post-output change creates M30b.
+
+---
+
+# Next Boundary — SH1 M29 Stall Diagnosis
+
+**Pre-registration date:** 2026-08-12
+
+**Source plan:** `ONTOGENESIS_STALL_TO_SELF_HOSTING_PLAN.md` supplied externally
+
+**Status:** executed without amendment
+
+## SH1 recorded outcome
+
+The frozen pair replayed: M29b passed and M30a remained unreached. Ten
+enumerator ablations isolated four load-bearing components for the current
+frontier: `SpectralCorrespondence`, `SelfAdjointness`, their joint bridge, and
+the spectral-forcing inference rule. Removing any one destroys the real-xi
+frontier. Removing finite zero evidence, the even-quartic forcing object,
+Euler-product semantics, the functional equation, conjugation closure, or M28
+reflection equivalence preserves the same open frontier.
+
+The diagnosis passes within the D22 boundary and selects a generic
+spectral-correspondence generator with independently exposed property
+obligations as the first self-hosting target. M29 remains unreached.
+
+## Frozen causal pair
+
+- Last bounded success: M29b, exact coefficient-derived forcing object over the
+  even-quartic surrogate.
+- First clean real-frontier failure: M30a, 12,480-program real-RH search with no
+  proof or strict reduction.
+
+SH1 diagnoses why the successful forcing-object pattern does not transfer to
+real xi. It does not add a new object grammar or alter either frozen result.
+
+## Executable ablations
+
+Starting from the exact M30a proof-program space, remove each statement kind in
+turn and rerun both orderings. Report whether any real-xi frontier survives,
+its rank, open assumptions, proof/reduction status, and enumeration cost.
+
+The primary causal test removes `SpectralCorrespondence` and
+`SelfAdjointness` separately and together. Controls remove finite zero evidence,
+the even-quartic object, Euler-product semantics, functional equation,
+conjugation closure, and reflection equivalence. A debt is load-bearing for the
+current frontier only if its removal destroys or strictly weakens the best
+real-xi frontier under the same grammar and length bound.
+
+## Gate and next action
+
+The diagnosis passes if the last success and first failure replay, all ten
+ablations execute deterministically, at least one load-bearing dependency is
+identified, and non-load-bearing controls are distinguished. It claims only a
+bounded causal diagnosis. The first self-hosting target must be the primitive
+generator needed to reconstruct the load-bearing dependency from generic
+lower-level material; no M29 advancement is claimed by SH1 itself.
+
+---
+
+# Next Boundary — SH2 Reconstruct Witness/Property Generators
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; control/accounting gate invalidated by post-run audit
+
+## SH2 recorded outcome and audit
+
+SH2 selected the anonymous schema
+`Relation(witness,observation) & Property(witness) -> Target(observation)` and
+regenerated the two real-xi obligations. A post-run integrity audit found that
+the one-premise controls compared atom identity rather than rerunning graph
+closure, and transfer proposal counts were assigned formulas rather than
+executed searches. The output is preserved but does not establish
+`reconstructed` status. SH2b changes only those two mechanisms.
+
+## Debt target
+
+SH2 targets the human-written candidate-family step behind the load-bearing
+M29 spectral bridge. The acquired condition may not contain `operator`,
+`spectrum`, `self-adjoint`, `xi`, or `critical line` constructors. It receives
+only anonymous proof graphs from M16, M25, and M29b, represented as typed nodes
+and directed implication edges.
+
+## Generic substrate and discovery
+
+Primitive operations are node-role equality, edge incidence, indegree,
+outdegree, graph substitution, and conjunction. Enumerate all two-premise Horn
+graph schemas with up to three anonymous roles. Retain the smallest schema that
+reconstructs every training proof's decisive bridge and whose one-premise
+ablations fail. Acquisition cost is the number of schemas checked.
+
+The expected generic schema has no domain names: a witness-to-observation
+correspondence plus a certified witness property jointly imply a target
+property. This expectation is not an acceptance shortcut; the independent
+checker compares instantiated proof-graph closure.
+
+## Transfer and real-M29 retry
+
+First transfer the retained generator without rediscovery to an unseen finite
+graph-spectrum domain. It must generate the two missing obligations needed to
+derive a supplied target and reduce proposal checks relative to enumerating all
+two-premise schemas. An incompatible direct-arithmetic proof graph must be
+declined with zero negative transfer.
+
+Then apply the same anonymous generator to the frozen real-xi target. Success
+at SH2 means it independently regenerates the two SH1 frontier obligations and
+reaches them with lower proposal cost. This reconstructs the generator only;
+the obligations remain unproved, so real M29 is still unreached unless their
+certificates are independently constructed. Acquisition cost and amortization
+horizon must be reported. Maximum debt status is `reconstructed`, not
+`retired`.
+
+---
+
+# Next Boundary — SH2b Executed Closure and Proposal Accounting
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; failed utility gate
+
+## SH2b recorded outcome
+
+Executed Horn closure validates the learned two-premise schema and both
+one-premise ablations fail. The generator transfers exactly to the unseen graph
+and real-xi interfaces and declines direct arithmetic. However, cold search
+finds the schema after two executed proposal checks and retained reuse emits two
+obligations. With acquisition cost two, no positive amortization horizon exists
+under the frozen unit. SH2b therefore fails, the generator remains `supplied`,
+and M29 remains unreached. The failure shows that generator selection is not
+the current cost bottleneck; proving or constructing its obligations is.
+
+SH2b preserves the SH2 training graphs, 54-schema space, ordering, transfer
+domains, compatibility interface, real-M29 retry, and claim ceiling. It changes
+only:
+
+1. one-premise ablations remove each premise and rerun Horn closure; the target
+   must not be derived;
+2. baseline proposal cost is the number of schemas actually instantiated and
+   checked before the correct obligations are produced; acquired cost counts
+   the actual emitted obligations.
+
+The machine record must expose per-transfer executed proposal counts. Any
+further post-output change creates SH2c.
+
+---
+
+# Next Boundary — SH3 Generic Spectral-Witness Construction
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed; representation/control gate invalidated by post-run audit
+
+## SH3 recorded outcome and audit
+
+The first run retained transpose (`Right`) because every training input was
+already symmetric, so it did not reconstruct a symmetrization mechanism. The
+focused Cargo filter also selected zero tests. SH3 is preserved as invalidated.
+SH3b changes training and transfer inputs to asymmetric raw encodings with
+independently supplied symmetric targets and runs each focused module test by
+its exact filter.
+
+## Objective
+
+SH3 targets construction of the two load-bearing SH1 obligations rather than
+their generator. It removes named operator and self-adjoint primitives. The
+substrate is generic finite integer sequences, index arithmetic, matrix entry
+programs, transpose, exact symmetry checking, and independently computed
+characteristic polynomials.
+
+Training proof worlds are M16's anonymous symmetric transform and M25's Hankel
+forcing construction. The search must retain a reusable sequence-to-symmetric-
+matrix program, not a fixed matrix. A one-domain fit is insufficient.
+
+## Frozen transfer and real-M29 retry
+
+- Positive unseen transfer: adjacency-degree sequences from finite path and
+  cycle graphs. The retained constructor must yield symmetric matrices whose
+  independently checked characteristic polynomials match the supplied graph
+  spectra.
+- Incompatible control: directed asymmetric graph data must be declined.
+- Real-M29 retry: input is a prime-derived explicit-formula sequence only. Zero
+  coordinates, tabulated zero heights, and M27 roots are prohibited by
+  provenance. Search may compare the resulting finite spectra with M27 zeros
+  only after construction.
+
+The real retry succeeds only if one retained constructor produces a symmetric
+family, passes disjoint prime cutoffs, matches held-out zero spectra under
+precision escalation, and has an exact certificate linking its limiting
+spectrum to all nontrivial xi zeros. Finite numerical agreement alone is a
+frontier, not M29. All search, mismatch, construction, and transfer costs must
+be reported even on failure.
+
+---
+
+# Next Boundary — SH3b Nontrivial Symmetric-Witness Reconstruction
+
+**Pre-registration date:** 2026-08-12
+
+**Status:** executed without amendment; finite reconstruction passed, real M29 unreached
+
+## SH3b recorded outcome
+
+SH3b retained `SymmetricAverage` at candidate 3/4. It exactly reconstructed all
+three asymmetric training encodings, transferred to unseen path/cycle graph
+spectra with proposal checks 3→1, and declined the directed-domain control.
+Including acquisition cost three, reuse becomes net-positive after two transfer
+tasks: baseline 6 checks versus acquired total 5.
+On prime-only inputs at cutoffs 11, 17, and 29 it constructed three finite
+symmetric matrices with provenance intact.
+
+The real-M29 gate failed: held-out zero-spectrum agreement, precision
+escalation, and an exact limiting correspondence are all false. SH3b therefore
+reconstructs a generic finite symmetric-witness constructor, but not the
+real-xi spectral correspondence. `m29_reached=false`.
+
+SH3b preserves the four entry programs, ordering, checker, graph domains,
+prime-only real retry, and M29 gate. Training matrices and positive graph
+transfers are now asymmetric even-valued raw encodings whose frozen targets are
+their symmetric averages. Exact target equality is required; transpose and
+identity must fail. The directed control carries incompatible-domain metadata
+and must be declined before construction. Any further change creates SH3c.

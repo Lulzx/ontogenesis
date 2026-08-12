@@ -255,3 +255,6 @@ M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 | M28 reflection-orbit predicate equivalence | confirmed, exact affine certificate | `src/rh_equivalence_world.rs`, `NEXT_BOUNDARY.md` |
 | M29b coefficient-derived forcing surrogate | confirmed, exact bounded surrogate; real M29 unreached | `src/rh_making_surrogate_world.rs`, `NEXT_BOUNDARY.md` |
 | M30a real-RH ontogenesis run | confirmed, 12,480-program bounded negative search; M30 unreached | `src/real_rh_ontogenesis.rs`, `NEXT_BOUNDARY.md` |
+| SH1 M29 stall diagnosis | confirmed, ten executable ablations isolate the spectral bridge | `src/stall_diagnosis.rs`, `NEXT_BOUNDARY.md` |
+| SH2b obligation-generator reconstruction | confirmed failure, exact but non-amortizing | `src/generator_reconstruction.rs`, `NEXT_BOUNDARY.md` |
+| SH3b generic symmetric-witness reconstruction | confirmed finite cross-domain transfer; real M29 unreached | `src/spectral_witness_search.rs`, `NEXT_BOUNDARY.md` |

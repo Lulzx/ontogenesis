@@ -46,3 +46,15 @@ This is an L2 surrogate result only. The object is for a supplied even-quartic
 family, not xi, and it explains no prime phenomenon. The actual M29 milestone
 remains unreached; `real_zeta_object=false`, `rh_proved=false`, and
 `m29_reached=false`.
+
+## Stall-to-self-hosting continuation
+
+SH1 identifies the spectral correspondence and witness-property bridge as
+load-bearing for the frozen real-xi frontier. SH2b reconstructs its anonymous
+obligation pattern but fails amortized utility. SH3b reconstructs a generic
+finite symmetric-matrix constructor and transfers it to unseen graph spectra.
+
+The prime-only real retry constructs finite symmetric families without zero
+coordinate provenance, but it does not match held-out zero spectra and has no
+exact limiting correspondence. This reduces finite witness-construction debt;
+it does not solve the real M29 object problem.

@@ -96,6 +96,12 @@
 //!   forcing object in a bounded even-quartic surrogate.
 //! - [`real_rh_ontogenesis`]: Direction M30a bounded proof-program search
 //!   against the real Riemann Hypothesis.
+//! - [`stall_diagnosis`]: self-hosting Phase SH1 executable diagnosis of the
+//!   M29-to-real-RH stall and its load-bearing ontology debt.
+//! - [`generator_reconstruction`]: self-hosting Phase SH2 reconstruction and
+//!   cross-domain reuse of anonymous witness/property obligation generators.
+//! - [`spectral_witness_search`]: self-hosting Phase SH3 generic symmetric
+//!   witness construction and provenance-safe real-M29 retry.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -128,6 +134,9 @@ pub mod locus_world;
 pub mod making_object_world;
 pub mod real_zeta_world;
 pub mod real_rh_ontogenesis;
+pub mod generator_reconstruction;
+pub mod stall_diagnosis;
+pub mod spectral_witness_search;
 pub mod rh_equivalence_world;
 pub mod rh_making_surrogate_world;
 pub mod nbe;

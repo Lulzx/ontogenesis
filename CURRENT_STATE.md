@@ -262,6 +262,25 @@ separate positive control. The completed run records
 `m30_reached=false`. It is an L0 bounded-search negative result, not a theorem.
 D21 remains active.
 
+## Self-hosting response to the M29 stall
+
+SH1 replays M29b success and real-M30 failure, then executes ten proof-space
+ablations. Only spectral correspondence, witness self-adjointness, their joint
+bridge, and the spectral-forcing rule are load-bearing for the current real-xi
+frontier. M26 symmetry, M27 evidence, M28 equivalence, and the M29 surrogate do
+not sustain that frontier when the spectral bridge is removed.
+
+SH2b reconstructs the anonymous two-premise obligation pattern exactly but
+fails its utility gate: cold discovery and retained emission both cost two
+checks, so acquisition never amortizes. SH3b then reconstructs the generic
+finite constructor `SymmetricAverage` at candidate 3/4 and transfers it to
+unseen graph spectra with proposal checks 3→1. Prime-only real-M29 construction
+preserves provenance and finite symmetry. Acquisition amortizes after two graph
+tasks (6 baseline checks versus 5 acquired total), but the real retry has no
+held-out spectral match or exact limiting correspondence. Mathematical
+capability remains at real M29 unreached; one finite witness-construction debt
+is now `reconstructed`.
+
 Directions G and Mathematical Ontogenesis M1–M28 plus M29b surrogate are
 implemented, and real M30 has been attempted. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
