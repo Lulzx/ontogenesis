@@ -57,6 +57,8 @@ command but not guarded by any assertion.
 | U2 cost contraction: downstream branchwise S->S takes learned 12 proposals vs uniform 39; raw/irrelevant fail and universal is unsolved after 707; charged net +271412 at 10000 uses | confirmed, asserted, executable | `examples/coproduct_property.rs`; `COPRODUCT_PROPERTY.md` |
 | U3: independent discovery for F(X)=1+X yields an anonymous carrier/constructor/mediator generator; protected depth-5/7/9 algebras commute with one untruncated semantic class | confirmed, asserted, executable | `src/initial_algebra.rs`; `INITIAL_ALGEBRA.md` |
 | U3 cost contraction: carrier doubling takes learned 12 proposals vs uniform 15; raw/irrelevant fail, universal is unsolved after 707, and charged net is +258372 at 100000 uses | confirmed, asserted, executable | `examples/initial_algebra.rs`; `INITIAL_ALGEBRA.md` |
+| U4: exact anonymous polynomial enumeration plus rich heterogeneous evidence narrows 237 syntax candidates to one bounded semantic recursive-signature class (12 aliases); weak evidence reports ambiguity | confirmed, asserted, executable | `src/recursive_signature.rs`; `RECURSIVE_SIGNATURE.md` |
+| U4: independently discovered constructors/alpha/generator commute at protected depths 5/7/9 with one untruncated mediator class; leakage, truncation, wrong-arity, aliasing, binary-signature, and fallback controls pass | confirmed, asserted, executable | `examples/recursive_signature.rs`; `RECURSIVE_SIGNATURE.md` |
 | B3: invented recursion expands proposals to map/append/reverse | confirmed, asserted | `src/typed.rs`; `b3_invented_recursion_expands_proposals_and_recovers_vocabulary` |
 | B3 transfer: invented map(reverse) mirrors unseen 5×4 grid | confirmed, asserted | same B3 regression test |
 

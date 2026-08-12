@@ -286,6 +286,23 @@ conditions fail, while pure universal remains unsolved after 707. Discovery cost
 41,628 comparable checks and nets +258,372 at 100,000 uses. Identity remains a
 negative transfer. Exact protocol: `INITIAL_ALGEBRA.md`.
 
+### U4 — recursive-signature ontogenesis
+
+U4 no longer receives `F(X)=1+X`. Exact size enumeration considers 237 anonymous
+polynomial syntax candidates through size 5 and uniformly derives their semantic
+variant profiles and executable actions. Weak evidence leaves 13 signature classes
+and reports ambiguity. Rich Boolean, numeral, and Church-list experience leaves one
+bounded semantic class with 12 syntax aliases, rather than claiming a unique syntax.
+
+Independent lambda/typed search discovers its two Church constructors, expanded
+`F(M)->M`, and generic mediator generator. Protected depths 5/7/9 commute and
+untruncated mediator enumeration yields one semantic class. Truncation, leakage,
+wrong-arity/nonrecursive, aliasing, weak-identifiability, binary-signature, and exact
+universal-fallback controls are asserted. Downstream learned/uniform costs are 12/15;
+the 928-unit discovery charge nets +29,072 at 10,000 uses. Supplying F also takes 12
+downstream proposals, isolating signature invention as an upfront cost. Exact protocol:
+`RECURSIVE_SIGNATURE.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are

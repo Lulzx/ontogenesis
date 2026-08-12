@@ -218,6 +218,16 @@ and pure universal unsolved after 707. After a 41,628-check discovery charge,
 the declared 100,000-use horizon nets +258,372 checks. See
 [`INITIAL_ALGEBRA.md`](INITIAL_ALGEBRA.md).
 
+**U4 — bounded recursive-signature ontogenesis.** U4 exhaustively enumerates a
+small anonymous polynomial-signature AST rather than receiving `F`. Weak evidence
+honestly leaves 13 semantic classes; rich heterogeneous evidence narrows 237 syntax
+candidates to one observational class with 12 syntax aliases. Uniform machinery then
+discovers the carrier constructors, `F(M)->M`, and mediator generator. Protected
+depths 5/7/9 commute with one untruncated mediator class. Learned downstream search
+takes 12 proposals versus uniform 15 and bounded pure universal 707; the 928-unit
+discovery cost nets +29,072 at 10,000 uses. See
+[`RECURSIVE_SIGNATURE.md`](RECURSIVE_SIGNATURE.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.
