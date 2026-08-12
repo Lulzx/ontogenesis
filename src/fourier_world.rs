@@ -1,4 +1,5 @@
-//! Direction M15: invent oscillatory coordinates from generic recurrences.
+//! Direction M15/M15b: invent oscillatory coordinates from generic
+//! recurrences, then route the retained closed-shift priority by raw probes.
 //!
 //! Candidate atoms are generated only by bounded second-order recurrences.
 //! Search never receives frequencies, trigonometric atoms, orthogonality, or a
@@ -522,6 +523,356 @@ pub fn machine_record(report: &FourierDiscovery) -> String {
     )
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Route {
+    Routed,
+    Declined,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConditionalTransferMeasurement {
+    pub task: &'static str,
+    pub compatible: bool,
+    pub route: Route,
+    pub probe_evaluations: usize,
+    pub baseline_checks: usize,
+    pub acquired_checks: usize,
+    pub squared_error: i64,
+    pub exact_winner: bool,
+    pub prediction_checked: bool,
+    pub winner_atoms: Vec<usize>,
+    pub winner_weights: Vec<i32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConditionalFourierDiscovery {
+    pub transfers: Vec<ConditionalTransferMeasurement>,
+    pub probe_evaluations_per_condition: usize,
+    pub baseline_checks: usize,
+    pub acquired_checks: usize,
+    pub measured_gain: usize,
+    pub routed_accelerated: usize,
+    pub declined_unchanged: usize,
+    pub controls_unchanged: usize,
+    pub false_positive_routes: usize,
+    pub negative_transfer_tasks: usize,
+    pub impulse_rejected: bool,
+    pub ramp_rejected: bool,
+    pub corruption_rejected: bool,
+    pub noisy_squared_error: i64,
+    pub constant_declined: bool,
+    pub candidate_sets_identical: bool,
+    pub l3_boundary_passed: bool,
+}
+
+fn probe_applicability(
+    target: &[i32; LENGTH],
+    atoms: &[Atom],
+    closed_pairs: &[Vec<usize>],
+) -> Route {
+    let probes = 0..6;
+    let single_atom = atoms.iter().enumerate().any(|(atom, _)| {
+        WEIGHTS.iter().any(|weight| {
+            probes
+                .clone()
+                .all(|index| target[index] == weight * atoms[atom].values[index])
+        })
+    });
+    if single_atom {
+        return Route::Declined;
+    }
+    let closed_pair = closed_pairs.iter().any(|pair| {
+        WEIGHTS.iter().any(|left_weight| {
+            WEIGHTS.iter().any(|right_weight| {
+                probes.clone().all(|index| {
+                    target[index]
+                        == left_weight * atoms[pair[0]].values[index]
+                            + right_weight * atoms[pair[1]].values[index]
+                })
+            })
+        })
+    });
+    if closed_pair {
+        Route::Routed
+    } else {
+        Route::Declined
+    }
+}
+
+fn best_squared_error(target: &[i32; LENGTH], candidates: &[Candidate], order: &[usize]) -> i64 {
+    order
+        .iter()
+        .map(|index| squared_error(&candidates[*index].values, target))
+        .min()
+        .unwrap()
+}
+
+/// Separately pre-registered M15b repair. It consumes M15's closed-shift
+/// coordinate schema but none of M15b's frozen tasks participate in retention.
+pub fn m15b_experiment() -> ConditionalFourierDiscovery {
+    let atoms = generate_atoms();
+    let candidates = enumerate_candidates(&atoms);
+    let unguided = (0..candidates.len()).collect::<Vec<_>>();
+    let guided = guided_order(&candidates);
+    let closed_pairs = candidates
+        .iter()
+        .filter(|candidate| candidate.closed_shift.is_some())
+        .map(|candidate| candidate.atoms.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let discoveries = discovery_signals();
+    let s1 = discoveries[0];
+    let s2 = discoveries[1];
+    let s3 = discoveries[2];
+    let s4 = discoveries[3];
+    let s5 = discoveries[4];
+    let s6 = discoveries[5];
+    let mut tasks: Vec<(&'static str, bool, [i32; LENGTH])> = vec![
+        ("phase_shift_two", true, shift(&s3, 2)),
+        ("phase_shift_three", true, shift(&s3, 3)),
+        ("phase_shift_four", true, shift(&s3, 4)),
+        ("phase_shift_five", true, shift(&s3, 5)),
+        (
+            "period4_pair_2_3",
+            true,
+            add(&scale(&s4, 2), &scale(&s5, 3)),
+        ),
+        (
+            "period4_pair_minus2_3",
+            true,
+            add(&scale(&s4, -2), &scale(&s5, 3)),
+        ),
+        (
+            "period4_pair_2_minus3",
+            true,
+            add(&scale(&s4, 2), &scale(&s5, -3)),
+        ),
+        (
+            "period6_pair_2_3",
+            true,
+            add(&scale(&s1, 2), &scale(&s2, 3)),
+        ),
+        (
+            "period6_pair_minus2_3",
+            true,
+            add(&scale(&s1, -2), &scale(&s2, 3)),
+        ),
+        (
+            "period6_nonclosed_3_minus2",
+            true,
+            add(&scale(&s1, 3), &scale(&s2, -2)),
+        ),
+        ("period6_single_atom_minus3_s6", true, scale(&s6, -3)),
+        ("constant", false, [3; LENGTH]),
+        (
+            "impulse",
+            false,
+            signal(&[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+        ),
+        ("ramp", false, std::array::from_fn(|index| index as i32)),
+        ("corrupt_s3_sample3", false, {
+            let mut values = s3;
+            values[3] += 1;
+            values
+        }),
+        ("noisy_s3_samples2_5", false, {
+            let mut values = s3;
+            values[2] += 1;
+            values[5] -= 1;
+            values
+        }),
+    ];
+    let mut transfers = Vec::new();
+    for (name, compatible, target) in tasks.drain(..) {
+        let baseline_fit = find_exact(&target, &candidates, &unguided);
+        let baseline_checks = baseline_fit
+            .as_ref()
+            .map(|fit| fit.checks)
+            .unwrap_or(candidates.len());
+        let route = probe_applicability(&target, &atoms, &closed_pairs);
+        let acquired_fit = match route {
+            Route::Routed => find_exact(&target, &candidates, &guided),
+            Route::Declined => baseline_fit.clone(),
+        };
+        let acquired_checks = acquired_fit
+            .as_ref()
+            .map(|fit| fit.checks)
+            .unwrap_or(candidates.len());
+        let (squared_error, winner_atoms, winner_weights, prediction_checked) = match &acquired_fit
+        {
+            Some(fit) => {
+                let candidate = &candidates[fit.candidate];
+                (
+                    fit.error,
+                    candidate.atoms.clone(),
+                    candidate.weights.clone(),
+                    route == Route::Routed && prediction_valid(candidate, &atoms, &target),
+                )
+            }
+            None => (
+                best_squared_error(
+                    &target,
+                    &candidates,
+                    match route {
+                        Route::Routed => &guided,
+                        Route::Declined => &unguided,
+                    },
+                ),
+                Vec::new(),
+                Vec::new(),
+                false,
+            ),
+        };
+        transfers.push(ConditionalTransferMeasurement {
+            task: name,
+            compatible,
+            route,
+            probe_evaluations: 6,
+            baseline_checks,
+            acquired_checks,
+            squared_error,
+            exact_winner: acquired_fit.is_some(),
+            prediction_checked,
+            winner_atoms,
+            winner_weights,
+        });
+    }
+    let baseline_checks = transfers.iter().map(|task| task.baseline_checks).sum();
+    let acquired_checks = transfers.iter().map(|task| task.acquired_checks).sum();
+    let probe_evaluations_per_condition = transfers.iter().map(|task| task.probe_evaluations).sum();
+    let routed_accelerated = transfers
+        .iter()
+        .filter(|task| task.compatible && task.route == Route::Routed)
+        .filter(|task| task.acquired_checks < task.baseline_checks)
+        .count();
+    let declined_unchanged = transfers
+        .iter()
+        .filter(|task| task.route == Route::Declined)
+        .filter(|task| task.acquired_checks == task.baseline_checks)
+        .count();
+    let controls_unchanged = transfers
+        .iter()
+        .filter(|task| !task.compatible)
+        .filter(|task| task.route == Route::Declined)
+        .filter(|task| task.acquired_checks == task.baseline_checks)
+        .count();
+    let false_positive_routes = transfers
+        .iter()
+        .filter(|task| !task.compatible && task.route == Route::Routed)
+        .count();
+    let negative_transfer_tasks = transfers
+        .iter()
+        .filter(|task| task.acquired_checks > task.baseline_checks)
+        .count();
+    let task = |name: &str| transfers.iter().find(|task| task.task == name).unwrap();
+    let impulse_rejected = !task("impulse").exact_winner;
+    let ramp_rejected = !task("ramp").exact_winner;
+    let corruption_rejected = !task("corrupt_s3_sample3").exact_winner;
+    let noisy_squared_error = task("noisy_s3_samples2_5").squared_error;
+    let constant = task("constant");
+    let constant_declined = constant.route == Route::Declined && constant.winner_atoms.len() == 1;
+    let candidate_sets_identical = {
+        let mut left = unguided.clone();
+        let mut right = guided.clone();
+        left.sort_unstable();
+        right.sort_unstable();
+        left == right
+    };
+    let l3_boundary_passed = transfers
+        .iter()
+        .filter(|task| task.compatible)
+        .all(|task| task.exact_winner && task.squared_error == 0)
+        && transfers
+            .iter()
+            .filter(|task| task.compatible && task.route == Route::Routed)
+            .all(|task| task.acquired_checks < task.baseline_checks && task.prediction_checked)
+        && transfers
+            .iter()
+            .filter(|task| task.route == Route::Declined)
+            .all(|task| task.acquired_checks == task.baseline_checks)
+        && controls_unchanged == 5
+        && false_positive_routes == 0
+        && negative_transfer_tasks == 0
+        && acquired_checks < baseline_checks
+        && impulse_rejected
+        && ramp_rejected
+        && corruption_rejected
+        && noisy_squared_error > 0
+        && constant_declined
+        && candidate_sets_identical;
+    ConditionalFourierDiscovery {
+        transfers,
+        probe_evaluations_per_condition,
+        baseline_checks,
+        acquired_checks,
+        measured_gain: baseline_checks.saturating_sub(acquired_checks),
+        routed_accelerated,
+        declined_unchanged,
+        controls_unchanged,
+        false_positive_routes,
+        negative_transfer_tasks,
+        impulse_rejected,
+        ramp_rejected,
+        corruption_rejected,
+        noisy_squared_error,
+        constant_declined,
+        candidate_sets_identical,
+        l3_boundary_passed,
+    }
+}
+
+pub fn m15b_machine_record(report: &ConditionalFourierDiscovery) -> String {
+    let transfers = report
+        .transfers
+        .iter()
+        .map(|task| {
+            format!(
+                "{}:compatible={}:route={}:checks={}>{}:error={}:exact={}:prediction={}:winner={:?}:weights={:?}",
+                task.task,
+                task.compatible,
+                match task.route {
+                    Route::Routed => "guided",
+                    Route::Declined => "declined",
+                },
+                task.baseline_checks,
+                task.acquired_checks,
+                task.squared_error,
+                task.exact_winner,
+                task.prediction_checked,
+                task.winner_atoms,
+                task.winner_weights
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(";");
+    format!(
+        "experiment=math_world_m15b,atoms=32,candidates=18048,transfers={},probe_evaluations_per_condition={},baseline_checks={},acquired_checks={},measured_gain={},routed_accelerated={},declined_unchanged={},controls_unchanged={},false_positive_routes={},negative_transfer_tasks={},impulse_rejected={},ramp_rejected={},corruption_rejected={},noisy_squared_error={},constant_declined={},candidate_sets_identical={},probe_positions=0..5,single_atom_probe=true,closed_pair_probe=true,named_frequency_primitives=false,fourier_dictionary_supplied=false,recurrence_generator_supplied=true,probe_routing_supplied=true,simple_dynamics_objective_supplied=true,l3_boundary_passed={},claim_level={},proof_status=exact_conditional_coordinate_routing,deterministic=true,fallback=exact",
+        transfers,
+        report.probe_evaluations_per_condition,
+        report.baseline_checks,
+        report.acquired_checks,
+        report.measured_gain,
+        report.routed_accelerated,
+        report.declined_unchanged,
+        report.controls_unchanged,
+        report.false_positive_routes,
+        report.negative_transfer_tasks,
+        report.impulse_rejected,
+        report.ramp_rejected,
+        report.corruption_rejected,
+        report.noisy_squared_error,
+        report.constant_declined,
+        report.candidate_sets_identical,
+        report.l3_boundary_passed,
+        if report.l3_boundary_passed {
+            "L3_transferred_ontology_with_measured_utility"
+        } else {
+            "L2_invented_feature_in_supplied_meta_ontology"
+        }
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -561,6 +912,56 @@ mod tests {
         assert_eq!(
             machine_record(&m15_experiment()),
             machine_record(&m15_experiment())
+        );
+    }
+
+    #[test]
+    fn conditional_routing_passes_m15b_gate() {
+        let report = m15b_experiment();
+        assert_eq!(report.routed_accelerated, 9);
+        assert_eq!(report.declined_unchanged, 7);
+        assert_eq!(report.controls_unchanged, 5);
+        assert_eq!(report.false_positive_routes, 0);
+        assert_eq!(report.negative_transfer_tasks, 0);
+        assert!(report.acquired_checks < report.baseline_checks);
+        assert!(report.l3_boundary_passed);
+    }
+
+    #[test]
+    fn conditional_routing_reconstructs_and_checks_every_compatible_task() {
+        let report = m15b_experiment();
+        for task in report.transfers.iter().filter(|task| task.compatible) {
+            assert!(task.exact_winner, "{}", task.task);
+            assert_eq!(task.squared_error, 0, "{}", task.task);
+            if task.route == Route::Routed {
+                assert!(task.acquired_checks < task.baseline_checks, "{}", task.task);
+                assert!(task.prediction_checked, "{}", task.task);
+            } else {
+                assert_eq!(task.acquired_checks, task.baseline_checks, "{}", task.task);
+            }
+        }
+    }
+
+    #[test]
+    fn conditional_routing_declines_all_controls() {
+        let report = m15b_experiment();
+        for task in report.transfers.iter().filter(|task| !task.compatible) {
+            assert_eq!(task.route, Route::Declined, "{}", task.task);
+            assert_eq!(task.acquired_checks, task.baseline_checks, "{}", task.task);
+        }
+        assert!(report.impulse_rejected);
+        assert!(report.ramp_rejected);
+        assert!(report.corruption_rejected);
+        assert!(report.noisy_squared_error > 0);
+        assert!(report.constant_declined);
+        assert_eq!(report.probe_evaluations_per_condition, 96);
+    }
+
+    #[test]
+    fn m15b_record_is_deterministic() {
+        assert_eq!(
+            m15b_machine_record(&m15b_experiment()),
+            m15b_machine_record(&m15b_experiment())
         );
     }
 }

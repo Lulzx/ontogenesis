@@ -44,13 +44,31 @@ However, transferring M9's simple-dynamics preference as unconditional search
 priority causes severe negative transfer: it helps two tasks, harms three, and
 raises actual proposal checks from 1,668,649 to 16,484,585. M15 therefore has an
 exact `L2_invented_feature_in_supplied_meta_ontology` result but fails its
-pre-registered L3/meta-transfer boundary. The ladder does not advance to M16.
+pre-registered L3/meta-transfer boundary.
 
-Directions G and Mathematical Ontogenesis M1–M13 are implemented. M10 added
+## M15b conditional routing result
+
+A separately pre-registered repair retains M15's closed-shift coordinate-pair
+schema and uses six common raw samples per task to decide whether the guided
+ordering applies. On sixteen new frozen tasks, all nine routed closed-pair
+tasks accelerate (134,049→12,423 checks); the two declined compatible tasks and
+all five controls keep exact baseline counts. Aggregate actual proposal checks
+fall 223,737→102,111, with 96 probe evaluations per condition reported
+separately. False-positive routes and negative-transfer tasks are both zero,
+impulse/ramp/corruption/noise exact controls are rejected, and the constant
+control keeps its one-atom explanation. M15b reaches
+`L3_transferred_ontology_with_measured_utility`; recurrence generation,
+closed-shift preference, and probe routing remain explicitly supplied. M16
+remains unreached.
+
+Directions G and Mathematical Ontogenesis M1–M15b are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
-exact multivariable factor-ideal certificates.
+exact multivariable factor-ideal certificates. M14/M14c add generic
+transformation-action invention with conditional response routing, and
+M15/M15b add recurrence-generated oscillatory coordinates with conditional
+closed-shift routing.
 
 ## M12 result
 

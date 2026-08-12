@@ -410,3 +410,164 @@ if a frozen transfer is not exact, if any control is called exact, if aggregate
 coordinate descriptions do not beat storage, if guided search causes negative
 transfer, or if measured candidate checks do not meet the frozen improvement
 criterion. Any post-output change creates M15b and preserves this run.
+
+---
+
+# Next Boundary — M15b Conditional Coordinate Routing
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M15b implementation; executed without amendment
+
+## Recorded outcome
+
+M15b passed the frozen L3 gate. The raw six-sample probes routed the
+closed-shift priority to nine compatible tasks and declined the other seven.
+All eleven compatible tasks reconstruct exactly and every routed winner passes
+the closed-shift prediction check; the nine routed tasks fall from 134,049 to
+12,423 actual proposal checks, while the two declined compatible tasks and all
+five controls keep their exact baseline counts. Aggregate actual proposal
+checks fall 223,737→102,111 (measured gain 121,626). The 96 probe evaluations
+per condition are separately labeled. False-positive routes and negative-
+transfer tasks are both zero; impulse, ramp, corruption, and noisy controls
+are declined and rejected as exact laws (noisy squared error 2), and the
+constant control keeps its one-atom explanation without routing. Claim level is
+`L3_transferred_ontology_with_measured_utility`. No probe, threshold, task,
+ordering, or candidate space was changed after observing this outcome.
+
+## Motivation and intended claim
+
+M15 forced the M9-style closed-shift priority on every task and exposed
+negative transfer: it improved two tasks, harmed three, and raised actual
+proposal checks from 1,668,649 to 16,484,585. M15b does not alter that result.
+It tests a new hypothesis: the retained object should be the closed-shift
+coordinate-pair schema plus a generic raw-sample applicability test, rather
+than an unconditional ordering priority.
+
+Maximum claim: `L3_transferred_ontology_with_measured_utility` if the schema
+reduces actual proposal checks on every routed compatible family, never
+increases checks on any task, declines every incompatible control, and lowers
+the aggregate. This is not an L4 claim: recurrence generation, the
+closed-shift objective, and the probe mechanism remain supplied meta-ontology.
+
+## Frozen acquired concepts
+
+M15's outputs are frozen without modification:
+
+- the 32 deduplicated recurrence atoms;
+- the 18,048 candidate reconstructions in the frozen unguided order;
+- the identical candidate set in the closed-shift-first guided order;
+- the 52 deduplicated coordinate pairs whose one-step cyclic shift has an
+  exact checked 2×2 integer matrix.
+
+No new coordinate atom, recurrence coefficient, weight, response program, or
+family is learned from M15b tasks.
+
+## Frozen applicability policy
+
+Every condition observes the same raw probes before proposal search: samples
+`0..=5` of the task signal (six scalar values). Probe evaluations are reported
+separately and are identical in both conditions.
+
+The policy compares the six samples against the frozen candidate substrate in
+this order:
+
+1. **single-atom consistency:** if some atom and weight in
+   `[1,-1,2,-2,3,-3]` equals all six samples, decline the schema and use the
+   unguided order immediately;
+2. **closed-pair consistency:** otherwise, if some closed-shift pair and two
+   weights in the same frozen weight set equals all six samples, route to the
+   guided order;
+3. otherwise decline the schema and use the unguided order immediately.
+
+Probe agreement alone cannot establish a law. The exact checker remains the
+only acceptance criterion and is identical to M15. Routing changes only the
+enumeration order; both orders contain exactly the same candidate set, so a
+routed task that fails exact checking still performs the exhaustive guided
+scan with the same candidate content as the baseline.
+
+## Frozen new downstream suite
+
+None of these tasks appeared in M15 discovery or evaluation. Discovery signals
+`s1`, `s2`, `s3`, `s4`, `s5`, `s6` below are generated only as integer arrays,
+exactly as in M15:
+
+1. `phase_shift_two`: two-step cyclic shift of `s3`;
+2. `phase_shift_three`: three-step cyclic shift of `s3`;
+3. `phase_shift_four`: four-step cyclic shift of `s3`;
+4. `phase_shift_five`: five-step cyclic shift of `s3`;
+5. `period4_pair_2_3`: `2*s4 + 3*s5`;
+6. `period4_pair_minus2_3`: `-2*s4 + 3*s5`;
+7. `period4_pair_2_minus3`: `2*s4 - 3*s5`;
+8. `period6_pair_2_3`: `2*s1 + 3*s2`;
+9. `period6_pair_minus2_3`: `-2*s1 + 3*s2`;
+10. `period6_nonclosed_3_minus2`: `3*s1 - 2*s2`;
+11. `period6_single_atom_minus3_s6`: `-3*s6`;
+12. `constant`: `[3;12]` control;
+13. `impulse`: `[1,0,...,0]` control;
+14. `ramp`: `[0,1,...,11]` control;
+15. `corrupt_s3_sample3`: `s3` with sample 3 incremented by one;
+16. `noisy_s3_samples2_5`: `s3` with sample 2 incremented by one and sample 5
+    decremented by one.
+
+Tasks 1–11 are compatible (they have exact sparse reconstructions in the frozen
+candidate space). Tasks 12–16 are incompatible controls. The policy is not
+given task names, domain labels, period labels, or any per-task rule.
+
+## Compared conditions and accounting
+
+- **Baseline:** after receiving the common probes, enumerate every candidate
+  in the frozen unguided order.
+- **Acquired:** after receiving the same probes, apply the frozen policy;
+  declined tasks run the identical unguided stream, routed tasks run the
+  identical guided stream.
+
+Report per task: common probe evaluations, unguided checks, acquired checks,
+route decision, exact winner, exact reconstruction error, and negative
+transfer. Controls additionally report exact rejection and integer squared
+error where noisy.
+
+Success requires:
+
+- exact recovery of every compatible task (error 0, and closed-shift
+  prediction checked for every routed winner);
+- strictly fewer acquired checks than baseline on every routed compatible
+  task;
+- acquired checks equal to baseline on every declined task;
+- every incompatible control declined with no exact false-positive acceptance
+  (noise is evaluated by explicit squared error, never as a law);
+- zero false-positive routes and zero negative-transfer tasks;
+- lower aggregate actual proposal checks;
+- identical candidate sets in both conditions.
+
+Probe evaluations cannot be combined numerically with checker calls and cannot
+be omitted from reporting.
+
+## Supplied-ontology ledger
+
+- **Supplied:** the M15 substrate (length-12 cyclic indexing, integer
+  arithmetic, bounded second-order recurrence execution, atom deduplication,
+  frozen weights, exact equality checker) and six fixed raw sample positions
+  per task.
+- **Acquired from M15:** the closed-shift coordinate-pair schema and the
+  guided ordering over the identical candidate set.
+- **Supplied mechanism:** the probe/comparison route (D2) and the
+  sparse-description/simple-dynamics objective (D3).
+- **Not supplied:** named frequencies, trigonometry, Fourier coefficients,
+  orthogonality, projection, period labels, target-shaped templates, per-task
+  routing rules, or checker information flow beyond boolean acceptance.
+- **Accounting:** actual checker invocations; common probe evaluations are a
+  distinct labeled unit.
+
+## Controls and falsification
+
+M15b fails L3 if any compatible task is not exact, any routed task is not
+accelerated, any declined task changes its checker count, any incompatible
+control is routed or accepted as exact, aggregate checker calls do not fall,
+or the candidate sets differ between conditions. The already-observed M15
+tasks may be reported only as historical context and cannot be substituted
+into this suite. Any post-output change creates M15c and preserves this run.

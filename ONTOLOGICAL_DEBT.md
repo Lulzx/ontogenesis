@@ -37,3 +37,14 @@ remains: simple dynamics is useful descriptively, yet unconditional M9-guided
 priority produces negative transfer on three of five tasks. This is evidence
 that applicability of the stability preference is unresolved, not evidence for
 removing the debt entry.
+
+## M15b entry (pre-registered)
+
+- D2 is now used as the applicability mechanism for D3: six fixed raw sample
+  values decide whether the retained closed-shift coordinate priority is
+  applied, with both conditions observing the same probes.
+- D3 remains supplied as an objective; its unconditional transfer failed in
+  M15, while conditional routing passes in M15b. The debt is therefore
+  conditioned, not eliminated.
+- D4 remains supplied: bounded second-order recurrence execution still
+  generates the coordinate atoms; M15b learns no new coordinates.

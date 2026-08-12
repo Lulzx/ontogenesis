@@ -27,6 +27,22 @@ as an unconditional priority. The result remains finite, exact, integer-valued,
 and recurrence-bounded; it does not establish continuous Fourier analysis,
 orthogonality, projection, or general frequency estimation.
 
+## M15b repair: conditional routing reaches L3
+
+The failed unconditional policy remains part of the record. A separately
+pre-registered repair retained M15's closed-shift coordinate-pair schema and
+routed it with six common raw samples per task: signals consistent with a
+single atom are declined, signals consistent with an exact closed-shift pair
+are routed to the guided ordering, and everything else is declined. On sixteen
+new frozen tasks, nine closed-pair tasks accelerated (134,049→12,423 checks),
+two compatible single-atom/non-closed tasks and all five controls kept their
+baseline counts, and the aggregate fell 223,737→102,111. Probe evaluations are
+96 per condition and separately labeled; false-positive routes and
+negative-transfer tasks are both zero; impulse, ramp, corruption, and noise
+controls are rejected as exact laws. M15b reaches
+`L3_transferred_ontology_with_measured_utility` while recurrence generation,
+the closed-shift objective, and the probe mechanism remain supplied.
+
 ## Future evidence
 
 A valid experiment needs answer-blind basis search, diverse train/held-out
