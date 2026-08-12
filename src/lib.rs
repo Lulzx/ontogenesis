@@ -36,6 +36,8 @@
 //!   lower-level raw tree substrate and retained by allocation regret.
 //! - [`universal_property`]: bounded relational discovery and validation of an
 //!   anonymous product-like universal factorization in pure lambda calculus.
+//! - [`recursive_signature`]: U4 bounded inference of an anonymous polynomial
+//!   recursive signature and its carrier, constructor, and mediator generator.
 
 pub mod acquire;
 pub mod bank;
@@ -54,6 +56,7 @@ pub mod ontology_guidance;
 pub mod parse;
 pub mod recurrence;
 pub mod recursion_search;
+pub mod recursive_signature;
 pub mod representation;
 pub mod search_accounting;
 pub mod term;
