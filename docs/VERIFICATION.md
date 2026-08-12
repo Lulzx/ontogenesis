@@ -160,3 +160,10 @@ the printed prose and depended on the raw solves and the search budget.
 New modules: `src/ontology_repair.rs`, `src/concept_migration.rs`. Examples:
 `examples/ontology_repair.rs`, `examples/concept_migration.rs`. Docs:
 `docs/ONTOLOGY_REPAIR.md`, `docs/MIGRATION.md`.
+
+| Invent observational probes: distinguish previously equivalent hypotheses from model disagreement only | confirmed, asserted | `src/probe_invention.rs`, 5 tests |
+| Probe scoring = expected hypothesis reduction - execution cost; correct stop when observationally equivalent | confirmed, asserted | `probe_value`, `select_probe`, `run` |
+| Probe selection never sees the hidden answer (§7.3) | confirmed, asserted | `probe_selection_does_not_see_the_answer` |
+
+New module: `src/probe_invention.rs`. Example: `examples/probe_invention.rs`.
+Docs: `docs/PROBE_INVENTION.md`.

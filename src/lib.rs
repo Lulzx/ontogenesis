@@ -57,6 +57,7 @@ pub mod learned_context;
 pub mod nbe;
 pub mod ontology_guidance;
 pub mod ontology_repair;
+pub mod probe_invention;
 pub mod open_signature;
 pub mod parse;
 pub mod recurrence;

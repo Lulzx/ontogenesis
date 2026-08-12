@@ -357,6 +357,23 @@ invalidated is exercised with a manually constructed ontology pair because the
 observation runner never drops accumulated tokens. Protocol: `MIGRATION.md`.
 
 
+
+### Direction D — invent observational probes
+
+A major source of human ontology is the probe set: humans choose which
+observations make structural distinctions visible. The agent holds a bounded
+set of executable candidate hypotheses (predicates over 4-bit inputs, accepted
+extensions with executable Church-witness meaning) that are observationally
+equivalent on every measured probe yet differ on some unmeasured input. It
+must invent the probe — which input to measure — scoring probes by expected
+hypothesis reduction minus execution cost, and never seeing the hidden answer
+(§7.3). With world truth "bit 1 set" and one measured probe, 29 initially
+equivalent candidates are narrowed to the truth by five invented probes
+(5 cost, 25 information); when the survivors agree on every unmeasured input
+the agent correctly stops rather than fabricating a distinction. Probe
+selection depends only on candidate disagreement. Protocol: `PROBE_INVENTION.md`.
+
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are

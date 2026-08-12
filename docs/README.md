@@ -258,6 +258,18 @@ genuinely reusable knowledge (preserved and refined) and never for ambiguous or
 invalidated concepts. Replay of the old task and held-out coverage are
 verified. See [`MIGRATION.md`](MIGRATION.md).
 
+
+**Direction D — invent observational probes.** A major source of human ontology
+is the probe set: humans decide which observations expose structural
+distinctions. Here the agent holds executable candidate hypotheses that agree
+on every measured probe yet differ on some unmeasured input, and it must invent
+the probe that separates them, scored by expected hypothesis reduction minus
+execution cost, never seeing the hidden answer. Twenty-nine initially
+equivalent candidates are narrowed to the world truth by five invented
+measurements (cost 5, information 25), and the agent correctly refuses to invent
+a probe when the survivors are truly indistinguishable. See
+[`PROBE_INVENTION.md`](PROBE_INVENTION.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.
