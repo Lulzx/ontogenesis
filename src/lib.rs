@@ -69,6 +69,9 @@
 //! - [`zeta_world`]: Direction M18 toy zeta object -- exact rational special
 //!   values, exponent-parameterized local factors, and formal pole/reflection
 //!   certificates.
+//! - [`functional_world`]: Direction M19 toy functional equation -- affine
+//!   reflection discovery and factor-program invention over exact completed
+//!   object values.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -83,6 +86,7 @@ pub mod coproduct_property;
 pub mod euclid_world;
 pub mod euler_world;
 pub mod fixpoint;
+pub mod functional_world;
 pub mod feature_invention;
 pub mod initial_algebra;
 pub mod irrational_world;

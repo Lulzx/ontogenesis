@@ -1060,3 +1060,148 @@ M18 fails L3 if no local factor is retained from training, any compatible
 universe is not exact or not accelerated, any control is accepted, aggregate
 operations or description cost do not fall, or accounting mixes units. Any
 post-output change creates M18b and preserves this run.
+
+---
+
+# Next Boundary — M19 Toy Functional Equation
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M19 implementation; executed without amendment
+
+## Recorded outcome
+
+M19 passed the frozen L3 gate. From exact values of the M18 completed object
+in two regions, the learner retained the non-identity involution
+`T(s)=1-s` (factor index 6, one of 2,972 semantically unique factor programs)
+and the factor program `(-1)^k`. The exact checker verifies the universe is
+the inferred semigroup, `T` is an involutive reflection with rational center
+`1/2`, and `Xi(1-s)=(-1)^k Xi(s)` on every integer in `[-8,8]`. All three
+frozen downstream objects are exact and accelerated (aggregate operations
+212→148, measured gain 64); the asymmetric-universe and corrupted-`Xi`
+controls are declined with baseline counts preserved. Description cost falls
+72→14 stored integers. False-positive acceptances and negative-transfer tasks
+are both zero. Claim level is
+`L3_transferred_ontology_with_measured_utility`. No grammar, task, threshold,
+ordering, or candidate space was changed after observing this outcome.
+
+## Motivation and intended claim
+
+M18 retained the toy completed factor `C(p,s)=p^{1-s}-p^s`. M19 asks whether,
+from exact values of the completed object `Xi(s)=prod_p C(p,s)` in two regions,
+the system can discover both the hidden reflection center and an auxiliary
+factor program relating `Xi(c-s)` to `Xi(s)`. “Functional equation,”
+“reflection,” “center,” and “symmetry” are not primitives or candidate labels.
+
+Maximum claim: `L3_transferred_ontology_with_measured_utility`, conditional on
+exact validation on every frozen compatible object, lower actual evaluation
+work, exact decline of every control, and zero negative transfer. This is a
+bounded exact toy claim, not an analytic-continuation theorem.
+
+## Frozen substrate
+
+- Hidden objects are finite irreducible sets `P` from `{2,3,5,7,11}` and the
+  fixed center `c=1`; `k=|P|` is inferred from the extensional universe as in
+  M18.
+- The completed object is
+  `Xi(s)=prod_{p in P} (p^{1-s}-p^s)`, evaluated with exact rational power
+  arithmetic for integer `s`.
+- Training observations are the exact rational values of `Xi` at
+  `s in {-3,-2,-1,4,5,6}` for `P=[2,3,5]` and `P=[2,3,5,7]`. Only these
+  values are stored; the formula and `P` are not passed to search.
+- Transformation grammar: affine maps `T(s)=a-b*s` with `a in [-3,3]`,
+  `b in [-2,2]\{0}`, enumerated lexicographically. A valid reflection must be
+  involutive (`T(T(s))=s` for every integer `s`) and must move a probe
+  (`T(0)!=0` or `T(1)!=1`); the identity transformation is a control and
+  cannot be retained.
+- Factor grammar: integer programs over one variable `k` with constants
+  `-2,-1,0,1,2`, operations `+,-,*`, and the supplied primitive
+  `pow(-1,k)`, AST size through 5, deduplicated by exact rational behavior on
+  `k in {3,4}`.
+
+## Exact checker
+
+For a submitted pair `(T,F)`, the checker:
+
+1. infers `P` and `k` from the extensional universe;
+2. recomputes `Xi` values directly from `C(p,s)=p^{1-s}-p^s` with exact
+   rational powers;
+3. verifies the observed universe equals the inferred semigroup
+   `U(P,2)` exactly;
+4. verifies `T` is involutive and non-identity;
+5. verifies `Xi(T(s)) = F(k)*Xi(s)` for every integer
+   `s in [-8,8]` on every training object;
+6. verifies the frozen center certificate: `T(1/2)=1/2` in rational
+   arithmetic.
+
+The checker returns boolean acceptance only; no normal form, residue,
+counterexample, or center hint flows back to proposal ranking.
+
+## Frozen downstream suite
+
+None of these objects appear in training:
+
+1. `P=[2,3,5,7,11]` with the four reflection pairs
+   `(s,1-s)` for `s in {-5,-4,7,8}` (eight held-out points);
+2. `P=[3,5,7]` with the same four reflection pairs;
+3. `P=[2,5,11]` with the same four reflection pairs.
+
+Controls, all incompatible:
+
+1. asymmetric universe: one element removed from `U(P,E)`;
+2. corrupted `Xi`: one stored value incremented by one;
+3. identity transformation plus `F(k)=1` must fail the checker;
+4. non-involutive transformation `T(s)=2-s` must fail the checker;
+5. constant factor `F(k)=1` with the correct non-identity reflection must
+   fail the checker.
+
+## Compared conditions and accounting
+
+- **Baseline:** store and evaluate `Xi` at all six observed values per
+  training object and all eight held-out values per downstream object. Each
+  exact rational `C(p,s)` evaluation is one operation and the product over
+  `P` is `k-1` multiplications, so `Xi(s)` costs `k + (k-1)` operations.
+- **Acquired:** store the transformation and factor programs, infer `P` and
+  `k`, evaluate `Xi` on one member of each reflection pair, and apply the
+  factor to obtain the other member. Cost per pair is one `Xi` evaluation plus
+  one `F(k)` evaluation.
+- Description cost is stored integers: raw stores `6` rationals (two integers
+  each) per training object and `8` rationals per downstream object; acquired
+  stores the transformation parameters, factor program nodes, and `k`.
+
+Report per task: irreducible count, inference checks, checker calls, baseline
+operations, acquired operations, exact identity, false-positive acceptance,
+and negative transfer. Success requires exact recovery of every compatible
+task, strictly fewer acquired operations, exact decline of every control with
+unchanged baseline counts, zero false-positive acceptances, zero
+negative-transfer tasks, and lower aggregate operations and description cost.
+
+## Supplied-ontology ledger
+
+- **Supplied:** M18's completed factor and `pow` primitive, the affine and
+  factor grammars, the frozen center `c=1`, and the exact rational checker.
+- **Acquired:** the reflection transformation `T(s)=1-s`, the factor program
+  `(-1)^k`, and the functional-equation schema.
+- **Not supplied:** functional-equation labels, center values, reflection
+  constructors, parity predicates, or checker information beyond boolean
+  acceptance.
+- **Accounting:** operations, stored integers, inference checks, and checker
+  calls are distinct labeled units.
+
+## Controls and ablations
+
+- A stronger substrate that receives `c` and `F` directly passes but does not
+  establish discovery.
+- A weaker grammar without `pow(-1,k)` must fail to express the odd/even
+  factor for both `k=3` and `k=4`.
+- Wrong centers, wrong factors, corrupted values, and asymmetric universes
+  must be declined.
+
+M19 fails L3 if no functional-equation schema is retained, any compatible task
+is not exact or not accelerated, any control is accepted, aggregate
+operations or description cost do not fall, or accounting mixes units. Any
+post-output change creates M19b and preserves this run.

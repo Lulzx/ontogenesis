@@ -88,3 +88,14 @@ removing the debt entry.
   not supplied.
 - D7 is conditioned, not eliminated: the toy remains bounded integer
   semigroup arithmetic with trusted exact semantics.
+
+## M19 entry (pre-registered)
+
+- D2 is reused: the frozen reflection center and exact checker route
+  validation, while both conditions share the same stored `Xi` values.
+- D3 is extended: a simple functional equation is an explicit objective.
+- New debt D8: affine involutions, `pow(-1,k)`, and exact rational power
+  evaluation are supplied; functional-equation labels, centers, and
+  reflection constructors are not.
+- D8 is conditioned, not eliminated: the result is a bounded exact toy
+  functional equation.

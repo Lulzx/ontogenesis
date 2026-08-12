@@ -308,4 +308,7 @@ toy domain, not a general analytic Euler product. M18 extends the substrate to
 an exponent-parameterized toy zeta, retains `q^2+q+1`, verifies exact integer
 special values with operations falling 584→422 and description 249→21, and
 declines corrupted/missing/extra/`s=0` controls; it reaches L3 as a bounded
-toy, not an analytic zeta function. M19–M30 are not claimed.
+toy, not an analytic zeta function. M19 discovers the non-identity reflection
+`T(s)=1-s` and factor `(-1)^k` for the completed toy object, verifies
+`Xi(1-s)=(-1)^k Xi(s)` exactly, and reaches L3 with operations falling
+212→148 and description 72→14. M20–M30 are not claimed.

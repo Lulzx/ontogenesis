@@ -104,7 +104,19 @@ missing, extra, and `s=0` controls are declined. M18 reaches
 the power primitive, coefficient grammar, and exact checker remain supplied.
 M19 remains unreached.
 
-Directions G and Mathematical Ontogenesis M1–M18 are implemented. M10 added
+## M19 toy functional equation result
+
+A separately pre-registered experiment hides the reflection center of the M18
+completed object and supplies exact `Xi` values in two regions. The learner
+retains the non-identity involution `T(s)=1-s` and the factor `(-1)^k`, with
+the checker verifying `Xi(1-s)=(-1)^k Xi(s)` exactly on all frozen integer
+points. Three unseen prime sets transfer exactly with operations falling
+212→148; asymmetric-universe and corrupted-`Xi` controls are declined and
+description falls 72→14 integers. M19 reaches
+`L3_transferred_ontology_with_measured_utility`; the affine grammar, power
+primitive, and exact checker remain supplied. M20 remains unreached.
+
+Directions G and Mathematical Ontogenesis M1–M19 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -115,7 +127,9 @@ closed-shift routing. M16 adds unlabelled structural predicate invention with
 checked orthogonal latent directions and rational spectral decomposition. M17
 adds irreducible inference and local-factor invention with exact finite Euler
 product transfer. M18 adds the exponent-parameterized toy zeta object with
-exact integer special values and formal pole/reflection certificates.
+exact integer special values and formal pole/reflection certificates. M19 adds
+the toy functional equation over the completed object with retained
+reflection and factor programs.
 
 ## M12 result
 
@@ -163,5 +177,7 @@ cargo test -p supsearch --lib euler_world
 cargo run --release --example euler_world
 cargo test -p supsearch --lib zeta_world
 cargo run --release --example zeta_world
+cargo test -p supsearch --lib functional_world
+cargo run --release --example functional_world
 cargo test --workspace
 ```
