@@ -226,7 +226,7 @@ Docs: `docs/MATH_WORLD.md`.
 M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 `docs/MATH_WORLD.md`.
 
-## Addendum (2026-08-12): Directions M3–M11 and M12 boundary
+## Addendum (2026-08-12): Directions M3–M12 and M13 boundary
 
 | Claim | Status | Where |
 |---|---|---|
@@ -245,4 +245,8 @@ M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 | Independent checker proves nonzero member remainder, size, and outside prime witness for arbitrary finite prime lists | confirmed within finite-list schema | `check_escape_certificate` |
 | Singleton, non-prime, and corrupted-certificate controls are rejected | confirmed, asserted | `euclid_world::tests` |
 | M11 transfers to three unseen prime lists and three composite-divisor lists; reuse cost 12 vs 31 | confirmed, asserted | `m11_experiment`, machine record |
-| M12 requires rational/lowest-terms contradiction architecture absent from M11 fragment | boundary demonstrated | `CURRENT_STATE.md`, `NEXT_BOUNDARY.md` |
+| M12 factored search discovers prime-exponent count modulo 2 at candidate 14 | confirmed, asserted | `src/irrational_world.rs`, `invents_valuation_parity_contradiction_for_sqrt_two` |
+| Independent checker proves the valuation even/odd contradiction for arbitrary ratio witnesses | confirmed within valuation fragment | `check_irrationality_certificate` |
+| Six nonsquare transfers pass; perfect-square and corrupt-obstruction/proof controls reject | confirmed, asserted | `irrational_world::tests`, `m12_experiment` |
+| M12 lowers reasoning 21→7 and compresses seven proofs 49→14 | confirmed, asserted | M12 machine record |
+| M13 requires unordered-root/multivariable polynomial architecture | boundary demonstrated | `CURRENT_STATE.md`, `NEXT_BOUNDARY.md` |

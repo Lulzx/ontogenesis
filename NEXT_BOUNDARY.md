@@ -1,25 +1,19 @@
-# Next Boundary — Rational Witnesses and Contradiction for M12
+# Next Boundary — Symmetric Root Representations for M13
 
-M11 is complete within a checked finite-list schema. The next valid milestone
-is M12, proving that `sqrt(2)` is irrational while inventing the useful parity
-and lowest-terms representation.
+M12 is complete within a checked prime-valuation contradiction fragment. The
+next valid milestone is M13, inventing polynomial coefficient/root relations.
 
-A scientifically valid M12 requires domain-general additions:
+A scientifically valid M13 requires:
 
-1. explicit integer-pair witnesses for rationals and nonzero-denominator
-   conditions;
-2. normalization to lowest terms with a checked coprimality certificate;
-3. proof terms for assumption, existential witness use, negation, falsehood,
-   and contradiction elimination;
-4. checked divisibility lemmas connecting `p²` divisible by a prime to `p`
-   divisible by that prime;
-5. answer-blind search over intermediate predicates such as divisibility,
-   parity, valuation, and common-factor structure;
-6. controls preventing the classical parity proof from entering proposal order
-   or checker axioms;
-7. transfer to related `sqrt(d)` irrationality problems with honest failure on
-   perfect squares.
+1. typed polynomial expressions over coefficients and multiple roots;
+2. unordered root collections so proposal generation cannot rely on root order;
+3. generic symmetric-expression enumeration without named Vieta primitives;
+4. exact multivariable polynomial normalization or independently checked
+   factor-expansion certificates;
+5. diverse training and held-out quadratics, including non-monic, repeated,
+   negative, and complex-root cases;
+6. controls rejecting laws that fit only consecutive integer-root examples;
+7. retained concepts that measurably reduce future coefficient/root reasoning.
 
-The trusted checker must validate each derivation independently. Decimal
-approximations, bounded denominator searches, or a prewritten classical proof
-do not satisfy M12.
+Supplying `r1+r2=-b/a` or `r1*r2=c/a` as candidates would leak the milestone.
+Finite regression without symbolic checking would not establish general laws.

@@ -8,8 +8,8 @@ The checker and ontology must be trusted independently of the search.
 
 ## Status: not reached
 
-The implemented ladder currently reaches M11 and documents the M12 rational-
-witness/contradiction boundary. No claim about proving RH, reducing RH, discovering a novel
+The implemented ladder currently reaches M12 and documents the M13 symmetric-
+root/polynomial-relation boundary. No claim about proving RH, reducing RH, discovering a novel
 equivalence, or constructing an RH-making object is made. Finite verification
 of zeros cannot satisfy M30.
 

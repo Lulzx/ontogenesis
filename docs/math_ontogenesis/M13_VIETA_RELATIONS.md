@@ -6,11 +6,12 @@ From quadratic polynomials paired with roots, the system must compress many
 examples into reusable coefficient/root laws equivalent to
 `r1+r2=-b/a` and `r1*r2=c/a`, without receiving Vieta's formulas.
 
-## Status: not attempted
+## Status: next boundary, not reached
 
-The arithmetic synthesizer could fit finite coefficient data, but M13 follows
-M10–M12 in the ordered ladder and success demands algebraic laws, not sampled
-regression. Skipping the proof boundary would break the standing directive.
+The arithmetic synthesizer can fit finite coefficient data, and M12 checks
+prime-valuation contradictions. Neither represents unordered root sets nor
+normalizes symbolic identities over roots and coefficients. M13 success
+demands reusable algebraic laws, not sampled regression.
 
 ## Future protocol
 

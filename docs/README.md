@@ -335,8 +335,9 @@ adds an independently checked modular proposition world and discovers a cheaper
 equivalent theorem representation. Each stage has deterministic costs,
 held-out transfer, and controls. M11 then adds auxiliary-object and existential-
 proof search: it invents `product(primes)+1` and checks the arbitrary
-finite-list escape proof. The next boundary is M12's rational lowest-terms
-contradiction. See
+finite-list escape proof. M12 invents prime-exponent count modulo 2 and checks
+the general square-root contradiction. The next boundary is M13's symmetric
+polynomial-root representation. See
 [`MATH_WORLD.md`](MATH_WORLD.md), [`../CURRENT_STATE.md`](../CURRENT_STATE.md),
 and [`../NEXT_BOUNDARY.md`](../NEXT_BOUNDARY.md).
 

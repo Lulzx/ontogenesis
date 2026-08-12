@@ -283,6 +283,10 @@ greater than one, and uses a generic prime-divisor lemma to derive a prime
 outside every finite prime list. Three prime-list and three divisor-list
 transfers pass; singleton and corrupted-certificate controls fail honestly.
 
-The next boundary is M12: rational lowest-terms witnesses, coprimality,
-divisibility inference, and contradiction are not expressible in the existing
-proof fragments. M12–M30 are not claimed.
+M12 adds `src/irrational_world.rs`. Factored representation search discovers
+prime-exponent count modulo 2; an independent checker validates the valuation
+contradiction for `sqrt(2)`. It transfers to six nonsquare radicands, rejects
+perfect squares, lowers reasoning 21→7, and compresses seven proofs 49→14.
+
+The next boundary is M13: unordered root sets and checked multivariable
+polynomial relations are absent. M13–M30 are not claimed.

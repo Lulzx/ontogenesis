@@ -1,10 +1,10 @@
-# Handoff — Mathematical Ontogenesis track (M1–M11 complete; M12 boundary)
+# Handoff — Mathematical Ontogenesis track (M1–M12 complete; M13 boundary)
 
 **Date:** 2026-08-12
 
-> **Superseding update:** M3–M11 are now complete. M11 added auxiliary-object
-> search and a checked finite-list prime witness; the ladder now stops at M12's
-> rational lowest-terms contradiction boundary. Read `/CURRENT_STATE.md` and
+> **Superseding update:** M3–M12 are now complete. M12 added a checked prime-
+> valuation contradiction; the ladder now stops at M13's symmetric root-
+> relation boundary. Read `/CURRENT_STATE.md` and
 > `/NEXT_BOUNDARY.md` before continuing. The earlier M3 suggestion below is
 > retained only as historical context.
 

@@ -566,7 +566,7 @@ cargo run --release --example world_model
 cargo test -p supsearch world_model --lib
 ```
 
-Mathematical ontogenesis (Directions M1–M11):
+Mathematical ontogenesis (Directions M1–M12):
 
 ```sh
 cargo run --release --example math_world
@@ -575,11 +575,13 @@ cargo run --release --example proposition_world
 cargo test -p supsearch proposition_world --lib
 cargo run --release --example euclid_world
 cargo test -p supsearch euclid_world --lib
+cargo run --release --example irrational_world
+cargo test -p supsearch irrational_world --lib
 ```
 
 M3–M9 advance from unary concept synthesis through theorem generation,
 successor-closure proof abstraction, cancellation, divisor invariants, formal
 series, and latent linear directions. M10 adds checked modular proposition
 search and invents a cheaper equivalent theorem. M11 invents Euclid's
-auxiliary object and checks the arbitrary finite-prime-list proof. M12 is the
-next boundary.
+auxiliary object and checks the arbitrary finite-prime-list proof. M12 invents
+and checks a prime-valuation contradiction for square roots. M13 is next.

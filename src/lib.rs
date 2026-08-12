@@ -51,6 +51,8 @@
 //!   search with independently checked modular proof certificates.
 //! - [`euclid_world`]: Direction M11 auxiliary-object invention and a checked
 //!   finite-prime-list escape certificate.
+//! - [`irrational_world`]: Direction M12 intermediate-representation invention
+//!   and a checked prime-valuation contradiction for square roots.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -66,6 +68,7 @@ pub mod euclid_world;
 pub mod fixpoint;
 pub mod feature_invention;
 pub mod initial_algebra;
+pub mod irrational_world;
 pub mod learned_allocation;
 pub mod learned_context;
 pub mod nbe;

@@ -2,40 +2,33 @@
 
 **Date:** 2026-08-12
 
-Directions G and Mathematical Ontogenesis M1–M11 are implemented. M10 added a
-checked modular proposition fragment. M11 adds generic finite collections,
-auxiliary-object enumeration, and a checked existential prime-witness schema.
+Directions G and Mathematical Ontogenesis M1–M12 are implemented. M10 added
+checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
+integer-ratio assumptions plus checked contradiction.
 
-## M11 result
+## M12 result
 
-From finite prime-list behavior, a fixed grammar over `product`, `sum`,
-`length`, constants, and arithmetic discovers `(product(xs)+1)` at proposal 19.
-The independent checker does not recognize that syntax. It symbolically proves
-that the construction has constant nonzero remainder modulo every arbitrary
-listed member and is greater than one; the trusted generic prime-divisor lemma
-then supplies a prime witness outside the list. Hence every finite prime list
-is incomplete and there are infinitely many primes.
+From `p²=dq²`, a fixed factored search over integer measures and finite
+quotients discovers prime-exponent count modulo 2 at candidate 14. For `d=2`,
+the checker proves the prime-2 valuation must be both even and odd, discharges
+the rational-witness assumption, and proves `sqrt(2)` irrational.
 
-Three unseen prime lists and three composite-divisor lists pass. A singleton
-control rejects `product-1`, non-prime evidence cannot claim the theorem, and a
-corrupted derivation is rejected. Reuse costs 12 reasoning units versus 31 with
-rediscovery; training compression gain is six tokens. The exact status is
-`formally_checked_finite_list_schema`.
+The schema transfers to six nonsquare radicands and refuses six perfect-square
+controls. Direct reasoning falls 21→7; seven proof descriptions compress from
+49 tokens to one schema plus witnesses (14 tokens), gain 35. Status is
+`formally_checked_valuation_contradiction`.
 
-## New boundary at M12
+## New boundary at M13
 
-The square-root-of-two problem needs rational witnesses in lowest terms,
-coprimality, parity/divisibility inference through a squared equality, and
-proof by contradiction. These are not expressible in the M10 modular checker
-or M11 finite-list witness schema. Encoding the classical parity chain directly
-would violate M12's discovery restriction.
+Polynomial root relations require unordered root-set semantics, multivariable
+symbolic polynomial normalization, coefficient/root expression enumeration,
+and controls for non-monic, repeated, negative, and complex roots. These are
+not expressible in the current arithmetic and valuation fragments.
 
 ## Reproduce
 
 ```sh
-cargo test -p supsearch --lib math_world
-cargo test -p supsearch --lib proposition_world
-cargo test -p supsearch --lib euclid_world
-cargo run --release --example euclid_world
+cargo test -p supsearch --lib irrational_world
+cargo run --release --example irrational_world
 cargo test --workspace
 ```
