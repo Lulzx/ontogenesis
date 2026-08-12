@@ -38,6 +38,8 @@
 //!   anonymous product-like universal factorization in pure lambda calculus.
 //! - [`recursive_signature`]: U4 bounded inference of an anonymous polynomial
 //!   recursive signature and its carrier, constructor, and mediator generator.
+//! - [`open_signature`]: U5 provisional open-world signature ranking and
+//!   structural ontology revision from a temporal evidence stream.
 
 pub mod acquire;
 pub mod bank;
@@ -53,6 +55,7 @@ pub mod learned_allocation;
 pub mod learned_context;
 pub mod nbe;
 pub mod ontology_guidance;
+pub mod open_signature;
 pub mod parse;
 pub mod recurrence;
 pub mod recursion_search;
