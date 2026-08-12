@@ -6,7 +6,8 @@ stage was allowed to know, what the system actually searched or inferred,
 what evidence supports the result, and what is explicitly not claimed.
 
 Status is intentionally asymmetric. M1–M12 are reached experiments, M13b and
-M14c has an integrity-calibrated L3 result, and M15–M30 remain unreached. A
+M14c has an integrity-calibrated L3 result, M15 has an exact L2 result with a
+failed L3 gate, and M16–M30 remain unreached. A
 complete directory is not a claim of a completed ladder.
 
 | Milestone | Topic | Status |
@@ -25,7 +26,7 @@ complete directory is not a claim of a completed ladder.
 | [M12](M12_SQRT2_CONTRADICTION.md) | Irrationality of sqrt(2) | reached — checked valuation contradiction |
 | [M13](M13_VIETA_RELATIONS.md) | Polynomial root relations | M13b reached — exact L2 |
 | [M14](M14_SYMMETRY.md) | Symmetry | M14c reached — exact L3 |
-| [M15](M15_FOURIER.md) | Fourier representation | not attempted |
+| [M15](M15_FOURIER.md) | Fourier representation | attempted — exact L2; L3 gate failed |
 | [M16](M16_TOY_SPECTRAL_THEOREM.md) | Toy spectral theorem | not attempted |
 | [M17](M17_EULER_PRODUCT.md) | Finite Euler product | not attempted |
 | [M18](M18_TOY_ZETA.md) | Toy zeta | not attempted |

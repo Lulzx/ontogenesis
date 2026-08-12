@@ -57,6 +57,8 @@
 //!   invention with exact multivariable factor-ideal checking.
 //! - [`symmetry_world`]: Direction M14 generic transformation-action invention,
 //!   exact response checking, and measured cross-domain reuse.
+//! - [`fourier_world`]: Direction M15 recurrence-generated oscillatory
+//!   coordinate invention with exact shift dynamics and M9 meta-transfer.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -75,6 +77,7 @@ pub mod initial_algebra;
 pub mod irrational_world;
 pub mod polynomial_world;
 pub mod symmetry_world;
+pub mod fourier_world;
 pub mod learned_allocation;
 pub mod learned_context;
 pub mod nbe;

@@ -252,3 +252,161 @@ control is routed to the schema, any acquired response passes probes but fails
 exact checking, any task has higher checker count, or aggregate checker count
 does not fall. The already-observed M14 tasks may be reported only as historical
 context and cannot be substituted into this suite.
+
+---
+
+# Next Boundary — M15 Oscillatory Coordinates
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M15 implementation; executed without amendment
+
+## Recorded outcome
+
+M15 constructed exact oscillatory coordinate families from 32 recurrence atoms
+without named frequencies or a supplied Fourier dictionary. All five frozen
+transfers reconstruct exactly, repeated closed shift dynamics predict every
+cyclic phase, cross-family composition is exact, and aggregate descriptions
+fall from 72 stored samples to 36 integers. Impulse, ramp, and corrupted exact
+controls are rejected; noisy data has nonzero squared error 2.
+
+The L3/meta-transfer gate failed. M9-style closed-dynamics ordering improved two
+tasks but harmed three, including cross-family composition. The identical
+candidate set required 1,668,649 unguided checks versus 16,484,585 guided
+checks. Therefore `l3_boundary_passed=false` and M15 is reported as
+`L2_invented_feature_in_supplied_meta_ontology`. No threshold, task, ordering,
+or candidate space was changed after observing this result. One implementation
+defect in gcd normalization of zero-leading sequences was corrected; it restored
+the pre-audited 32-atom space and did not change the frozen protocol.
+
+## Intended claim
+
+M15 asks whether generic sequence generators can produce coordinate families
+in which periodic signals have sparse descriptions and cyclic shift has simple
+dynamics. “Fourier,” “frequency,” “sine,” “cosine,” complex exponential,
+orthogonality, and projection are absent from proposal generation.
+
+Maximum claim is `L3_transferred_ontology_with_measured_utility`. This boundary
+cannot reach L4 because second-order recurrence generation and the preference
+for simple shift dynamics are supplied meta-ontology.
+
+## Frozen substrate and enumeration
+
+- Signals are exact integer sequences of length 12.
+- A raw coordinate generator is a second-order recurrence
+  `u[n+2] = p*u[n+1] + q*u[n]`, with `p,q` enumerated in `[-2,2]` and initial
+  values `(u[0],u[1])` in `[-2,2]^2 \ {(0,0)}`.
+- Generated sequences must satisfy the recurrence around the cyclic boundary,
+  be nonzero, and be normalized by their integer gcd and first nonzero sign.
+- Extensionally equal sequences are deduplicated. No period or frequency label
+  is available to search.
+- Coordinate families are pairs of generated sequences with the same recurrence
+  coefficients and independent initial states. Search enumerates recurrence
+  coefficients, seed pairs, and integer reconstruction weights in the frozen
+  order `0,1,-1,2,-2,3,-3`.
+- Generic raw fitting enumerates all deduplicated coordinate atoms and weights;
+  it does not receive recurrence-family grouping.
+- Ordinary candidates contain up to two distinct atoms. The declared
+  cross-family composition task contains exactly two such supports (up to four
+  distinct atoms); both conditions enumerate the same support and weight space.
+- The M9-retained idea may reorder complete enumeration by first considering
+  coordinate pairs whose one-step cyclic shift is represented by a small exact
+  2×2 integer matrix. It may not add or remove candidates. Applicability is
+  endogenous: if no exact closed shift matrix exists, the ordering is unchanged.
+
+## Frozen discovery signals
+
+The following length-12 signals are generated before search and used only as
+integer arrays:
+
+1. `[2,1,-1,-2,-1,1]` repeated twice;
+2. `[0,1,1,0,-1,-1]` repeated twice;
+3. their coefficient mixture `2*s1 - s2`;
+4. `[1,0,-1,0]` repeated three times;
+5. `[0,1,0,-1]` repeated three times;
+6. their coefficient mixture `s4 + 2*s5`.
+
+The recurrence coefficients, coordinate families, periods, and generating
+interpretation are not passed to proposal search.
+
+## Exact validation
+
+- Reconstruction must equal every signal sample exactly.
+- A family certificate must independently recompute a 2×2 integer matrix that
+  maps both coordinate sequences to their one-step cyclic shifts.
+- Prediction holds only if repeated matrix action reconstructs every held-out
+  cyclic shift exactly.
+- Composition is checked by adding two signals in coordinate weights and
+  reconstructing their pointwise sum exactly.
+- Corrupted recurrences, dependent coordinate pairs, incomplete
+  reconstructions, and finite-prefix-only fits must be rejected.
+
+## Frozen transfer and controls
+
+Transfer signals, unseen during family retention:
+
+1. phase shift by one of discovery signal 3;
+2. amplitude scaling `-2` of discovery signal 6;
+3. cross-family composition `signal3 + signal6` using two retained families;
+4. new coefficient mixture `-signal1 + 3*signal2`;
+5. new coefficient mixture `3*signal4 - signal5`.
+
+Controls:
+
+- constant signal `[3;12]` must not justify an oscillatory family;
+- impulse `[1,0,...,0]` must not have an exact sparse two-coordinate fit;
+- ramp `[0,1,...,11]` must not pass cyclic recurrence closure;
+- one-sample corruption of a discovery mixture must fail exact reconstruction;
+- additive-noise versions are evaluated with explicit squared error and cannot
+  be reported as exact laws.
+
+## Compared conditions and measured units
+
+For every frozen transfer task compare actual candidate reconstruction checks:
+
+- **unguided:** complete raw atom/weight enumeration in frozen order;
+- **M9-guided:** the identical candidate set, with exact closed-shift coordinate
+  families tried first; if the retained idea is inapplicable, fall back to the
+  unchanged unguided stream.
+
+Report proposal checks per task, exact reconstruction error, prediction checks,
+composition checks, false-positive controls, negative transfer, and aggregate
+counts. Success requires exact recovery of all five transfer tasks, strictly
+fewer M9-guided proposal checks on at least four, no task with more checks, and
+zero exact false positives on impulse, ramp, and corrupted controls.
+
+## Baselines
+
+- Time-domain storage cost is 12 integers per signal.
+- Generic fitting cost is the actual unguided proposal count and the number of
+  stored sample integers.
+- Coordinate description cost counts recurrence parameters, two seeds, and
+  signal weights; it must be lower in aggregate than time-domain storage.
+- Noise error is reported as exact integer squared error; no floating tolerance
+  or post-hoc threshold is allowed.
+
+## Supplied-ontology ledger
+
+- **Supplied:** length-12 cyclic indexing, integer arithmetic, bounded
+  second-order recurrence execution, sparse-description and simple-dynamics
+  objectives, exact equality checker.
+- **Acquired and optionally transferred:** M9 relation that useful coordinates
+  may have simple closed dynamics.
+- **Not supplied:** oscillatory atoms, named frequencies, trigonometry, Fourier
+  coefficients, basis orthogonality, projection formulas, phase/amplitude
+  operators, or the mapping from signals to recurrence parameters.
+- **Checker information flow:** boolean acceptance only; normal forms, matrix
+  entries, residuals, and counterexamples do not return to proposal ranking.
+- **Claim ceiling:** L3; recurrence generation is D4 debt.
+
+## Falsification
+
+M15 fails L3 if candidate sets differ between guided and unguided conditions,
+if a frozen transfer is not exact, if any control is called exact, if aggregate
+coordinate descriptions do not beat storage, if guided search causes negative
+transfer, or if measured candidate checks do not meet the frozen improvement
+criterion. Any post-output change creates M15b and preserves this run.

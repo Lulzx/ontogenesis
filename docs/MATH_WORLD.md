@@ -291,4 +291,6 @@ perfect squares, lowers reasoning 21→7, and compresses seven proofs 49→14.
 M13b constructs permutation-invariant quadratic-root features and checks their
 coefficient laws at L2. M14's unconditional action policy failed its L3 gate;
 the separately frozen M14c conditional action–response schema reaches L3 with
-measured transfer and no negative transfer. M15–M30 are not claimed.
+measured transfer and no negative transfer. M15 constructs exact recurrence-
+generated oscillatory coordinates at L2 but fails its L3 M9-transfer gate.
+M16–M30 are not claimed.

@@ -31,6 +31,21 @@ and negative-transfer tasks are both zero. M14c reaches
 `L3_transferred_ontology_with_measured_utility`; pointwise lifting and the
 intervention-routing meta-ontology remain explicitly supplied.
 
+## M15 exact result; L3 gate failed
+
+From a generic bounded second-order recurrence language, M15 constructs 32
+cyclic coordinate atoms and retains exact closed-shift coordinate families
+without named frequencies, trigonometry, orthogonality, or a Fourier
+dictionary. Five frozen phase, amplitude, mixture, and cross-family composition
+tasks reconstruct and predict exactly. Description falls 72→36 integers;
+impulse, ramp, corruption, constant, and noise controls behave correctly.
+
+However, transferring M9's simple-dynamics preference as unconditional search
+priority causes severe negative transfer: it helps two tasks, harms three, and
+raises actual proposal checks from 1,668,649 to 16,484,585. M15 therefore has an
+exact `L2_invented_feature_in_supplied_meta_ontology` result but fails its
+pre-registered L3/meta-transfer boundary. The ladder does not advance to M16.
+
 Directions G and Mathematical Ontogenesis M1–M13 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
@@ -75,5 +90,7 @@ cargo test -p supsearch --lib polynomial_world
 cargo run --release --example polynomial_world
 cargo test -p supsearch --lib symmetry_world
 cargo run --release --example symmetry_world
+cargo test -p supsearch --lib fourier_world
+cargo run --release --example fourier_world
 cargo test --workspace
 ```
