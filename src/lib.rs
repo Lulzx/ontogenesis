@@ -84,6 +84,8 @@
 //! - [`equivalence_world`]: Direction M24 toy-RH equivalence -- novel
 //!   equivalent predicate invention with exhaustive bidirectional proof
 //!   certificates.
+//! - [`making_object_world`]: Direction M25 toy RH-making object -- a
+//!   signal-derived Hankel object whose rank-one property forces toy-RH.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -112,6 +114,7 @@ pub mod fourier_world;
 pub mod learned_allocation;
 pub mod learned_context;
 pub mod locus_world;
+pub mod making_object_world;
 pub mod nbe;
 pub mod ontology_guidance;
 pub mod ontology_repair;

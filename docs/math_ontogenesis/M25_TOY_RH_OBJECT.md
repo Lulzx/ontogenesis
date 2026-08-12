@@ -7,11 +7,21 @@ forces Toy-RH. Operators, spaces, inner products, and spectra may be
 constructible, but the desired object and self-adjointness-like property may
 not be hard-coded.
 
-## Status: not attempted
+## Status: reached — exact L3 toy RH-making object
 
-ToyRH and its M24 equivalence are absent. Current M9 latent directions do not
-provide operator domains, inner products, adjoints, completeness, or a proof
-linking spectral location to zeros.
+ToyRH and its M24 equivalence now exist. M25 freezes a 270-member family of
+candidate zero sets, constructs the signal-derived Hankel object
+`X=[[a0,a1],[a1,a2]]`, and retains the exact rank-one property `P`. The
+independent checker verifies `P(X) -> ToyRH` over the entire family with
+non-vacuity, and provenance rejects objects built from zero coordinates.
+
+Three frozen downstream diagonal sets are exact and accelerated (lattice
+evaluations 1,183→730); off-diagonal, circular, corrupted-signal, and
+asymmetric-universe controls are declined; description falls 507→13 integers.
+M25 reaches `L3_transferred_ontology_with_measured_utility` as a bounded toy.
+The family, signal grammar, Hankel construction, rank-one checker, and
+provenance rule remain supplied; no general operator/spectral theorem is
+claimed.
 
 ## Evidence required
 

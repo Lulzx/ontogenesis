@@ -1869,3 +1869,122 @@ equivalence. M24 fails L3 if no novel equivalent predicate is retained, either
 direction fails on any compatible task, Q is not cheaper, any control is
 accepted, or accounting mixes units. Any post-output change creates M24b and
 preserves this run.
+
+---
+
+# Next Boundary — M25 Toy RH-Making Object
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M25 implementation; executed without amendment
+
+## Recorded outcome
+
+M25 passed the frozen L3 gate. The independent checker enumerated all 270
+frozen candidate zero sets and verified `P(X) -> ToyRH` for every family
+member, with ToyRH members satisfying `P` (non-vacuity). The object is the
+signal-derived Hankel matrix `X=[[a0,a1],[a1,a2]]` and the property is exact
+rank one. Provenance rejected the circular zero-coordinate construction. All
+three frozen downstream diagonal sets are exact and accelerated (aggregate
+lattice evaluations 1,183→730, measured gain 453); off-diagonal, circular,
+corrupted-signal, and asymmetric-universe controls are declined. Description
+cost falls 507→13 stored integers. False-positive acceptances and
+negative-transfer tasks are both zero. Claim level is
+`L3_transferred_ontology_with_measured_utility`. No family, grammar, property,
+threshold, or candidate space was changed after observing this outcome.
+
+## Motivation and intended claim
+
+M24 retained a checked equivalent predicate for toy-RH. M25 asks whether the
+system can construct an object `X` from arithmetic observables and a property
+`P(X)` whose theorem `P(X) -> ToyRH` is checker-verified, while `X` also
+explains the oscillation phenomena and is not built from the known zero
+coordinates. “Operator,” “spectrum,” and “self-adjoint” are not supplied.
+
+Maximum claim: `L3_transferred_ontology_with_measured_utility` if the forcing
+implication is verified over the whole frozen family, `X` explains the
+independent signal observables, provenance rejects zero-coordinate
+construction, and downstream zero prediction is cheaper.
+
+## Frozen substrate
+
+- Candidate zero sets `Z` have size 3, points `(u,v)` with
+  `u in {-3,-1,0,1,3}` and `v in {1-u, 0, 2}`, and fixed weights
+  `{1,2,1}`; the frozen family is all `C(5,3)*3^3 = 270` such sets.
+- The arithmetic observable is
+  `a[t]=sum_{(u,v,w) in Z} w * 2^{(u+v+6)t}` for `t=0,1,2`, exact integers;
+  the fixed shift `+6` is a supplied normalization that keeps every exponent
+  nonnegative in the frozen family.
+- The candidate object is the Hankel matrix `X=[[a0,a1],[a1,a2]]`,
+  constructed only from these signal values.
+- ToyRH is the frozen conjecture: every zero of `Z` satisfies `u+v=1`.
+
+## Frozen property and forcing theorem
+
+The property is `P(X)`: `X` is symmetric and has exact rank one (all `2x2`
+minors vanish). The forcing theorem is `P(X) -> ToyRH`.
+
+The independent checker:
+
+1. enumerates the whole frozen family of candidate zero sets;
+2. recomputes every signal and matrix directly;
+3. verifies `P(X) -> ToyRH` for every family member and that ToyRH members do
+   satisfy `P` (non-vacuity);
+4. rejects objects whose construction uses zero coordinates instead of signal
+   values (provenance control);
+5. returns a boolean forcing certificate.
+
+The checker returns boolean certificates only; no matrix entries or residuals
+flow into ranking.
+
+## Frozen downstream suite
+
+Downstream candidate sets are frozen outside the training family:
+
+1. diagonal set `{(−3,4),(−1,2),(2,−1)}`;
+2. diagonal set `{(0,1),(1,0),(3,−2)}`;
+3. diagonal set `{(−1,2),(0,1),(1,0)}`.
+
+Controls, all incompatible:
+
+1. off-diagonal set `{(−3,0),(−1,2),(2,−1)}` must fail P or ToyRH;
+2. circular object built from zero coordinates must be rejected by
+   provenance;
+3. corrupted signal (one value changed) must fail;
+4. asymmetric universe.
+
+## Compared conditions and accounting
+
+- **Baseline:** evaluate the toy object over all `169` lattice points.
+- **Acquired:** compute the three signal values, form `X`, verify `P`, and
+  predict the diagonal zero positions.
+- Description cost: raw stores the lattice values; acquired stores `X` and the
+  forcing certificate.
+
+Report per task: family checks, baseline evaluations, acquired evaluations,
+forcing certificate, provenance pass, false-positive acceptance, and negative
+transfer. Success requires the forcing certificate over the whole frozen
+family, non-vacuity, exact downstream predictions, provenance and control
+declines, cheaper acquired work, and lower aggregate description cost.
+
+## Supplied-ontology ledger
+
+- **Supplied:** the frozen family, signal grammar, Hankel construction, exact
+  rank-one checker, provenance rule, and ToyRH conjecture.
+- **Acquired:** the object/property pair whose theorem forces toy-RH.
+- **Not supplied:** operator/spectrum/self-adjoint labels, zero-coordinate
+  construction, or checker information beyond boolean certificates.
+- **Accounting:** family checks, lattice evaluations, stored integers, and
+  checker calls are distinct labeled units.
+
+## Controls and falsification
+
+The implication must be verified over the whole frozen family, not on sampled
+members. Circular construction is rejected by provenance. M25 fails L3 if the
+forcing certificate is missing, ToyRH members do not satisfy P, any control is
+accepted, acquired work is not cheaper, or accounting mixes units. Any
+post-output change creates M25b and preserves this run.

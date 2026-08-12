@@ -146,3 +146,12 @@ removing the debt entry.
   templates are not.
 - D13 is conditioned, not eliminated: the certificates are finite case
   analysis over a bounded lattice.
+
+## M25 entry (pre-registered)
+
+- D13 is reused: the toy-RH conjecture is the target of the forcing theorem.
+- New debt D14: the frozen family, signal grammar, Hankel construction,
+  rank-one checker, and provenance rule are supplied; operator/spectrum/
+  self-adjoint labels are not.
+- D14 is conditioned, not eliminated: the forcing theorem is a finite
+  enumeration certificate over a bounded family.

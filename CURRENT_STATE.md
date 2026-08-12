@@ -179,7 +179,20 @@ declined; description falls 507→13 integers. M24 reaches
 the proof is finite case analysis, not an unrestricted kernel. M25 remains
 unreached.
 
-Directions G and Mathematical Ontogenesis M1–M24 are implemented. M10 added
+## M25 toy RH-making object result
+
+A separately pre-registered experiment freezes a 270-member family of
+candidate zero sets and constructs the signal-derived Hankel object
+`X=[[a0,a1],[a1,a2]]`. The exact rank-one property `P` forces ToyRH over the
+whole family (checked exhaustively with non-vacuity), and provenance rejects
+zero-coordinate construction. Three downstream diagonal sets are exact and
+accelerated (lattice evaluations 1,183→730); off-diagonal, circular,
+corrupted-signal, and asymmetric-universe controls are declined; description
+falls 507→13 integers. M25 reaches
+`L3_transferred_ontology_with_measured_utility` as a bounded toy. M26 remains
+unreached.
+
+Directions G and Mathematical Ontogenesis M1–M25 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -200,6 +213,8 @@ M23 adds the frozen-scored toy conjecture that all hidden zeros satisfy
 `u+v=1`, validated on held-out zeros with an explicit falsifier.
 M24 adds a checked equivalent predicate `Q: Xi(1-v,1-u)=0` with exhaustive
 bidirectional certificates and measured membership savings.
+M25 adds the signal-derived Hankel object whose exact rank-one property
+forces toy-RH over a frozen family with provenance controls.
 
 ## M12 result
 
@@ -259,5 +274,7 @@ cargo test -p supsearch --lib conjecture_world
 cargo run --release --example conjecture_world
 cargo test -p supsearch --lib equivalence_world
 cargo run --release --example equivalence_world
+cargo test -p supsearch --lib making_object_world
+cargo run --release --example making_object_world
 cargo test --workspace
 ```
