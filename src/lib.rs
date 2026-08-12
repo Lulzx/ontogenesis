@@ -46,6 +46,7 @@ pub mod contextual_guidance;
 pub mod coproduct_property;
 pub mod fixpoint;
 pub mod feature_invention;
+pub mod initial_algebra;
 pub mod learned_allocation;
 pub mod learned_context;
 pub mod nbe;
