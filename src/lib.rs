@@ -42,6 +42,9 @@
 //!   structural ontology revision from a temporal evidence stream.
 //! - [`causal_ontology`]: Direction F causal inference from intervention
 //!   responses on a tiny deterministic 3-variable system.
+//! - [`world_model`]: Direction G world-model ontogenesis — factored state
+//!   compression and invented reversible-counter transfer in a persistent
+//!   deterministic world.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -74,3 +77,4 @@ pub mod transform;
 pub mod typed;
 pub mod universal;
 pub mod universal_property;
+pub mod world_model;

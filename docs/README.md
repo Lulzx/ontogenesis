@@ -294,6 +294,17 @@ chain (`final_candidates=1, true_recovered=true`). When survivors agree on
 every available intervention the agent stops rather than inventing a
 distinction. See [`CAUSAL_ONTOLOGY.md`](CAUSAL_ONTOLOGY.md).
 
+**Direction G — world-model ontogenesis.** From a persistent deterministic
+world of independent reversible counters, the agent invents a compressed
+representation that reduces future reasoning cost. It discovers the factored
+transition model, predicts all held-out full-state transitions (1.000) where
+the raw monolithic table predicts none (0.000), invents a "reversible counter"
+concept that transfers to a new switch at probe cost 3 vs. cold-start 8, and
+plans in 6 factored expansions vs. 58 raw BFS expansions. A coupled control
+world honestly reports partial factorization with held-out accuracy 0.000, so
+the discovery does not over-claim compression. See
+[`WORLD_MODEL.md`](WORLD_MODEL.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

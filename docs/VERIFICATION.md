@@ -183,3 +183,17 @@ Docs: `docs/ACTIVE_EXPERIMENTATION.md`.
 
 New module: `src/causal_ontology.rs`. Example: `examples/causal_ontology.rs`.
 Docs: `docs/CAUSAL_ONTOLOGY.md`.
+
+## Addendum (2026-08-12): Direction G world-model ontogenesis
+
+| Claim | Status | Where |
+|---|---|---|
+| Factored transition-model discovery (minimal parent set per output variable) | confirmed, asserted | `src/world_model.rs` (`discover_factors`), 6 tests |
+| Held-out generalization: factored predicts all held-out where raw table predicts none | confirmed, asserted | `evaluate_generalization`, `two_switch_world_is_fully_factorable` |
+| Coupled control: partial factorization honestly reported, no over-claim | confirmed, asserted | `coupled_world_is_only_partially_factorable` |
+| Invented reversible-counter concept predicts switch behavior exactly and transfers | confirmed, asserted | `invent_switch_concept`/`predict_with_concept`/`transfer_to_new_switch`, `switch_concept_transfers_to_a_new_switch` |
+| Component planning cheaper than raw BFS | confirmed, asserted | `plan_factored` vs `plan_raw`, `planning_is_cheaper_with_the_component_abstraction` |
+| Deterministic machine record (`deterministic=true`) | confirmed, asserted | `machine_record_is_deterministic` |
+
+New module: `src/world_model.rs`. Example: `examples/world_model.rs`.
+Docs: `docs/WORLD_MODEL.md`.

@@ -405,6 +405,22 @@ pool to 7, and two further interventions pin it to exactly the chain
 disagreement; when survivors agree on every available intervention the agent
 stops rather than fabricating a distinction. Protocol: `CAUSAL_ONTOLOGY.md`.
 
+### Direction G — world-model ontogenesis
+
+A persistent deterministic world of independent reversible counters
+("switches"), each toggled by exactly one action, is never described to the
+agent. From a bounded set of observed `(state, action) -> next_state`
+transitions it must invent a compressed representation that reduces future
+reasoning cost. It discovers the factored transition model
+(`parents=[[0],[1],[2]]`), predicts all 16 held-out full-state transitions
+(1.000) where the raw monolithic table predicts none (0.000), invents a
+"reversible counter" concept that predicts switch behavior exactly (32/32) and
+transfers to a new switch at probe cost 3 vs. cold-start 8 (saved 5), and plans
+to set all 6 switches in 6 factored expansions vs. 58 raw BFS expansions. A
+coupled control world honestly reports partial factorization
+(`parents=[[0],[0,1],[0,1]]`) with held-out factored accuracy 0.000, so the
+discovery does not over-claim compression. Protocol: `WORLD_MODEL.md`.
+
 
 ## B3 — recursive law to reasoning vocabulary
 
@@ -516,4 +532,11 @@ Causal ontology (Direction F):
 ```sh
 cargo run --release --example causal_ontology
 cargo test -p supsearch causal_ontology --lib
+```
+
+World-model ontogenesis (Direction G):
+
+```sh
+cargo run --release --example world_model
+cargo test -p supsearch world_model --lib
 ```
