@@ -228,6 +228,15 @@ takes 12 proposals versus uniform 15 and bounded pure universal 707; the 928-uni
 discovery cost nets +29,072 at 10,000 uses. See
 [`RECURSIVE_SIGNATURE.md`](RECURSIVE_SIGNATURE.md).
 
+**U5 — open-world recursive-signature revision.** Constructor observations no
+longer assert a complete inventory. The learner keeps every bounded compatible
+semantic class, labels its cost-minimal ontology provisional, and revises it when
+delayed evidence falsifies it. A nullary -> unary -> binary stream leaves 44 -> 15
+-> 2 live classes while the incumbent restructures twice and replays all history;
+logical identifiability remains false. The frozen unary incumbent independently
+passes U4's executable carrier/constructor/mediator and protected uniqueness tests.
+See [`OPEN_SIGNATURE.md`](OPEN_SIGNATURE.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

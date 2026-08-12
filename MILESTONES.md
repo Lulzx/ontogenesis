@@ -303,6 +303,23 @@ the 928-unit discovery charge nets +29,072 at 10,000 uses. Supplying F also take
 downstream proposals, isolating signature invention as an upfront cost. Exact protocol:
 `RECURSIVE_SIGNATURE.md`.
 
+### U5 — open-world recursive-signature revision
+
+U5 removes the complete-variant bit. Exact bounded enumeration retains every
+semantic signature class compatible with the observations and ranks them by a
+declared MDL-like description cost. A nullary -> unary -> binary stream leaves
+44 -> 15 -> 2 live classes while the provisional incumbent restructures from
+`[(0,0)]` to `[(0,0),(0,1)]` to `[(0,0),(0,1),(0,2)]`. It never claims logical
+identifiability, and replays all earlier evidence after both revisions.
+
+Hysteresis prevents compatible-score thrashing but cannot preserve a falsified
+incumbent. A deliberately wrong early preference recovers; aliases, calibration,
+leakage, post-freeze, truncation, temporal-order, supplied-completeness, irrelevant,
+misleading, and exact universal-fallback controls are asserted. The frozen unary
+incumbent passes unchanged U4 executable carrier/constructor/mediator discovery and
+protected uniqueness. Signature-allocation costs change from learned/uniform 1/1
+before useful revision to 1/5 and 1/2 afterward. Protocol: `OPEN_SIGNATURE.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are
