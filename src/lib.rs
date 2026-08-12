@@ -75,6 +75,8 @@
 //! - [`completion_world`]: Direction M20 toy completed object -- auxiliary
 //!   completion-factor invention for the maximally simple symmetry
 //!   Xi(1-s)=Xi(s).
+//! - [`locus_world`]: Direction M21 toy critical locus -- zero-set locus
+//!   invention on an integer lattice under reflection and conjugation.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -99,6 +101,7 @@ pub mod symmetry_world;
 pub mod fourier_world;
 pub mod learned_allocation;
 pub mod learned_context;
+pub mod locus_world;
 pub mod nbe;
 pub mod ontology_guidance;
 pub mod ontology_repair;

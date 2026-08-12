@@ -129,7 +129,19 @@ description falls 72→15 integers. M20 reaches
 factor atoms, power primitive, and exact checker remain supplied. M21 remains
 unreached.
 
-Directions G and Mathematical Ontogenesis M1–M20 are implemented. M10 added
+## M21 toy critical locus result
+
+A separately pre-registered experiment fixes an integer lattice and retains
+the diagonal locus `u+v=1` from zero positions of the completed lattice
+object, invariant under conjugation and reflection. Three unseen prime sets
+recover zero sets exactly with lattice evaluations falling 654→183;
+asymmetric-universe, missing-zero, and extra-zero controls are declined and
+description falls 96→13 integers. M21 reaches
+`L3_transferred_ontology_with_measured_utility`; the lattice, completed-object
+definition, exact checker, and fixed locus grammar remain supplied. M22
+remains unreached.
+
+Directions G and Mathematical Ontogenesis M1–M21 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -143,7 +155,8 @@ product transfer. M18 adds the exponent-parameterized toy zeta object with
 exact integer special values and formal pole/reflection certificates. M19 adds
 the toy functional equation over the completed object with retained
 reflection and factor programs. M20 adds the completed-object construction
-with the maximally simple symmetry `Ξ(1-s)=Ξ(s)`.
+with the maximally simple symmetry `Ξ(1-s)=Ξ(s)`. M21 adds the toy critical
+locus as the diagonal zero set `u+v=1`.
 
 ## M12 result
 
@@ -195,5 +208,7 @@ cargo test -p supsearch --lib functional_world
 cargo run --release --example functional_world
 cargo test -p supsearch --lib completion_world
 cargo run --release --example completion_world
+cargo test -p supsearch --lib locus_world
+cargo run --release --example locus_world
 cargo test --workspace
 ```

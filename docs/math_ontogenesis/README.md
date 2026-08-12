@@ -6,8 +6,8 @@ stage was allowed to know, what the system actually searched or inferred,
 what evidence supports the result, and what is explicitly not claimed.
 
 Status is intentionally asymmetric. M1–M12 are reached experiments, M13b,
-M14c, M15b, M16, M17, M18, M19, and M20 have integrity-calibrated L3 results,
-M15 has an exact L2 result with a failed L3 gate, and M21–M30 remain
+M14c, M15b, M16, M17, M18, M19, M20, and M21 have integrity-calibrated L3
+results, M15 has an exact L2 result with a failed L3 gate, and M22–M30 remain
 unreached. A complete directory is not a claim of a completed ladder.
 
 | Milestone | Topic | Status |
@@ -33,7 +33,7 @@ unreached. A complete directory is not a claim of a completed ladder.
 | [M18](M18_TOY_ZETA.md) | Toy zeta | reached — exact L3 toy zeta object |
 | [M19](M19_FUNCTIONAL_EQUATION.md) | Functional equation | reached — exact L3 toy functional equation |
 | [M20](M20_COMPLETED_OBJECT.md) | Completed toy object | reached — exact L3 toy completed object |
-| [M21](M21_CRITICAL_LOCUS.md) | Critical symmetry locus | not attempted |
+| [M21](M21_CRITICAL_LOCUS.md) | Critical symmetry locus | reached — exact L3 toy critical locus |
 | [M22](M22_HIDDEN_ZEROS.md) | Hidden zeros | not attempted |
 | [M23](M23_TOY_RH.md) | Toy RH conjecture | not attempted |
 | [M24](M24_TOY_RH_EQUIVALENCE.md) | Toy-RH equivalence | not attempted |

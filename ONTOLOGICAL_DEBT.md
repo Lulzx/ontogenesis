@@ -110,3 +110,12 @@ removing the debt entry.
   templates are not.
 - D9 is conditioned, not eliminated: the result is a bounded exact toy
   completion.
+
+## M21 entry (pre-registered)
+
+- New debt D10: the integer lattice, the completed lattice object, and the
+  fixed locus grammar are supplied; line/axis labels, critical-line
+  templates, and symmetry constructors are not.
+- D3 is extended to joint zero-set/reflection/conjugation compression.
+- D10 is conditioned, not eliminated: the result is a bounded integer-lattice
+  toy locus.

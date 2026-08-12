@@ -6,12 +6,20 @@ Given zeros of the completed toy object, M21 must infer the simplest geometric
 locus jointly explaining zero positions, functional reflection, conjugation,
 and other relations. A line or axis concept is not supplied.
 
-## Status: not attempted
+## Status: reached — exact L3 toy critical locus
 
-The M20 completed object and its zeros do not exist in the implemented track.
-The current geometry search in M2 handles real point invariants only and cannot
-represent complex conjugation or compare competing loci by multi-phenomenon
-compression.
+M20 supplied the completed toy object. M21 fixes an integer lattice domain and
+retains the diagonal locus `u+v=1` from zero positions of
+`Ξ(u,v)=prod_p(p^{2-u-v}-p^{u+v})`. The locus exactly equals the zero set and
+is invariant under conjugation `(u,v)->(v,u)` and reflection
+`(u,v)->(1-v,1-u)`, without a supplied line/axis concept.
+
+On three frozen unseen prime sets, zero-set recovery is exact and lattice
+evaluations fall 654→183. Asymmetric-universe, missing-zero, and extra-zero
+controls are declined; description falls 96→13 integers. M21 reaches
+`L3_transferred_ontology_with_measured_utility` as a bounded integer-lattice
+toy. The lattice, completed-object definition, exact checker, and fixed locus
+grammar remain supplied; no complex-analytic critical-line theorem is claimed.
 
 ## Future controls
 

@@ -314,4 +314,6 @@ toy, not an analytic zeta function. M19 discovers the non-identity reflection
 212→148 and description 72→14. M20 completes the raw toy object with
 `G(s)=C^{-1}B'`, reaches the maximally simple symmetry `Xi(1-s)=Xi(s)` with
 operations falling 672→432 and description 72→15, and rejects monomial and
-constant rescalings. M21–M30 are not claimed.
+constant rescalings. M21 infers the diagonal locus `u+v=1` from toy-lattice
+zeros, verifies conjugation/reflection invariance, and reaches L3 with
+evaluations falling 654→183 and description 96→13. M22–M30 are not claimed.

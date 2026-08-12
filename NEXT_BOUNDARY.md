@@ -1340,3 +1340,142 @@ M20 fails L3 if no completion is retained, any compatible task is not exact or
 not accelerated, any control is accepted, aggregate operations or description
 cost do not fall, or accounting mixes units. Any post-output change creates
 M20b and preserves this run.
+
+---
+
+# Next Boundary — M21 Toy Critical Locus
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M21 implementation; executed without amendment
+
+## Recorded outcome
+
+M21 passed the frozen L3 gate. From exact zero positions on the toy lattice,
+the learner retained the diagonal locus `u+v=1` (locus index 203 of 287 in
+the fixed complexity order). The checker verifies that the locus equals the
+zero set of `Ξ(u,v)=prod_p(p^{2-u-v}-p^{u+v})` exactly and is invariant under
+both conjugation and reflection. All three frozen downstream objects are exact
+and accelerated (aggregate lattice evaluations 654→183, measured gain 471);
+asymmetric-universe, missing-zero, and extra-zero controls are declined with
+baseline counts preserved. Description cost falls 96→13 stored integers.
+False-positive acceptances and negative-transfer tasks are both zero. Claim
+level is `L3_transferred_ontology_with_measured_utility`. No grammar, task,
+threshold, ordering, or candidate space was changed after observing this
+outcome.
+
+## Motivation and intended claim
+
+M20 retained a completed toy object with the simple symmetry
+`Ξ(1-s)=Ξ(s)`. M21 asks whether, from exact zero positions on a toy lattice,
+the system can infer the simplest geometric locus jointly explaining zero
+positions, functional reflection, and conjugation. “Line,” “axis,” “critical
+line,” and “symmetry locus” are not supplied.
+
+Maximum claim: `L3_transferred_ontology_with_measured_utility`, conditional on
+exact zero-set recovery, lower actual lattice evaluation work, exact decline
+of every control, and zero negative transfer. This is a bounded integer-lattice
+toy, not a complex-analytic critical-line theorem.
+
+## Frozen substrate
+
+- The toy domain is the integer lattice `(u,v)` with `u,v in [-6,6]`.
+- Hidden objects are irreducible sets `P` from `{2,3,5,7,11}` inferred from
+  the extensional universe as before.
+- The completed lattice object is
+  `Ξ(u,v)=prod_{p in P} (p^{2-u-v}-p^{u+v})`, evaluated with exact rational
+  powers for integer exponents. Its zeros are exactly the lattice points with
+  `u+v=1`.
+- Training observations are the zero positions on `[-3,3]^2` for
+  `P=[2,3,5]` and `P=[2,3,5,7]`, plus the boolean facts that the object is
+  symmetric under conjugation `(u,v)->(v,u)` and that reflection
+  `(u,v)->(1-v,1-u)` maps zero positions to zero positions.
+
+## Frozen locus grammar
+
+Candidates are geometric predicates over the lattice, enumerated in this
+fixed complexity order:
+
+1. `all` (accepts every lattice point);
+2. `point(a,b)`;
+3. `vertical(a)` (`u=a`);
+4. `horizontal(b)` (`v=b`);
+5. `diagonal(c)` (`u+v=c`);
+6. `pair_diagonals(c1,c2)` (union of two diagonals).
+
+Parameters range over `[-6,6]`. The retained locus is the first candidate
+that exactly matches the training zero set and is invariant under both the
+conjugation and reflection maps.
+
+## Exact checker
+
+For a submitted locus, the checker:
+
+1. infers `P` and verifies the universe equals `U(P,2)`;
+2. recomputes `Ξ(u,v)` directly for every lattice point in the training range
+   and compares its zero set to the locus;
+3. verifies the locus is invariant under conjugation and reflection;
+4. rejects loci that are not minimal: if a simpler candidate in the fixed
+   order also matches, the submitted locus is not retained.
+
+The checker returns boolean acceptance only; no zero coordinates, residuals,
+or counterexamples flow into ranking.
+
+## Frozen downstream suite
+
+None of these objects appear in training:
+
+1. `P=[2,3,5,7,11]` on `[-6,6]^2`;
+2. `P=[3,5,7]` on `[-6,6]^2`;
+3. `P=[2,5,11]` on `[-6,6]^2`.
+
+Controls, all incompatible:
+
+1. a single off-line zero added to the observed set;
+2. one on-line zero removed from the observed set;
+3. an asymmetric universe (one element removed from `U(P,E)`);
+4. wrong loci: `point`, `vertical`, `horizontal`, `pair_diagonals`, and
+   `all` must fail the checker.
+
+## Compared conditions and accounting
+
+- **Baseline:** evaluate `Ξ` at every point of the downstream lattice
+  (`169` points) to find zeros.
+- **Acquired:** evaluate the retained diagonal locus only (`13` points) and
+  verify it matches the observed zeros.
+- Description cost: raw stores the zero coordinates; acquired stores the locus
+  parameters and inferred `P`.
+
+Report per task: irreducible count, inference checks, baseline evaluations,
+acquired evaluations, exact zero-set recovery, false-positive acceptance, and
+negative transfer. Success requires exact recovery on every compatible task,
+strictly fewer acquired evaluations, exact decline of every control, zero
+false-positive acceptances, zero negative-transfer tasks, and lower aggregate
+evaluations and description cost.
+
+## Supplied-ontology ledger
+
+- **Supplied:** the integer lattice, the completed-object definition, exact
+  rational powers, the fixed locus grammar, and the reflection/conjugation
+  constraints.
+- **Acquired:** the diagonal locus `u+v=1` and its zero-set explanation.
+- **Not supplied:** line/axis labels, critical-line templates, symmetry
+  constructors, or checker information beyond boolean acceptance.
+- **Accounting:** lattice evaluations, stored coordinates, inference checks,
+  and checker calls are distinct labeled units.
+
+## Controls and ablations
+
+- A stronger substrate that receives the hidden diagonal directly passes but
+  does not establish discovery.
+- A weaker grammar without the diagonal candidate cannot explain the zero set.
+- Corrupted zero sets and asymmetric universes must be declined.
+
+M21 fails L3 if no locus is retained, any compatible task is not exact or not
+accelerated, any control is accepted, aggregate evaluations or description
+cost do not fall, or accounting mixes units. Any post-output change creates
+M21b and preserves this run.
