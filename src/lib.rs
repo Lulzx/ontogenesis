@@ -43,6 +43,7 @@ pub mod bootstrap;
 pub mod canon;
 pub mod contextual_allocation;
 pub mod contextual_guidance;
+pub mod coproduct_property;
 pub mod fixpoint;
 pub mod feature_invention;
 pub mod learned_allocation;
