@@ -253,6 +253,22 @@ even at 378 uses, and yields net gain 8,714 over 1,000 uses. A `mapBoth` negativ
 transfer control is worse (442 versus 221), preserving the contextual value
 boundary. Full protocol and limitations are in `UNIVERSAL_PROPERTY.md`.
 
+### U2 — coproduct-property ontogenesis
+
+An independent empty-alphabet lambda search, with no U1 dependency or sum-like
+production, discovers two size-6 embeddings and a size-8 mediator generator.
+Heterogeneous Boolean, numeral, and Church-list result families satisfy both
+embedding equations on protected probes. Exhaustive typed mediator enumeration
+through size 8 is untruncated and yields one semantic class; a carrier with a
+third observable image preserves existence but falsifies uniqueness.
+
+Frozen U2 is reused on a branchwise carrier-to-carrier transformation: learned
+allocation solves in 12 proposals/22 checks versus uniform 39/50 and oracle 1/8.
+Raw typed and irrelevant conditions fail; pure universal remains unsolved after
+707 proposals. Discovery costs 8,588 comparable checks and yields net +271,412
+at 10,000 uses. Identity remains zero-benefit evidence. Full protocol and
+limitations are in `COPRODUCT_PROPERTY.md`.
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are

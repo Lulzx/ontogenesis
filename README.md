@@ -196,6 +196,17 @@ with an irrelevant ontology. Its charged 5,286-check discovery cost breaks even
 after 378 uses while a negative-transfer map control is correctly worse. See
 [`UNIVERSAL_PROPERTY.md`](UNIVERSAL_PROPERTY.md).
 
+**U2 — bounded coproduct-property ontogenesis.** Independent empty-alphabet
+lambda enumeration invents two anonymous embeddings and a reusable mediator
+generator from heterogeneous relational arrow pairs. Protected Boolean, numeral,
+and Church-list evidence commutes; exhaustive enumeration through size 8 finds
+one semantic mediator class, while a third-observable-image control passes
+existence and fails uniqueness. On downstream branchwise `S->S`, learned search
+takes 12 proposals versus uniform 39; raw typed and irrelevant ontologies fail,
+and pure universal is unsolved after 707. The charged 10,000-use horizon yields
++271,412 observation checks, while identity reuse records zero benefit. See
+[`COPRODUCT_PROPERTY.md`](COPRODUCT_PROPERTY.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.
