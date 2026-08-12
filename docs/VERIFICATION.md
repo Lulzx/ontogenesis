@@ -140,3 +140,23 @@ the printed prose and depended on the raw solves and the search budget.
 - `fixpoint.rs` / `representation.rs` — pure-lambda single/mutual knot tying and
   anonymous sum-of-products encoding invention.
 - `main.rs` — all experiment commands (`ladder`, `ontogen`, `dep`, `gen`, `transfer`, `meta`, `disc`, `ablation`, `diag`, `prune`) and the tests.
+
+---
+
+## Addendum (2026-08-12): U6 / U7 non-monotonic repair and migration
+
+| Claim | Status | Where |
+|---|---|---|
+| Non-monotonic repair ops (retain/add/remove/split/merge/specialize/generalize/structural-replace) classified between consecutive ontologies | confirmed, asserted | `src/ontology_repair.rs` (`op_between`), 10 tests |
+| Comparable cost ledger (description/reasoning/predictive-error/migration/revision) | confirmed, asserted | `ontology_repair::structural_cost` + `Runner::add_stage` ledger |
+| Preserved/affected concept accounting and predictive replay (current + accumulated) | confirmed, asserted | `Runner::add_stage` |
+| Executable concept meaning via Church-witness term accepted exactly on its extension | confirmed, asserted | `witness`/`evaluate_witness` |
+| Structural replacement when patch cost exceeds rebuild | confirmed, asserted | `structural_decision` |
+| Deterministic machine records (`deterministic=true`) | confirmed, asserted | `machine_record` (both modules) |
+| Five-way migration classification (preserved/refined/re-expressible/ambiguous/invalidated) | confirmed, asserted | `src/concept_migration.rs`, 6 tests |
+| Migration cheaper than cold restart by genuinely reusable knowledge only | confirmed, asserted | `migrate` saving, tests assert `saving > 0` only where carry-over exists |
+| Replay of old task + held-out verification | confirmed, asserted | `migrate` fields; example output |
+
+New modules: `src/ontology_repair.rs`, `src/concept_migration.rs`. Examples:
+`examples/ontology_repair.rs`, `examples/concept_migration.rs`. Docs:
+`docs/ONTOLOGY_REPAIR.md`, `docs/MIGRATION.md`.

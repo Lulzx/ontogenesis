@@ -286,7 +286,7 @@ fn partition_by_label(observations: &[Observation]) -> Vec<Concept> {
         .collect()
 }
 
-fn structural_cost(ontology: &Ontology, task: &Task) -> CostLedger {
+pub(crate) fn structural_cost(ontology: &Ontology, task: &Task) -> CostLedger {
     let covered = ontology.covered_tokens();
     let description =
         HEADER_PRICE * ontology.concepts.len() as u64 + TOKEN_PRICE * covered.len() as u64;

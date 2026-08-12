@@ -237,6 +237,27 @@ logical identifiability remains false. The frozen unary incumbent independently
 passes U4's executable carrier/constructor/mediator and protected uniqueness tests.
 See [`OPEN_SIGNATURE.md`](OPEN_SIGNATURE.md).
 
+
+**U6 — non-monotonic ontology repair.** Growth-only revision is extended to the
+full non-monotonic repair set (retain/add/remove/split/merge/specialize/
+generalize/structural-replace) over a behavior-bank substrate: concepts are
+finite predicates with an executable Church-witness meaning. Consecutive
+ontologies are compared by classified transitions, unaffected concepts are
+preserved, historical commitments are replayed (accumulated, reported honestly
+when a dropped task distinction makes it impossible), and one comparable cost
+ledger covers description, reasoning, predictive error, migration, and revision
+penalty. A merge is admitted only when predictive error stays equal, and
+structural replacement fires when patches cost more than a fresh model. See
+[`ONTOLOGY_REPAIR.md`](ONTOLOGY_REPAIR.md).
+
+**U7 — knowledge migration.** When an ontology changes, every old concept is
+classified as preserved / refined / re-expressible / ambiguous / invalidated,
+and revision + migration is compared against a cold restart on one ledger.
+Both end at the identical new ontology, so migration saves exactly the cost of
+genuinely reusable knowledge (preserved and refined) and never for ambiguous or
+invalidated concepts. Replay of the old task and held-out coverage are
+verified. See [`MIGRATION.md`](MIGRATION.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

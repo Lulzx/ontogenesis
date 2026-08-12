@@ -320,6 +320,43 @@ incumbent passes unchanged U4 executable carrier/constructor/mediator discovery 
 protected uniqueness. Signature-allocation costs change from learned/uniform 1/1
 before useful revision to 1/5 and 1/2 afterward. Protocol: `OPEN_SIGNATURE.md`.
 
+
+### U6 — non-monotonic ontology repair
+
+U6 extends U5's growth-only revision to the full non-monotonic repair set:
+retain, add, remove/invalidate, split, merge, specialize, generalize, and
+structural replacement, over a behavior-bank substrate (concepts are finite
+predicates on probe tokens 0..15 whose meaning is an executable Church-witness
+term). Transitions between consecutive ontologies are classified by extension
+overlap; a comparable cost ledger covers description, reasoning, predictive
+error, migration, and revision penalty; unaffected concepts are counted as
+preserved and historical commitments are replayed (current-task and
+accumulated, reported honestly when a dropped task distinction makes the
+latter impossible). A merge is only admitted when predictive error stays
+equal, and structural replacement fires when patch clauses cost more than a
+fresh model. Witness acceptance is verified to be exact on every probe token.
+
+Controls: deterministic construction, causal epoch ordering, exact fallback,
+frozen evaluation, no leakage, adversarial wrong-incumbent recovery, and
+explicit `machine_record` output with `deterministic=true`. Protocol:
+`ONTOLOGY_REPAIR.md`.
+
+### U7 — knowledge migration across ontology changes
+
+U7 asks what happens to existing knowledge when an ontology is revised. Every
+old concept is classified as preserved, refined, re-expressible, ambiguous, or
+invalidated against the new ontology, and two strategies are compared on one
+comparable ledger: revision + migration (carry preserved/refined knowledge
+forward, apply a small re-expression map, re-derive only ambiguous/invalidated
+concepts) versus cold restart (discard everything, rediscover the new
+ontology). Both end at the identical new ontology, so they share descriptive
+and reasoning cost and differ only in transfer work; migration saves exactly
+when the world changed less than the full ontology. Replay of the old task and
+held-out coverage are verified. The example demonstrates all five kinds;
+invalidated is exercised with a manually constructed ontology pair because the
+observation runner never drops accumulated tokens. Protocol: `MIGRATION.md`.
+
+
 ## B3 — recursive law to reasoning vocabulary
 
 Question: does reifying the B2 recursion scheme change which higher concepts are
