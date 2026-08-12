@@ -1479,3 +1479,137 @@ M21 fails L3 if no locus is retained, any compatible task is not exact or not
 accelerated, any control is accepted, aggregate evaluations or description
 cost do not fall, or accounting mixes units. Any post-output change creates
 M21b and preserves this run.
+
+---
+
+# Next Boundary — M22 Hidden Toy Zeros
+
+**Pre-registration date:** 2026-08-12
+
+**Integrity contract:** `SCIENTIFIC_INTEGRITY.md`
+
+**Debt ledger:** `ONTOLOGICAL_DEBT.md`
+
+**Status:** frozen before M22 implementation; executed without amendment
+
+## Recorded outcome
+
+M22 passed the frozen L3 gate. From exact oscillation signals with zero
+positions withheld, the learner retained the oscillator model
+`u in {-2,0,3}` with weights `{1,2,1}` from 31,713 dictionary models, and the
+checker mapped every recovered frequency through the retained diagonal locus
+to `(u,1-u)`. All three frozen downstream hidden sets are recovered exactly
+and accelerated (aggregate lattice evaluations 6,897→4,779, measured gain
+2,118); corrupted-signal, off-locus, and asymmetric-universe controls are
+declined with baseline counts preserved. Description cost falls 51→12 stored
+integers. False-positive acceptances and negative-transfer tasks are both
+zero. Claim level is `L3_transferred_ontology_with_measured_utility`. No
+grammar, task, threshold, ordering, or candidate space was changed after
+observing this outcome.
+
+## Motivation and intended claim
+
+M21 retained the diagonal zero locus `u+v=1`. M22 withholds the zero positions
+and asks whether, from exact arithmetic oscillation signals over the toy
+lattice, the system can invent latent oscillators and recover the hidden
+spectral locations, completing each recovered frequency with the retained
+diagonal locus. “Zero,” “frequency,” “oscillator,” and “spectrum” are not
+supplied as candidate labels.
+
+Maximum claim: `L3_transferred_ontology_with_measured_utility`, conditional on
+exact signal recovery and hidden-location recovery on every frozen compatible
+task, lower actual lattice work, exact decline of every control, and zero
+negative transfer. This is a bounded integer toy, not complex-frequency
+estimation.
+
+## Frozen substrate
+
+- The toy lattice is `(u,v)` with `u,v in [-5,5]`; hidden zeros lie on the
+  M21 diagonal `v=1-u`.
+- A hidden oscillator for coordinate `u` has exact integer base
+  `q(u)=prime(u+4)` where `prime` is the frozen list
+  `[2,3,5,7,11,13,17,19,23,29,31]` for `u=-5..5`, and an integer weight
+  `w in {1,2,3}`.
+- The arithmetic observable is `a[t]=sum_{u in hidden} w_u * q(u)^t` for
+  integer `t`, evaluated with exact integers.
+- Training hidden set is `u in {-2,0,3}` with weights `{1,2,1}`; observable
+  values are given for `t=0..12`.
+- Candidate models enumerate subsets of `u in [-5,5]` of size at most 4 with
+  weights in `{1,2,3}`, lexicographically, and are deduplicated by exact
+  signal behavior.
+
+## Exact checker
+
+For a submitted oscillator model, the checker:
+
+1. infers `P` from the extensional universe and verifies `U(P,2)`;
+2. recomputes `a[t]` for every frozen `t` directly from the dictionary and
+   submitted weights;
+3. requires exact equality with the observed signal on all training and
+   held-out exponents;
+4. maps each recovered `u` to the hidden location `(u,1-u)` and verifies it
+   lies on the retained diagonal locus;
+5. rejects models with fewer distinct frequencies when an equally fitting
+   smaller support exists (lexicographic minimality).
+
+The checker returns boolean acceptance only; no residuals, weights, or
+frequency hints flow into ranking.
+
+## Frozen downstream suite
+
+None of these hidden sets appear in training:
+
+1. `u in {-4,-1,1,4}`, weights `{1,2,1,3}`;
+2. `u in {-3,2,5}`, weights `{1,3,2}`;
+3. `u in {-5,0,5}`, weights `{2,1,2}`.
+
+Each downstream object supplies a universe from the frozen prime pool and
+observable values at held-out `t=13..18`.
+
+Controls, all incompatible:
+
+1. corrupted signal: one held-out value incremented by one;
+2. off-dictionary frequency: a base not in the frozen prime list;
+3. off-locus location: a recovered `u` mapped to `v != 1-u`;
+4. asymmetric universe: one element removed from `U(P,E)`.
+
+## Compared conditions and accounting
+
+- **Baseline:** evaluate the observable over all 121 lattice points for each
+  held-out exponent.
+- **Acquired:** evaluate only the retained oscillators (one term per hidden
+  zero) and map them through the retained diagonal locus.
+- Description cost: raw stores the observable values and zero-counting
+  positions; acquired stores the retained oscillator bases, weights, and the
+  locus parameters.
+
+Report per task: irreducible count, inference checks, baseline evaluations,
+acquired evaluations, exact signal recovery, exact location recovery,
+false-positive acceptance, and negative transfer. Success requires exact
+recovery on every compatible task, strictly fewer acquired evaluations, exact
+decline of every control, zero false-positive acceptances, zero
+negative-transfer tasks, and lower aggregate evaluations and description cost.
+
+## Supplied-ontology ledger
+
+- **Supplied:** the oscillator dictionary, weight range, exact integer
+  arithmetic, the retained M21 diagonal locus, and the exact checker.
+- **Acquired:** the hidden oscillator set and weights, and the mapping from
+  recovered frequencies to lattice locations.
+- **Not supplied:** zero labels, frequency labels, spectral templates,
+  projection formulas, or checker information beyond boolean acceptance.
+- **Accounting:** lattice evaluations, stored integers, inference checks, and
+  checker calls are distinct labeled units.
+
+## Controls and ablations
+
+- A stronger substrate that receives the hidden set directly passes but does
+  not establish discovery.
+- A weaker dictionary missing the true bases cannot recover the signal.
+- Corrupted signals, off-dictionary bases, and off-locus locations must be
+  declined.
+
+M22 fails L3 if no oscillator model is retained, any compatible task is not
+exact or not accelerated, any control is accepted, aggregate evaluations or
+description cost do not fall, or accounting mixes units. Any post-output
+change creates M22b and preserves this run.

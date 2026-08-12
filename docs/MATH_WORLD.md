@@ -316,4 +316,7 @@ toy, not an analytic zeta function. M19 discovers the non-identity reflection
 operations falling 672→432 and description 72→15, and rejects monomial and
 constant rescalings. M21 infers the diagonal locus `u+v=1` from toy-lattice
 zeros, verifies conjugation/reflection invariance, and reaches L3 with
-evaluations falling 654→183 and description 96→13. M22–M30 are not claimed.
+evaluations falling 654→183 and description 96→13. M22 recovers withheld toy
+zeros from exact oscillation signals and completes locations through the
+retained diagonal, with evaluations falling 6,897→4,779 and description
+51→12. M23–M30 are not claimed.

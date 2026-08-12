@@ -119,3 +119,12 @@ removing the debt entry.
 - D3 is extended to joint zero-set/reflection/conjugation compression.
 - D10 is conditioned, not eliminated: the result is a bounded integer-lattice
   toy locus.
+
+## M22 entry (pre-registered)
+
+- D10 is reused: the retained diagonal locus completes recovered frequencies.
+- New debt D11: the oscillator dictionary, weight range, and exact signal
+  checker are supplied; zero/frequency/spectrum labels and projection formulas
+  are not.
+- D11 is conditioned, not eliminated: the result is a bounded integer toy
+  hidden-spectrum recovery.

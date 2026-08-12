@@ -77,6 +77,8 @@
 //!   Xi(1-s)=Xi(s).
 //! - [`locus_world`]: Direction M21 toy critical locus -- zero-set locus
 //!   invention on an integer lattice under reflection and conjugation.
+//! - [`hidden_zeros_world`]: Direction M22 hidden toy zeros -- oscillator
+//!   invention and location recovery from exact arithmetic signals.
 
 pub mod acquire;
 pub mod active_experimentation;
@@ -93,6 +95,7 @@ pub mod euclid_world;
 pub mod euler_world;
 pub mod fixpoint;
 pub mod functional_world;
+pub mod hidden_zeros_world;
 pub mod feature_invention;
 pub mod initial_algebra;
 pub mod irrational_world;

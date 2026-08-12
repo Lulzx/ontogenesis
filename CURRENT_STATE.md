@@ -141,7 +141,20 @@ description falls 96→13 integers. M21 reaches
 definition, exact checker, and fixed locus grammar remain supplied. M22
 remains unreached.
 
-Directions G and Mathematical Ontogenesis M1–M21 are implemented. M10 added
+## M22 hidden toy zeros result
+
+A separately pre-registered experiment withholds zero positions and supplies
+exact oscillation signals. The learner retains the hidden oscillator set
+`u in {-2,0,3}` with weights `{1,2,1}` from a bounded dictionary and completes
+every recovered frequency through the M21 diagonal locus. Three unseen hidden
+sets recover exactly with lattice evaluations falling 6,897→4,779;
+corrupted-signal, off-locus, and asymmetric-universe controls are declined and
+description falls 51→12 integers. M22 reaches
+`L3_transferred_ontology_with_measured_utility`; the oscillator dictionary,
+weight range, exact checker, and retained locus remain supplied. M23 remains
+unreached.
+
+Directions G and Mathematical Ontogenesis M1–M22 are implemented. M10 added
 checked modular propositions, M11 finite-list auxiliary-object proofs, and M12
 integer-ratio assumptions plus checked contradiction. M13 adds unordered root
 observations, permutation-intervention discovery of invariant programs, and
@@ -156,7 +169,8 @@ exact integer special values and formal pole/reflection certificates. M19 adds
 the toy functional equation over the completed object with retained
 reflection and factor programs. M20 adds the completed-object construction
 with the maximally simple symmetry `Ξ(1-s)=Ξ(s)`. M21 adds the toy critical
-locus as the diagonal zero set `u+v=1`.
+locus as the diagonal zero set `u+v=1`. M22 adds hidden-zero recovery from
+exact oscillation signals using the retained oscillator dictionary and locus.
 
 ## M12 result
 
@@ -210,5 +224,7 @@ cargo test -p supsearch --lib completion_world
 cargo run --release --example completion_world
 cargo test -p supsearch --lib locus_world
 cargo run --release --example locus_world
+cargo test -p supsearch --lib hidden_zeros_world
+cargo run --release --example hidden_zeros_world
 cargo test --workspace
 ```
