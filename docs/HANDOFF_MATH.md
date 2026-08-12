@@ -1,10 +1,15 @@
-# Handoff — Mathematical Ontogenesis track (M1, M2) and next steps
+# Handoff — Mathematical Ontogenesis track (M1–M9 complete; M10 boundary)
 
 **Date:** 2026-08-12
 
-This handoff documents the current state of the **Mathematical Ontogenesis**
-track and how to continue it. It is written for a future agent (or a resumed
-session) to pick up exactly where the work stopped.
+> **Superseding update:** M3–M9 are now complete. The ladder reached a genuine
+> architecture stop at M10 because the repository lacks a proposition language,
+> proof terms, and a trusted checker. Read `/CURRENT_STATE.md` and
+> `/NEXT_BOUNDARY.md` before continuing. The earlier M3 suggestion below is
+> retained only as historical context.
+
+This handoff originally documented the state after M2. It is retained to show
+the exact starting point and standing directive used by the M3–M9 continuation.
 
 ## Where the work stands
 

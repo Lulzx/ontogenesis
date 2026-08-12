@@ -225,3 +225,16 @@ Docs: `docs/MATH_WORLD.md`.
 
 M2 extends `src/math_world.rs` and `examples/math_world.rs`. Docs:
 `docs/MATH_WORLD.md`.
+
+## Addendum (2026-08-12): Directions M3–M9 and M10 boundary
+
+| Claim | Status | Where |
+|---|---|---|
+| M3 synthesizes `n*n` without a square primitive and lowers transfer description cost | confirmed, asserted | `discover_square`, `m3_invents_multiplicative_square_without_square_primitive` |
+| M4 generates a generalizing odd-sum theorem; malformed control is rejected | confirmed, asserted | `discover_odd_sum_law`, `m4_generates_and_generalizes_the_odd_sum_theorem`, `m4_rejects_non_law_control` |
+| M5 retains base + successor closure and transfers to two recursive identities | confirmed, bounded proof-schema claim | `discover_induction`, `m5_invents_reusable_successor_closure_schema` |
+| M6 invents reciprocal-difference cancellation and transfers to two offset families | confirmed, asserted | `discover_telescoping`, `m6_invents_cancellation_representation_and_transfers` |
+| M7 invents maximum common divisor from divisibility as a transition invariant | confirmed, bounded | `discover_divisor_invariant`, `m7_invents_maximum_common_divisor_invariant` |
+| M8 derives a rational formal-series object and predicts three held-out coefficients | confirmed, asserted | `discover_sequence_object`, `m8_invents_fibonacci_formal_series_object` |
+| M9 infers hidden transform and scaled latent directions for exact 10-step prediction | confirmed, bounded | `discover_latent_directions`, `invents_scaled_latent_directions_for_hidden_transform` |
+| M10 cannot be validly attempted without proposition/proof-term architecture | boundary demonstrated, not a milestone claim | `CURRENT_STATE.md`, `NEXT_BOUNDARY.md` |

@@ -325,6 +325,18 @@ compresses the class (16 raw tokens -> 8 tokens, gain 8). A non-circular
 control honestly reports no generalizing invariant. See
 [`MATH_WORLD.md`](MATH_WORLD.md).
 
+**Directions M3–M9 — laws, proof abstraction, and latent representations.**
+The agent next invents square as multiplication, generates the odd-sum law,
+retains a transferable successor-closure proof schema, invents cancellation
+for reciprocal sums, discovers maximum common divisor as a transition
+invariant, constructs a rational formal-series representation of Fibonacci,
+and invents scaled latent directions for long-horizon linear dynamics. Each
+stage has deterministic costs, held-out transfer, and controls. The ladder then
+stops honestly at M10: bidirectional theorem-equivalence search requires a
+trusted proposition/proof-term layer absent from the current architecture. See
+[`MATH_WORLD.md`](MATH_WORLD.md), [`../CURRENT_STATE.md`](../CURRENT_STATE.md),
+and [`../NEXT_BOUNDARY.md`](../NEXT_BOUNDARY.md).
+
 The B3 generator is also deliberately bounded (maximum syntax size and 50,000 terms
 per memoized type/context/size cell); its negative claims are relative to those stated
 bounds.

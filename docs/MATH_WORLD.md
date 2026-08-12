@@ -239,3 +239,44 @@ cargo test --workspace
 
 The example ends with
 `experiment=math_world_m2,...deterministic=true,fallback=exact` machine output.
+
+---
+
+# Directions M3–M9: arithmetic laws to latent linear coordinates
+
+The ladder was continued strictly in order. Each stage searches a bounded,
+explicit candidate space, checks held-out transfer, records reasoning and
+description costs, and retains the result only when it reduces downstream
+cost. The implementation and machine records live in `src/math_world.rs` and
+`examples/math_world.rs`.
+
+| Stage | Invented object | Evidence | Honest status |
+|---|---|---|---|
+| M3 | `square(n) = n*n` from five input/output pairs | exact on three held-out values; five square occurrences cost 10 ontology tokens vs 15 expanded tokens | empirical |
+| M4 | `sum(k=1..n, k+(k-1)) = square(n)` | theorem generated before proof and checked for `n=6..20`; corrupted-prefix control has no generalizing law | conjectured |
+| M5 | base case + successor closure proof schema | verifies the odd-sum base/step and transfers to triangular and cube-sum identities | proof schema verified; no general proof kernel claimed |
+| M6 | `1/(k(k+1)) = 1/k - 1/(k+1)` and boundary cancellation | exact rational checks and transfer to offsets 2 and 3; 2 boundary terms vs 12 raw terms | identity verified |
+| M7 | `max({d : d divides a and b})` invariant | unchanged over three Euclidean trajectories, equals their terminal result, and transfers to two held-out trajectories | bounded verified |
+| M8 | rational formal-series object `F(x)=(1+0x)/(1-x-x²)` | recurrence and numerator derived from observations; predicts 21, 34, 55 | formal-series verified |
+| M9 | latent directions satisfying `A(v)=scale*v` | hidden matrix inferred; two primitive directions give exact 10-step predictions and transfer to two unseen transforms | bounded verified |
+
+These stages add only the minimal representation needed by the failing next
+problem. In particular, `square` is unavailable during M3 search and becomes
+an ontology token only afterward; M6 searches reciprocal decompositions
+without a telescoping primitive; M7 constructs common-divisor sets from the
+divisibility predicate without a GCD primitive; and M9 searches scaled images
+without supplying eigenvalue/eigenvector terminology.
+
+## Boundary after M9
+
+M10 requires candidate propositions and machine-checked proofs of both
+`P -> Q` and `Q -> P`, then proof-cost comparison. The repository currently has
+evaluators, bounded expression synthesis, and a verified proof-schema
+experiment, but it has no proposition language, proof terms, or trusted proof
+kernel. Adding those is a fundamental architecture change, not the minimal
+extension of the arithmetic world. Hard-coding parity lemmas would also make
+M10 nominally pass while violating its discovery restriction.
+
+Accordingly the ladder stops at the first proven thesis boundary. M10–M30 are
+not claimed. See `CURRENT_STATE.md` and `NEXT_BOUNDARY.md` for the evidence and
+the requirements for a scientifically valid continuation.

@@ -45,8 +45,8 @@
 //! - [`world_model`]: Direction G world-model ontogenesis — factored state
 //!   compression and invented reversible-counter transfer in a persistent
 //!   deterministic world.
-//! - [`math_world`]: Direction M1 mathematical ontogenesis — invent distance
-//!   as a reusable concept in an arithmetic world.
+//! - [`math_world`]: Directions M1--M9 mathematical ontogenesis -- arithmetic
+//!   concept/law invention through latent linear representations.
 
 pub mod acquire;
 pub mod active_experimentation;
