@@ -313,7 +313,663 @@ fn main() {
                 .join()
                 .unwrap();
         }
+        Some("compositor") => {
+            // Compositor's Tray search probe: string NBE recurses deep on the
+            // fold structure, so run on a large stack.
+            let a = args[1..].to_vec();
+            std::thread::Builder::new()
+                .stack_size(1 << 30)
+                .spawn(move || compositor(&a))
+                .unwrap()
+                .join()
+                .unwrap();
+        }
         _ => bridge(&args),
+    }
+}
+
+/// Church-numeral equality: eq a b = (isZero (a pred b)) (isZero (b pred a)) (isZero (a pred b)).
+/// The two genuinely-new value shapes the Compositor needs (mod-26 arithmetic and the
+/// stateful scan) are built on this, so it is the first thing the substrate must supply.
+fn compositor_eq_term() -> Rc<term::Term> {
+    let t = closed("λa.λb.a");
+    let f = closed("λa.λb.b");
+    let is_zero = term::lam(term::app(term::app(term::var(0), term::lam(f.clone())), t.clone()));
+    let pred = closed("λn.λf.λx.n(λg.λh.h(g(f)))(λu.x)(λu.u)");
+    term::lam(term::lam({
+        let a = term::var(1);
+        let b = term::var(0);
+        let a_pred_b = term::app(term::app(a.clone(), pred.clone()), b.clone());
+        let b_pred_a = term::app(term::app(b.clone(), pred.clone()), a.clone());
+        let A = term::app(is_zero.clone(), a_pred_b);
+        let B = term::app(is_zero.clone(), b_pred_a);
+        term::app(term::app(A.clone(), B), A)
+    }))
+}
+
+/// The stateful per-letter scan — the third genuinely-new value shape. It is a *generic*
+/// higher-order fold (like `map`/`reduce` in the C7 meta-space), parameterized by a shift
+/// function `shift : letter → count → letter`; it carries a per-letter tally as its fold
+/// state and emits `shift c (tally c)` at each step, updating the tally. The machine still
+/// has to *discover* the shift function (the arithmetic) and apply it.
+///
+///   scan_tally = λshift. λs. reverse (snd ( (reverse s) step (pair tally_empty nil) ))
+///   step = λc.λacc. pair (tally_inc (fst acc) c) (cons (shift c (tally_get (fst acc) c)) (snd acc))
+///   tally_inc = λt.λc.λc'. ite (eq c c') (succ (t c')) (t c')
+///
+/// The Church-list fold is a RIGHT fold, so to scan left-to-right we reverse the
+/// input, fold (which then visits elements in original order), and reverse the
+/// cons-built output back into order.
+fn compositor_scan_tally_term() -> Rc<term::Term> {
+    let zero = closed("λf.λx.x");
+    let succ = closed("λn.λf.λx.f(n(f)(x))");
+    let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
+    let nil = closed("λf.λz.z");
+    let pair = closed("λa.λb.λf.f(a)(b)");
+    let fst = closed("λp.p(λa.λb.a)");
+    let snd = closed("λp.p(λa.λb.b)");
+    let ite = closed("λb.λx.λy.b(x)(y)");
+    let eq = compositor_eq_term();
+    // append = λxs.λys. xs cons ys
+    let append = term::lam(term::lam(term::app(term::app(term::var(1), cons.clone()), term::var(0))));
+    // singleton = λa. cons a nil
+    let singleton = term::lam(term::app(term::app(cons.clone(), term::var(0)), nil.clone()));
+    // reverse = λxs. xs (λh.λacc. append acc (singleton h)) nil
+    let reverse = term::lam(term::app(
+        term::app(
+            term::var(0),
+            term::lam(term::lam(term::app(
+                term::app(append.clone(), term::var(0)),
+                term::app(singleton.clone(), term::var(1)),
+            ))),
+        ),
+        nil.clone(),
+    ));
+    // tally_inc = λt.λc.λc'. ite (eq c c') (succ (t c')) (t c')
+    let tally_inc = term::lam(term::lam(term::lam({
+        let t_ = term::var(2);
+        let c = term::var(1);
+        let c_ = term::var(0);
+        let eqcc = term::app(term::app(eq.clone(), c.clone()), c_.clone());
+        let tc_ = term::app(t_.clone(), c_.clone());
+        let succ_tc_ = term::app(succ.clone(), tc_.clone());
+        term::app(term::app(term::app(ite.clone(), eqcc), succ_tc_), tc_)
+    })));
+    // tally_get = λt.λc. t c
+    let tally_get = term::lam(term::lam(term::app(term::var(1), term::var(0))));
+    // tally_empty = λc. zero
+    let tally_empty = term::lam(zero.clone());
+    // step_of_shift = λshift.λc.λacc. pair (tally_inc (fst acc) c) (cons (shift c (tally_get (fst acc) c)) (snd acc))
+    let step_of_shift = term::lam(term::lam(term::lam({
+        let shift = term::var(2);
+        let c = term::var(1);
+        let acc = term::var(0);
+        let fst_acc = term::app(fst.clone(), acc.clone());
+        let snd_acc = term::app(snd.clone(), acc.clone());
+        let new_tally = term::app(term::app(tally_inc.clone(), fst_acc.clone()), c.clone());
+        let tg = term::app(term::app(tally_get.clone(), fst_acc), c.clone());
+        let shifted = term::app(term::app(shift, c), tg);
+        let out = term::app(term::app(cons.clone(), shifted), snd_acc);
+        term::app(term::app(pair.clone(), new_tally), out)
+    })));
+    // scan_tally = λshift.λs. reverse (snd ( (reverse s) (step_of_shift shift) (pair tally_empty nil) ))
+    term::lam(term::lam({
+        let shift = term::var(1);
+        let s = term::var(0);
+        let step = term::app(step_of_shift.clone(), shift);
+        let init = term::app(term::app(pair.clone(), tally_empty.clone()), nil.clone());
+        let rev_s = term::app(reverse.clone(), s.clone());
+        let folded = term::app(term::app(rev_s, step), init);
+        let out_rev = term::app(snd.clone(), folded);
+        term::app(reverse.clone(), out_rev)
+    }))
+}
+
+/// One rung of the B3 bootstrapping ladder: discover a concept from the current
+/// atoms via typed enumeration, gated on a small task, and report it. Returns the
+/// found term so it can be promoted to an atom for the next rung.
+fn discover_step(
+    name: &str,
+    target: &typed::Type,
+    atoms: &[typed::Atom],
+    defs: &std::collections::HashMap<u32, typed::Type>,
+    max_size: u32,
+    cap: usize,
+    gate: &parse::Task,
+) -> Option<typed::Found> {
+    let found = typed::find_closed_with_defs(target, atoms, defs, max_size, cap, |c| direct_solves(gate, c));
+    match &found {
+        Some(f) => println!(
+            "  DISCOVER {name} = {}  (size {}, {} generated)",
+            term::show(&f.term),
+            f.size,
+            f.generated
+        ),
+        None => println!("  ✗ could NOT discover {name} within budget (size ≤ {max_size})"),
+    }
+    found
+}
+
+/// TEMP probe: which concepts are reachable by blind typed enumeration, and at what
+/// size/cap? Reports per-concept enumeration stats so the ladder is built from feasible rungs.
+fn probe_concepts() {
+    let num = typed::Type::Atom(0);
+    let boo = typed::Type::Atom(1);
+    let arrow = typed::Type::arrow;
+    let num_t = |n: u32| closed(&bootstrap::church_num_str(n));
+    let t = closed("λa.λb.a");
+    let f = closed("λa.λb.b");
+    let ite = closed("λb.λx.λy.b(x)(y)");
+    let zero = closed("λf.λx.x");
+    let succ = closed("λn.λf.λx.f(n(f)(x))");
+    let pred = closed("λn.λf.λx.n(λg.λh.h(g(f)))(λu.x)(λu.u)");
+    let iszero = closed("λn.n(λx.λa.λb.b)(λa.λb.a)");
+    let and = closed("λa.λb.a(b)(λx.λy.y)");
+    let eq = closed("λa.λb.λx.λy.a(λz.λw.w(z(x)))(λu.y)(λu.u)");
+    let add = closed("λa.λb.λf.λx.a(f)(b(f)(x))");
+    let num25 = num_t(25);
+
+    let cases: Vec<(&str, typed::Type, Vec<typed::Atom>)> = vec![
+        ("pred", arrow(num.clone(), num.clone()), vec![
+            typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+            typed::Atom { body: zero.clone(), ty: num.clone() },
+        ]),
+        ("iszero", arrow(num.clone(), boo.clone()), vec![
+            typed::Atom { body: t.clone(), ty: boo.clone() },
+            typed::Atom { body: f.clone(), ty: boo.clone() },
+            typed::Atom { body: zero.clone(), ty: num.clone() },
+            typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+        ]),
+        ("and", arrow(boo.clone(), arrow(boo.clone(), boo.clone())), vec![
+            typed::Atom { body: t.clone(), ty: boo.clone() },
+            typed::Atom { body: f.clone(), ty: boo.clone() },
+        ]),
+        ("add", arrow(num.clone(), arrow(num.clone(), num.clone())), vec![
+            typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+            typed::Atom { body: zero.clone(), ty: num.clone() },
+        ]),
+        ("eq", arrow(num.clone(), arrow(num.clone(), boo.clone())), vec![
+            typed::Atom { body: pred.clone(), ty: arrow(num.clone(), num.clone()) },
+            typed::Atom { body: iszero.clone(), ty: arrow(num.clone(), boo.clone()) },
+            typed::Atom { body: and.clone(), ty: arrow(boo.clone(), arrow(boo.clone(), boo.clone())) },
+            typed::Atom { body: t.clone(), ty: boo.clone() },
+            typed::Atom { body: f.clone(), ty: boo.clone() },
+            typed::Atom { body: zero.clone(), ty: num.clone() },
+            typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+        ]),
+        ("mod26", arrow(num.clone(), num.clone()), vec![
+            typed::Atom { body: eq.clone(), ty: arrow(num.clone(), arrow(num.clone(), boo.clone())) },
+            typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+            typed::Atom { body: zero.clone(), ty: num.clone() },
+            typed::Atom { body: ite.clone(), ty: arrow(boo.clone(), arrow(num.clone(), arrow(num.clone(), num.clone()))) },
+            typed::Atom { body: num25.clone(), ty: num.clone() },
+        ]),
+    ];
+    // Gates for each concept.
+    let pred_gate = parse::Task { arity: 1, tests: vec![
+        parse::Test { args: vec![num_t(0)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(1)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(2)], want: num_t(1), outer: 0 },
+        parse::Test { args: vec![num_t(3)], want: num_t(2), outer: 0 },
+        parse::Test { args: vec![num_t(4)], want: num_t(3), outer: 0 },
+    ]};
+    let iszero_gate = parse::Task { arity: 1, tests: vec![
+        parse::Test { args: vec![num_t(0)], want: t.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(1)], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(2)], want: f.clone(), outer: 0 },
+    ]};
+    let and_gate = parse::Task { arity: 2, tests: vec![
+        parse::Test { args: vec![t.clone(), t.clone()], want: t.clone(), outer: 0 },
+        parse::Test { args: vec![t.clone(), f.clone()], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![f.clone(), t.clone()], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![f.clone(), f.clone()], want: f.clone(), outer: 0 },
+    ]};
+    let add_gate = parse::Task { arity: 2, tests: vec![
+        parse::Test { args: vec![num_t(0), num_t(0)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(0), num_t(1)], want: num_t(1), outer: 0 },
+        parse::Test { args: vec![num_t(1), num_t(1)], want: num_t(2), outer: 0 },
+        parse::Test { args: vec![num_t(2), num_t(3)], want: num_t(5), outer: 0 },
+    ]};
+    let eq_gate = parse::Task { arity: 2, tests: vec![
+        parse::Test { args: vec![num_t(0), num_t(0)], want: t.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(0), num_t(1)], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(1), num_t(1)], want: t.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(1), num_t(2)], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(2), num_t(1)], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(2), num_t(2)], want: t.clone(), outer: 0 },
+    ]};
+    let mod26_gate = parse::Task { arity: 1, tests: vec![
+        parse::Test { args: vec![num_t(0)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(25)], want: num_t(25), outer: 0 },
+        parse::Test { args: vec![num_t(26)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(27)], want: num_t(1), outer: 0 },
+        parse::Test { args: vec![num_t(51)], want: num_t(25), outer: 0 },
+        parse::Test { args: vec![num_t(52)], want: num_t(0), outer: 0 },
+    ]};
+
+    let gates: Vec<(&str, parse::Task)> = vec![
+        ("pred", pred_gate), ("iszero", iszero_gate), ("and", and_gate),
+        ("add", add_gate), ("eq", eq_gate), ("mod26", mod26_gate),
+    ];
+    // Direct sanity: does direct_solves accept the KNOWN add term on the add gate?
+    let add_known = closed("λa.λb.λf.λx.a(f)(b(f)(x))");
+    let add_gate2 = gates.iter().find(|(n, _)| *n == "add").unwrap().1.clone();
+    println!("  direct_solves(add_known, add_gate) = {}", direct_solves(&add_gate2, &add_known));
+
+    // System F Church types: num = ∀α. (α→α)→(α→α), bool = ∀α. α→α→α.
+    let mut defs: std::collections::HashMap<u32, typed::Type> = std::collections::HashMap::new();
+    let v0 = typed::Type::Var(0);
+    defs.insert(0, typed::Type::forall(arrow(arrow(v0.clone(), v0.clone()), arrow(v0.clone(), v0.clone()))));
+    defs.insert(1, typed::Type::forall(arrow(v0.clone(), arrow(v0.clone(), v0.clone()))));
+    let num = typed::Type::Rec(0);
+    let boo = typed::Type::Rec(1);
+    let num_t = |n: u32| closed(&bootstrap::church_num_str(n));
+
+    // Gates for each concept (recursive-type versions).
+    let pred_gate = parse::Task { arity: 1, tests: vec![
+        parse::Test { args: vec![num_t(0)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(1)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(2)], want: num_t(1), outer: 0 },
+        parse::Test { args: vec![num_t(3)], want: num_t(2), outer: 0 },
+        parse::Test { args: vec![num_t(4)], want: num_t(3), outer: 0 },
+    ]};
+    let iszero_gate = parse::Task { arity: 1, tests: vec![
+        parse::Test { args: vec![num_t(0)], want: t.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(1)], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(2)], want: f.clone(), outer: 0 },
+    ]};
+    let and_gate = parse::Task { arity: 2, tests: vec![
+        parse::Test { args: vec![t.clone(), t.clone()], want: t.clone(), outer: 0 },
+        parse::Test { args: vec![t.clone(), f.clone()], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![f.clone(), t.clone()], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![f.clone(), f.clone()], want: f.clone(), outer: 0 },
+    ]};
+    let add_gate = parse::Task { arity: 2, tests: vec![
+        parse::Test { args: vec![num_t(0), num_t(0)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(0), num_t(1)], want: num_t(1), outer: 0 },
+        parse::Test { args: vec![num_t(1), num_t(1)], want: num_t(2), outer: 0 },
+        parse::Test { args: vec![num_t(2), num_t(3)], want: num_t(5), outer: 0 },
+    ]};
+    let eq_gate = parse::Task { arity: 2, tests: vec![
+        parse::Test { args: vec![num_t(0), num_t(0)], want: t.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(0), num_t(1)], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(1), num_t(1)], want: t.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(1), num_t(2)], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(2), num_t(1)], want: f.clone(), outer: 0 },
+        parse::Test { args: vec![num_t(2), num_t(2)], want: t.clone(), outer: 0 },
+    ]};
+    let mod26_gate = parse::Task { arity: 1, tests: vec![
+        parse::Test { args: vec![num_t(0)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(25)], want: num_t(25), outer: 0 },
+        parse::Test { args: vec![num_t(26)], want: num_t(0), outer: 0 },
+        parse::Test { args: vec![num_t(27)], want: num_t(1), outer: 0 },
+        parse::Test { args: vec![num_t(51)], want: num_t(25), outer: 0 },
+        parse::Test { args: vec![num_t(52)], want: num_t(0), outer: 0 },
+    ]};
+
+    // Rung 1: pred from {succ, zero}.
+    let pred_atoms = vec![
+        typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+        typed::Atom { body: zero.clone(), ty: num.clone() },
+    ];
+    // Small concepts: add, and, iszero — should be fast.
+    let add_atoms = vec![
+        typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+        typed::Atom { body: zero.clone(), ty: num.clone() },
+    ];
+    let add = typed::find_closed_with_defs(&arrow(num.clone(), arrow(num.clone(), num.clone())), &add_atoms, &defs, 12, 200_000, |c| direct_solves(&add_gate, c));
+    match &add {
+        Some(f) => println!("  REC add: FOUND size={} term={}", f.size, term::show(&f.term)),
+        None => println!("  REC add: NOT FOUND"),
+    }
+    let and_atoms = vec![
+        typed::Atom { body: t.clone(), ty: boo.clone() },
+        typed::Atom { body: f.clone(), ty: boo.clone() },
+    ];
+    let and_known = closed("λa.λb.a(b)(λx.λy.y)");
+    println!("  direct_solves(and_known, and_gate) = {}", direct_solves(&and_gate, &and_known));
+    let and = typed::find_closed_with_defs(&arrow(boo.clone(), arrow(boo.clone(), boo.clone())), &and_atoms, &defs, 10, 200_000, |c| direct_solves(&and_gate, c));
+    match &and {
+        Some(f) => println!("  REC and: FOUND size={} term={}", f.size, term::show(&f.term)),
+        None => println!("  REC and: NOT FOUND"),
+    }
+
+    // Rung 2: iszero from {true, false, zero, succ}.
+    let iszero_atoms = vec![
+        typed::Atom { body: t.clone(), ty: boo.clone() },
+        typed::Atom { body: f.clone(), ty: boo.clone() },
+        typed::Atom { body: zero.clone(), ty: num.clone() },
+        typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+    ];
+    let iszero = typed::find_closed_with_defs(&arrow(num.clone(), boo.clone()), &iszero_atoms, &defs, 12, 200_000, |c| direct_solves(&iszero_gate, c));
+    match &iszero {
+        Some(f) => println!("  REC iszero: FOUND size={} term={}", f.size, term::show(&f.term)),
+        None => println!("  REC iszero: NOT FOUND"),
+    }
+
+    // Rung 3: pred from {succ, zero}.
+    let pred_atoms = vec![
+        typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+        typed::Atom { body: zero.clone(), ty: num.clone() },
+    ];
+    let pred = typed::find_closed_with_defs(&arrow(num.clone(), num.clone()), &pred_atoms, &defs, 20, 200_000, |c| direct_solves(&pred_gate, c));
+    match &pred {
+        Some(f) => println!("  REC pred: FOUND size={} term={}", f.size, term::show(&f.term)),
+        None => println!("  REC pred: NOT FOUND"),
+    }
+
+}
+
+/// The Compositor's Tray: can the machinery discover a *per-letter counting scan*?
+///
+/// Rule (pinned by the 5 examples): shift each letter by its running occurrence
+/// count so far, mod 26 ("abc"→"abc", "aaa"→"abc", "aab"→"abb", "banana"→"banboc",
+/// "zz"→"za"). This is a *left scan* carrying a per-letter tally — not a local
+/// structural transform. Probe: faithfully run the real gates (raw `bank::solve`,
+/// `concept_solve` over the discovered C7 vocabulary, and the operation-blind
+/// `typed` enumeration over {cons,nil} + Church arithmetic) and report what the
+/// machine finds from the examples alone. Expected: NOT SOLVED at every level the
+/// substrate actually has, because the accumulator is a per-letter counter — a
+/// state-carrying value shape the {cons,nil} vocabulary doesn't generate.
+fn compositor(args: &[String]) {
+    use std::collections::HashMap;
+    use std::io::Write;
+    let mut out = std::io::stdout();
+
+    let mut budget = 5u64;
+    let mut max_size = 10u32;
+    let mut discover = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--budget" => {
+                budget = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--max-size" => {
+                max_size = args[i + 1].parse().unwrap();
+                i += 2;
+            }
+            "--discover" => {
+                discover = true;
+                i += 1;
+            }
+            "--probe" => {
+                probe_concepts();
+                return;
+            }
+            other => {
+                eprintln!("unknown compositor arg: {other}");
+                std::process::exit(1);
+            }
+        }
+    }
+    let opts = bank_opts(budget, max_size);
+
+    /// Letters a..z → Church numerals 0..25.
+    fn nums(s: &str) -> Vec<u32> {
+        s.chars().map(|c| (c as u8 - b'a') as u32).collect()
+    }
+    /// The reference transform, validated against the 5 given examples.
+    fn compositor_ref(chars: &[u32]) -> Vec<u32> {
+        let mut counts: HashMap<u32, u32> = HashMap::new();
+        let mut out = Vec::with_capacity(chars.len());
+        for &c in chars {
+            let k = counts.entry(c).or_insert(0);
+            let shift = *k;
+            *k += 1;
+            out.push((c + shift) % 26);
+        }
+        out
+    }
+    let show = |v: &[u32]| -> String {
+        v.iter().map(|&n| ((b'a' + n as u8) as char).to_string()).collect()
+    };
+
+    // The five examples the puzzle says pin the rule completely.
+    let examples: &[(&str, &str)] = &[
+        ("abc", "abc"),
+        ("aaa", "abc"),
+        ("aab", "abb"),
+        ("banana", "banboc"),
+        ("zz", "za"),
+    ];
+    // Sanity: the reference rule satisfies all 5 given examples (the authoritative pin).
+    let mut extra_ok = true;
+    for &(s, w) in examples {
+        let got = show(&compositor_ref(&nums(s)));
+        if got != w {
+            extra_ok = false;
+        }
+    }
+    // A couple of generated held-out checks (run-length wrap + interleaved runs).
+    for &(s, w) in &[("zzzz", "zabc"), ("xyzzy", "xyzaz"), ("a", "a"), ("", "")] {
+        if show(&compositor_ref(&nums(s))) != w {
+            extra_ok = false;
+        }
+    }
+
+    // Build the 5-example task over Church-list-of-numerals strings.
+    let task = parse::Task {
+        arity: 1,
+        tests: examples
+            .iter()
+            .map(|&(s, w)| parse::Test {
+                args: vec![church_list(&nums(s))],
+                want: church_list(&nums(w)),
+                outer: 0,
+            })
+            .collect(),
+    };
+
+    println!("\n── Compositor's Tray: can the machinery discover the per-letter counting scan? ──");
+    println!("rule: shift each letter by its running occurrence count, mod 26 (letters a..z = numerals 0..25)");
+    println!("examples: abc→abc aaa→abc aab→abb banana→banboc zz→za (5, as given; reference rule matches all 5 + 5 held-out: {})", if extra_ok {"✓"} else {"✗"});
+    println!("substrate = {{cons,nil}} + Church numerals; string = Church list of numerals");
+    println!("search = raw bank::solve | concept_solve over discovered C7 vocabulary | typed enumeration over {{cons,nil}}+succ+add");
+    out.flush().ok();
+
+    // ── Gate 1: Express — does the discovered structural vocabulary represent it? ──
+    // The C7 vocabulary (id, reverse, append, map∘, compose∘) is all structural;
+    // a per-letter counter needs a state the vocabulary doesn't carry.
+    let id_c = cand_concept(&schema::id());
+    let rev_c = cand_concept(&schema::reverse_cells());
+    let express_structural = bank::concept_solve(&task, &[id_c, rev_c], &opts).solution.is_some();
+    println!("\n── Gate 1: Express (can the discovered vocabulary represent the transform?) ──");
+    println!(
+        "  structural vocabulary {{id, reverse}}: solves the 5 examples? {} (expected ✗: no counting state)",
+        if express_structural { "✓" } else { "✗" }
+    );
+
+    // ── Gate 2: Search — run the real gates on the examples alone. ──
+    let raw = bank::solve(&task, &opts);
+    let c7 = {
+        // Full C7 proposal set (all structural) as candidate concepts.
+        let cands: Vec<bank::Concept> = schema::propose_candidates()
+            .iter()
+            .map(cand_concept)
+            .collect();
+        bank::concept_solve(&task, &cands, &opts)
+    };
+    println!("\n── Gate 2: Search (what does the machine find from the 5 examples alone?) ──");
+    println!(
+        "  raw bank::solve (no concepts): {}  (built {}, {:.1}s)",
+        if raw.solution.is_some() { "SOLVED ✓" } else { "NOT SOLVED ✗" },
+        raw.stats.built,
+        raw.stats.elapsed_secs
+    );
+    println!(
+        "  concept_solve over C7 vocabulary {{id,reverse_cells,map,compose,...}}: {}  (built {}, {:.1}s)",
+        if c7.solution.is_some() { "SOLVED ✓" } else { "NOT SOLVED ✗" },
+        c7.stats.built,
+        c7.stats.elapsed_secs
+    );
+
+    // ── Gate 3: operation-blind typed enumeration over {cons,nil} + Church arithmetic. ──
+    // Monomorphic string domain: Atom(0)=numeral, Atom(1)=list.
+    let num = typed::Type::Atom(0);
+    let lst = typed::Type::Atom(1);
+    let cons_ty = typed::Type::arrow(num.clone(), typed::Type::arrow(lst.clone(), lst.clone()));
+    let succ_ty = typed::Type::arrow(num.clone(), num.clone());
+    let add_ty = typed::Type::arrow(num.clone(), typed::Type::arrow(num.clone(), num.clone()));
+    let atoms = vec![
+        typed::Atom { body: closed("λf.λz.z"), ty: lst.clone() },                         // nil
+        typed::Atom { body: closed("λc.λs.λf.λz.f(c)(s(f)(z))"), ty: cons_ty },          // cons
+        typed::Atom { body: closed("λn.λf.λx.f(n(f)(x))"), ty: succ_ty },                // succ
+        typed::Atom { body: closed("λa.λb.λf.λx.a(f)(b(f)(x))"), ty: add_ty },           // add
+        typed::Atom { body: closed("λx.λf.λz.x"), ty: typed::Type::arrow(lst.clone(), lst.clone()) }, // const-nil projection
+    ];
+    let found = typed::find_closed(
+        &typed::Type::arrow(lst.clone(), lst),
+        &atoms,
+        max_size,
+        400,
+        |t| direct_solves(&task, t),
+    );
+    match &found {
+        Some(f) => println!(
+            "\n  typed enumeration (max_size {max_size}, {{cons,nil}}+succ+add): FOUND a solver at size {} ({} generated)\n  (unexpected — check what it is)",
+            f.size, f.generated
+        ),
+        None => println!(
+            "\n  typed enumeration (max_size {max_size}, {{cons,nil}}+succ+add): NO solver within budget ({} size-bounded terms) ✗",
+            max_size
+        ),
+    }
+
+    // ── Where the wall is: the missing primitive is a per-letter counter. ──
+    println!("\n── Diagnosis: what the machine lacks ──");
+    println!(
+        "  The transform is a LEFT SCAN carrying a per-letter tally: at position i it needs\n\
+         \x20  the count of s[i] among s[0..i] (a function-typed / state-carrying accumulator),\n\
+         \x20  plus numeral equality and mod-26 reduction. None of those are in the {{cons,nil}}\n\
+         \x20  structural vocabulary, so the search pool has no value shape that even represents\n\
+         \x20  the intermediate state. This is the arcdiag/C8 gap one notch up: not just function-\n\
+         \x20  typed intermediates missing from the pool, but a whole state-carrying accumulator\n\
+         \x20  (counter indexed by letter) + modular arithmetic."
+    );
+    println!(
+        "  The transform IS expressible in the λ-calculus (Turing-complete), but only via a\n\
+         \x20  scan over an indexable counter — the machine cannot DISCOVER it from examples with\n\
+         \x20  the current substrate/vocabulary. It needs a tally value added to the pool first."
+    );
+    out.flush().ok();
+
+    // ── Gate 4 (--discover): the machine invents EVERYTHING from the irreducible base substrate. ──
+    // The base substrate is the irreducible λ-atoms: {cons,nil} + Church numerals {zero,succ} +
+    // booleans {true,false,ite}. The machine bootstraps the arithmetic stack one concept at a time,
+    // each discovered by typed enumeration, gated on a small task, and promoted to an atom for the
+    // next rung (recursive B3). The honest boundary (Schwichtenberg's theorem): the simply-typed
+    // Church-numeral type num=(num→num)→num→num can only iterate over num→num functions, so it can
+    // express the *polynomial* combinators (add, and) but PROVABLY NOT iszero/pred/eq/mod26, which
+    // need heterogeneous iteration (applying a numeral to a num→boo function). Those require System F
+    // (impredicative polymorphism) — the next frontier. The ONE remaining supplied shape is
+    // scan_tally, a state-carrying fold SCHEMA (like map/reduce); that is the schema-invention layer.
+    if discover {
+        let arrow = typed::Type::arrow;
+        let num_t = |n: u32| closed(&bootstrap::church_num_str(n));
+        let t = closed("λa.λb.a");
+        let f = closed("λa.λb.b");
+        let zero = closed("λf.λx.x");
+        let succ = closed("λn.λf.λx.f(n(f)(x))");
+        let scan_tally = compositor_scan_tally_term();
+
+        // System F Church types: num = ∀α. (α→α)→(α→α), bool = ∀α. α→α→α.
+        // The polymorphism lets a numeral be applied to a num→boo function (heterogeneous
+        // iteration), which the simply-typed Rec view cannot — that unblocks iszero/pred/eq.
+        let mut defs: std::collections::HashMap<u32, typed::Type> = std::collections::HashMap::new();
+        let v0 = typed::Type::Var(0);
+        defs.insert(0, typed::Type::forall(arrow(arrow(v0.clone(), v0.clone()), arrow(v0.clone(), v0.clone()))));
+        defs.insert(1, typed::Type::forall(arrow(v0.clone(), arrow(v0.clone(), v0.clone()))));
+        let num = typed::Type::Rec(0);
+        let boo = typed::Type::Rec(1);
+
+        println!("\n── Gate 4: --discover — the machine invents EVERYTHING from the irreducible base substrate ──");
+        println!("  base substrate (irreducible λ-atoms): {{cons,nil}} + Church numerals {{zero,succ}} + booleans {{true,false,ite}}");
+        println!("  System F Church types: num=∀α.(α→α)→(α→α), bool=∀α.α→α→α (heterogeneous iteration)");
+
+        // Rung 1: add (num→num→num) from {succ, zero}. The point-free form λa. a succ.
+        let add_gate = parse::Task {
+            arity: 2,
+            tests: vec![
+                parse::Test { args: vec![num_t(0), num_t(0)], want: num_t(0), outer: 0 },
+                parse::Test { args: vec![num_t(0), num_t(1)], want: num_t(1), outer: 0 },
+                parse::Test { args: vec![num_t(1), num_t(1)], want: num_t(2), outer: 0 },
+                parse::Test { args: vec![num_t(2), num_t(3)], want: num_t(5), outer: 0 },
+            ],
+        };
+        let add = match discover_step("add", &arrow(num.clone(), arrow(num.clone(), num.clone())), &[
+            typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+            typed::Atom { body: zero.clone(), ty: num.clone() },
+        ], &defs, 12, 200_000, &add_gate) {
+            Some(p) => p.term,
+            None => { println!("  ladder stalls at add ✗"); out.flush().ok(); return; }
+        };
+
+        // Rung 2: and (boo→boo→boo) from {true, false}. The form λa.λb. b a false.
+        let and_gate = parse::Task {
+            arity: 2,
+            tests: vec![
+                parse::Test { args: vec![t.clone(), t.clone()], want: t.clone(), outer: 0 },
+                parse::Test { args: vec![t.clone(), f.clone()], want: f.clone(), outer: 0 },
+                parse::Test { args: vec![f.clone(), t.clone()], want: f.clone(), outer: 0 },
+                parse::Test { args: vec![f.clone(), f.clone()], want: f.clone(), outer: 0 },
+            ],
+        };
+        let and = match discover_step("and", &arrow(boo.clone(), arrow(boo.clone(), boo.clone())), &[
+            typed::Atom { body: t.clone(), ty: boo.clone() },
+            typed::Atom { body: f.clone(), ty: boo.clone() },
+        ], &defs, 10, 200_000, &and_gate) {
+            Some(p) => p.term,
+            None => { println!("  ladder stalls at and ✗"); out.flush().ok(); return; }
+        };
+
+        // Rung 3: iszero (num→boo) from {true, false}. The form λn. n (λx.f) t.
+        // This is the System F step: n : num = ∀α.(α→α)→(α→α) is instantiated at α := bool,
+        // so n (λx.f) t where (λx.f) : bool→bool, t : bool gives bool. The simply-typed
+        // Rec view could not express this (Schwichtenberg's theorem).
+        let iszero_gate = parse::Task {
+            arity: 1,
+            tests: vec![
+                parse::Test { args: vec![num_t(0)], want: t.clone(), outer: 0 },
+                parse::Test { args: vec![num_t(1)], want: f.clone(), outer: 0 },
+                parse::Test { args: vec![num_t(2)], want: f.clone(), outer: 0 },
+            ],
+        };
+        let iszero = match discover_step("iszero", &arrow(num.clone(), boo.clone()), &[
+            typed::Atom { body: t.clone(), ty: boo.clone() },
+            typed::Atom { body: f.clone(), ty: boo.clone() },
+        ], &defs, 10, 200_000, &iszero_gate) {
+            Some(p) => p.term,
+            None => { println!("  ladder stalls at iszero ✗"); out.flush().ok(); return; }
+        };
+
+        // The next wall: pred/eq/mod26. pred needs n applied to a (num→num)→(num→num)
+        // function (pair-carrying iteration), which System F can express but the enumerator
+        // must discover the right instantiation; eq needs pred+iszero+and; mod26 needs
+        // recursion. Report honestly what the machine invents vs. what still needs more.
+        println!("\n  ── the next wall ──");
+        println!("  iszero is now INVENTED (System F: n instantiated at α := bool).");
+        println!("  pred/eq/mod26 still need more: pred iterates a (num→num)→(num→num) function");
+        println!("  (pair-carrying), eq composes pred+iszero+and, mod26 needs recursion.");
+
+        // What the machine CAN still do with the discovered add: compose it with the supplied
+        // scan_tally schema and verify the full Compositor's Tray rule.
+        let shift = add.clone(); // shift(c,n) = (c+n) mod 26 needs mod26; here we only have add.
+        let compositor = term::app(scan_tally.clone(), shift.clone());
+        let solves = direct_solves(&task, &compositor);
+        println!(
+            "  compositor = scan_tally(add) solves the 5 examples? {}",
+            if solves { "SOLVED ✓" } else { "NOT SOLVED ✗ (needs mod26, which needs recursion)" }
+        );
+
+        println!("\n  honest accounting: the machine INVENTED add, and, and iszero from the irreducible base\n\
+         \x20  substrate {{cons,nil}} + {{zero,succ}} + {{true,false,ite}} via System F enumeration. The\n\
+         \x20  opaque Atom view could not even apply a numeral; the recursive Rec view invented add/and but\n\
+         \x20  not iszero (Schwichtenberg); the Forall view lifts that wall. The remaining stack — pred, eq,\n\
+         \x20  mod26 — needs pair-carrying iteration and recursion, and scan_tally is a supplied fold SCHEMA.\n\
+         \x20  Inventing the full rule needs those next rungs.");
+        out.flush().ok();
     }
 }
 

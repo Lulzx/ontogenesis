@@ -13,11 +13,27 @@ use std::rc::Rc;
 pub enum Type {
     Atom(u32),
     Arrow(Box<Type>, Box<Type>),
+    /// Reference to a (possibly recursive) type definition in the `defs` map.
+    /// Used to give Church numerals their true type `num = (num→num)→num→num`,
+    /// so the enumerator can apply a numeral as a function (which the opaque
+    /// `Atom` view cannot). `Rec(i)` expands to `defs[i]` during enumeration.
+    Rec(u32),
+    /// Type variable (de Bruijn index, bound by the nearest enclosing `Forall`).
+    Var(u32),
+    /// Universal quantification `∀α. body` where `α = Var(0)` in `body`.
+    /// This is the System F step: a polymorphic Church numeral `num = ∀α. (α→α)→(α→α)`
+    /// can be applied to a `num→boo` function (heterogeneous iteration), which the
+    /// simply-typed `Rec` view cannot — that is what unblocks iszero/pred/eq/mod26.
+    Forall(Box<Type>),
 }
 
 impl Type {
     pub fn arrow(a: Type, b: Type) -> Type {
         Type::Arrow(Box::new(a), Box::new(b))
+    }
+
+    pub fn forall(body: Type) -> Type {
+        Type::Forall(Box::new(body))
     }
 }
 
@@ -54,10 +70,12 @@ struct Key {
 
 struct Enumerator<'a> {
     atoms: &'a [Atom],
+    defs: &'a HashMap<u32, Type>,
     memo: HashMap<Key, Vec<Rc<Term>>>,
     generated: u64,
     per_cell_cap: usize,
     truncated: bool,
+    rec_calls: u64,
 }
 
 /// Search closed beta-normal terms by increasing syntax size.
@@ -66,14 +84,28 @@ pub fn find_closed(
     atoms: &[Atom],
     max_size: u32,
     per_cell_cap: usize,
+    accepts: impl FnMut(&Rc<Term>) -> bool,
+) -> Option<Found> {
+    find_closed_with_defs(target, atoms, &HashMap::new(), max_size, per_cell_cap, accepts)
+}
+
+/// `find_closed` with a map of recursive type definitions (see [`Type::Rec`]).
+pub fn find_closed_with_defs(
+    target: &Type,
+    atoms: &[Atom],
+    defs: &HashMap<u32, Type>,
+    max_size: u32,
+    per_cell_cap: usize,
     mut accepts: impl FnMut(&Rc<Term>) -> bool,
 ) -> Option<Found> {
     let mut e = Enumerator {
         atoms,
+        defs,
         memo: HashMap::new(),
         generated: 0,
         per_cell_cap,
         truncated: false,
+        rec_calls: 0,
     };
     for size in 1..=max_size {
         for candidate in e.terms(target, &[], size) {
@@ -99,12 +131,25 @@ pub fn enumerate_closed(
     max_size: u32,
     per_cell_cap: usize,
 ) -> Enumeration {
+    enumerate_closed_with_defs(target, atoms, &HashMap::new(), max_size, per_cell_cap)
+}
+
+/// `enumerate_closed` with a map of recursive type definitions (see [`Type::Rec`]).
+pub fn enumerate_closed_with_defs(
+    target: &Type,
+    atoms: &[Atom],
+    defs: &HashMap<u32, Type>,
+    max_size: u32,
+    per_cell_cap: usize,
+) -> Enumeration {
     let mut e = Enumerator {
         atoms,
+        defs,
         memo: HashMap::new(),
         generated: 0,
         per_cell_cap,
         truncated: false,
+        rec_calls: 0,
     };
     let mut terms = Vec::new();
     let mut seen = HashSet::new();
@@ -134,10 +179,23 @@ impl Enumerator<'_> {
         if let Some(found) = self.memo.get(&key) {
             return found.clone();
         }
+        // DEBUG: detect runaway recursion on recursive types.
+        if let Type::Rec(i) = target {
+            self.rec_calls += 1;
+            if self.rec_calls > 5_000_000 {
+                panic!("typed: runaway Rec({i}) expansion at size {size}, context len {}", context.len());
+            }
+        }
 
         let mut out = Vec::new();
         let mut seen = HashSet::new();
-        if let Type::Arrow(arg, result) = target {
+        // Expand a recursive type reference to its definition before generating.
+        let expanded: Option<Type> = match target {
+            Type::Rec(i) => self.defs.get(i).cloned(),
+            _ => None,
+        };
+        let effective = expanded.as_ref().unwrap_or(target);
+        if let Type::Arrow(arg, result) = effective {
             if size >= 2 {
                 let mut inner = context.to_vec();
                 inner.push((**arg).clone());
@@ -166,7 +224,7 @@ impl Enumerator<'_> {
         );
 
         for (head, head_ty) in heads {
-            if let Some(args) = arguments_to(head_ty, target) {
+            for args in arguments_to(head_ty, target, self.defs) {
                 let overhead = 1 + args.len() as u32;
                 if size < overhead + args.len() as u32 {
                     continue;
@@ -218,20 +276,107 @@ impl Enumerator<'_> {
     }
 }
 
-fn arguments_to(mut ty: Type, target: &Type) -> Option<Vec<Type>> {
+/// Reserved index for the meta-variable introduced when instantiating a `Forall`.
+const META: u32 = u32::MAX;
+
+/// Replace `Var(var)` with `replacement` throughout `ty`.
+fn subst(ty: &Type, var: u32, replacement: &Type) -> Type {
+    match ty {
+        Type::Var(i) if *i == var => replacement.clone(),
+        Type::Arrow(a, b) => Type::arrow(subst(a, var, replacement), subst(b, var, replacement)),
+        Type::Forall(b) => Type::forall(subst(b, var, replacement)),
+        other => other.clone(),
+    }
+}
+
+/// Find `σ` such that `ty[Var(META) := σ] == target`. Returns `Some(σ)` or `None`.
+/// `ty` may contain the meta-variable `Var(META)` (from a `Forall` instantiation);
+/// concrete types must match `target` exactly. This is the small unification step
+/// that lets a polymorphic head (e.g. a Church numeral) be applied at the target type.
+fn solve(ty: &Type, target: &Type) -> Option<Type> {
+    match ty {
+        Type::Var(i) if *i == META => Some(target.clone()),
+        Type::Arrow(a, b) => {
+            if let Type::Arrow(ta, tb) = target {
+                let sa = solve(a, ta)?;
+                let sb = solve(b, tb)?;
+                if sa == sb {
+                    Some(sa)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        other => {
+            if other == target {
+                Some(other.clone())
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// All ways to apply a head of type `ty` to reach `target`, as argument-type lists.
+/// A recursive type (e.g. `Rec(1) = Rec(1)→Rec(1)→Rec(1)`) can be used as-is (0 args)
+/// OR applied to 2 args to reach itself again, so there can be several arg-lists.
+/// A polymorphic type (`Forall`) is instantiated at the target via `solve`, which is
+/// what lets a Church numeral `num = ∀α. (α→α)→(α→α)` be applied to a `num→boo`
+/// function (iszero) or a `num→num` function (add). The arg-list length is capped
+/// (the size budget bounds feasible applications anyway).
+fn arguments_to(mut ty: Type, target: &Type, defs: &HashMap<u32, Type>) -> Vec<Vec<Type>> {
+    let mut results = Vec::new();
+    let mut seen = HashSet::new();
     let mut args = Vec::new();
+    let mut rec_expansions = 0u32;
     loop {
-        if &ty == target {
-            return Some(args);
+        // Can the current type (possibly with a meta-variable from a Forall) be
+        // unified with the target? If so, record the concrete arg-list.
+        if let Some(sigma) = solve(&ty, target) {
+            let concrete: Vec<Type> = args.iter().map(|a| subst(a, META, &sigma)).collect();
+            if seen.insert(concrete.clone()) {
+                results.push(concrete);
+            }
+            // Reached the target via a non-recursive, non-polymorphic type: no
+            // further application is possible.
+            if !matches!(ty, Type::Rec(_) | Type::Forall(_)) {
+                break;
+            }
+        }
+        if args.len() >= 4 {
+            break;
         }
         match ty {
             Type::Arrow(a, b) => {
                 args.push(*a);
                 ty = *b;
             }
-            Type::Atom(_) => return None,
+            Type::Atom(_) => break,
+            Type::Rec(i) => {
+                // Expand a recursive reference. Cap the number of expansions: a regular
+                // recursive type (e.g. Church numerals) needs only a bounded number of
+                // unfoldings to reach any target, and an unreachable target would
+                // otherwise loop forever (Rec → Arrow(Arrow(Rec,Rec), Arrow(Rec,Rec)) → Rec).
+                rec_expansions += 1;
+                if rec_expansions > 100 {
+                    break;
+                }
+                match defs.get(&i) {
+                    Some(d) if *d != Type::Rec(i) => ty = d.clone(),
+                    _ => break,
+                }
+            }
+            Type::Forall(body) => {
+                // Instantiate the bound variable at the meta-variable; the walk
+                // then solves for it against the target.
+                ty = subst(&body, 0, &Type::Var(META));
+            }
+            Type::Var(_) => break,
         }
     }
+    results
 }
 
 fn positive_compositions(total: u32, parts: usize) -> Vec<Vec<u32>> {
