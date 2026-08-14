@@ -1,9 +1,10 @@
-//! Small simply-typed, beta-normal proposal enumeration.
+//! Small typed beta-normal proposal enumeration plus explicit compositional search.
 //!
 //! Types prune meaningless applications; they do not encode target operations.
 //! The same generator searches for any requested interface from the currently
 //! acquired atoms.  In particular it contains no productions named map,
-//! reverse, append, fold, or reduce.
+//! reverse, append, fold, or reduce. System F instantiation and the optional
+//! Church-fold decomposition are represented explicitly in types/search APIs.
 
 use crate::term::{self, Term};
 use std::collections::{HashMap, HashSet};
@@ -59,6 +60,142 @@ pub struct Enumeration {
     pub per_cell_cap: usize,
     /// At least one otherwise-new inhabitant may have been excluded by a cap.
     pub truncated: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChurchFoldFound {
+    pub term: Rc<Term>,
+    pub size: u32,
+    /// Terms generated while enumerating the three component spaces.
+    pub generated: u64,
+    /// Fully assembled candidates checked against the end-to-end gate.
+    pub assembled: u64,
+    /// Whether any component cell hit its cap.
+    pub truncated: bool,
+}
+
+/// Goal-directed search for a Church-iterator program. The search receives
+/// only the accumulator decomposition (projection, transition builder, seed
+/// builder), enumerates all three closed component spaces independently, and
+/// checks their assemblies against the original end-to-end gate. It receives
+/// no behavioral oracle for an individual component.
+pub fn find_church_fold_with_defs(
+    project_type: &Type,
+    step_builder_type: &Type,
+    seed_builder_type: &Type,
+    component_atoms: [&[Atom]; 3],
+    defs: &HashMap<u32, Type>,
+    component_max_sizes: [u32; 3],
+    per_cell_cap: usize,
+    mut accepts: impl FnMut(&Rc<Term>) -> bool,
+) -> Option<ChurchFoldFound> {
+    let projects = enumerate_closed_with_defs(
+        project_type,
+        component_atoms[0],
+        defs,
+        component_max_sizes[0],
+        per_cell_cap,
+    );
+    let steps = enumerate_closed_with_defs(
+        step_builder_type,
+        component_atoms[1],
+        defs,
+        component_max_sizes[1],
+        per_cell_cap,
+    );
+    let seeds = enumerate_closed_with_defs(
+        seed_builder_type,
+        component_atoms[2],
+        defs,
+        component_max_sizes[2],
+        per_cell_cap,
+    );
+    let generated = projects.generated + steps.generated + seeds.generated;
+    let truncated = projects.truncated || steps.truncated || seeds.truncated;
+
+    let mut candidates = Vec::new();
+    for (project_index, project) in projects.terms.iter().enumerate() {
+        for (step_index, step) in steps.terms.iter().enumerate() {
+            for (seed_index, seed) in seeds.terms.iter().enumerate() {
+                if let Some(term) = church_fold_candidate(project.clone(), step.clone(), seed.clone()) {
+                    candidates.push((term.size(), project_index, step_index, seed_index, term));
+                }
+            }
+        }
+    }
+    candidates.sort_by_key(|(size, project, step, seed, _)| (*size, *project, *step, *seed));
+
+    for (index, (size, _, _, _, term)) in candidates.into_iter().enumerate() {
+        if accepts(&term) {
+            return Some(ChurchFoldFound {
+                term,
+                size,
+                generated,
+                assembled: index as u64 + 1,
+                truncated,
+            });
+        }
+    }
+    None
+}
+
+/// Assemble a three-argument Church fold from independently synthesized,
+/// closed components:
+///
+/// `\u{3bb}n.\u{3bb}f.\u{3bb}x. project (n (step_builder f) (seed_builder x))`.
+///
+/// The two builder applications are beta-contracted while `Prim` nodes remain
+/// opaque.  This is important for compositional search accounting: acquired
+/// atoms keep cost one, but the helper lambdas introduced solely to make the
+/// subgoals closed disappear from the assembled beta-normal candidate.
+pub fn church_fold_candidate(
+    project: Rc<Term>,
+    step_builder: Rc<Term>,
+    seed_builder: Rc<Term>,
+) -> Option<Rc<Term>> {
+    let step = beta_apply_preserving_prims(&step_builder, term::var(1))?;
+    let seed = beta_apply_preserving_prims(&seed_builder, term::var(0))?;
+    let folded = term::app(term::app(term::var(2), step), seed);
+    let projected = beta_apply_preserving_prims(&project, folded.clone())
+        .unwrap_or_else(|| term::app(project, folded));
+    Some(term::lam(term::lam(term::lam(projected))))
+}
+
+/// Contract one beta redex without expanding acquired primitives.
+fn beta_apply_preserving_prims(function: &Rc<Term>, argument: Rc<Term>) -> Option<Rc<Term>> {
+    let Term::Lam(body) = function.as_ref() else {
+        return None;
+    };
+    Some(substitute_outer_binder(body, &argument, 0))
+}
+
+fn substitute_outer_binder(term: &Rc<Term>, argument: &Rc<Term>, depth: u32) -> Rc<Term> {
+    match term.as_ref() {
+        Term::Var(i) if *i == depth => shift_free_indices(argument, depth, 0),
+        Term::Var(i) if *i > depth => term::var(i - 1),
+        Term::Var(i) => term::var(*i),
+        Term::Free(i) => Rc::new(Term::Free(*i)),
+        Term::Prim(body) => Rc::new(Term::Prim(body.clone())),
+        Term::Lam(body) => term::lam(substitute_outer_binder(body, argument, depth + 1)),
+        Term::App(function, arg) => term::app(
+            substitute_outer_binder(function, argument, depth),
+            substitute_outer_binder(arg, argument, depth),
+        ),
+    }
+}
+
+fn shift_free_indices(term: &Rc<Term>, amount: u32, cutoff: u32) -> Rc<Term> {
+    match term.as_ref() {
+        Term::Var(i) if *i >= cutoff => term::var(i + amount),
+        Term::Var(i) => term::var(*i),
+        Term::Free(i) => Rc::new(Term::Free(*i)),
+        Term::Prim(body) => Rc::new(Term::Prim(body.clone())),
+        Term::Lam(body) => term::lam(shift_free_indices(body, amount, cutoff + 1)),
+        Term::App(function, arg) => term::app(
+            shift_free_indices(function, amount, cutoff),
+            shift_free_indices(arg, amount, cutoff),
+        ),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -453,5 +590,70 @@ mod tests {
         assert!(capped.truncated);
         assert_eq!(capped.terms, capped_replay.terms);
         assert_eq!(capped.generated, capped_replay.generated);
+    }
+
+    #[test]
+    fn church_fold_composition_contracts_builders_but_preserves_atoms() {
+        let project_body = term::lam(term::var(0));
+        let project = Rc::new(Term::Prim(project_body.clone()));
+        let step_atom = Rc::new(Term::Prim(term::lam(term::var(0))));
+        let seed_atom = Rc::new(Term::Prim(term::lam(term::var(0))));
+        let step_builder = term::lam(term::lam(term::app(step_atom.clone(), term::var(0))));
+        let seed_builder = term::lam(term::app(seed_atom.clone(), term::var(0)));
+
+        let candidate = church_fold_candidate(project.clone(), step_builder, seed_builder).unwrap();
+        assert_eq!(candidate.size(), 15);
+        assert_eq!(
+            candidate,
+            term::lam(term::lam(term::lam(term::app(
+                project,
+                term::app(
+                    term::app(
+                        term::var(2),
+                        term::lam(term::app(step_atom, term::var(0))),
+                    ),
+                    term::app(seed_atom, term::var(0)),
+                ),
+            ))))
+        );
+    }
+
+    #[test]
+    fn goal_directed_church_fold_enumerates_components_before_assembly() {
+        let f = Type::Atom(0);
+        let x = Type::Atom(1);
+        let state = Type::Atom(2);
+        let output = Type::Atom(3);
+        let project_body = term::lam(term::var(0));
+        let step_body = term::lam(term::lam(term::var(0)));
+        let seed_body = term::lam(term::var(0));
+        let project_atoms = [Atom {
+            body: project_body,
+            ty: Type::arrow(state.clone(), output.clone()),
+        }];
+        let step_atoms = [Atom {
+            body: step_body,
+            ty: Type::arrow(f.clone(), Type::arrow(state.clone(), state.clone())),
+        }];
+        let seed_atoms = [Atom {
+            body: seed_body,
+            ty: Type::arrow(x.clone(), state.clone()),
+        }];
+
+        let found = find_church_fold_with_defs(
+            &Type::arrow(state.clone(), output),
+            &Type::arrow(f, Type::arrow(state.clone(), state.clone())),
+            &Type::arrow(x, state),
+            [&project_atoms, &step_atoms, &seed_atoms],
+            &HashMap::new(),
+            [4, 7, 4],
+            100,
+            |_| true,
+        )
+        .unwrap();
+
+        assert_eq!(found.assembled, 1);
+        assert!(!found.truncated);
+        assert!(found.generated > 0);
     }
 }

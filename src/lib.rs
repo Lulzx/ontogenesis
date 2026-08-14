@@ -15,7 +15,8 @@
 //! - [`transform`]: generic program-transformation meta-search (context abstraction
 //!   + composition) — the machinery that invents primitives by restructuring code.
 //! - [`recurrence`]: generic invariant-context induction across finite unrollings.
-//! - [`typed`]: operation-blind simply-typed beta-normal proposal enumeration.
+//! - [`typed`]: typed beta-normal proposal enumeration, System F instantiation,
+//!   and explicit goal-directed Church-fold composition.
 //! - [`fixpoint`]: pure-lambda fixed-point and mutual-recursion synthesis.
 //! - [`recursion_search`]: fair universal search for recursive functionals.
 //! - [`representation`]: invention of anonymous data encodings and eliminators.

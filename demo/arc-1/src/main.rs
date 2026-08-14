@@ -856,7 +856,7 @@ fn compositor(args: &[String]) {
     );
     out.flush().ok();
 
-    // ── Gate 4 (--discover): the machine invents EVERYTHING from the irreducible base substrate. ──
+    // ── Gate 4 (--discover): bootstrap the arithmetic ladder with explicit provenance. ──
     // The base substrate is the irreducible λ-atoms: {cons,nil} + Church numerals {zero,succ} +
     // booleans {true,false,ite}. The machine bootstraps the arithmetic stack one concept at a time,
     // each discovered by typed enumeration, gated on a small task, and promoted to an atom for the
@@ -890,7 +890,7 @@ fn compositor(args: &[String]) {
         defs.insert(2, typed::Type::forall(arrow(arrow(num.clone(), arrow(num.clone(), v0.clone())), v0.clone())));
         let pair_ty = typed::Type::Rec(2);
 
-        println!("\n── Gate 4: --discover — the machine invents EVERYTHING from the irreducible base substrate ──");
+        println!("\n── Gate 4: --discover — arithmetic bootstrap with explicit provenance ──");
         println!("  base substrate (irreducible λ-atoms): {{cons,nil}} + Church numerals {{zero,succ}} + booleans {{true,false,ite}}");
         println!("  System F Church types: num=∀α.(α→α)→(α→α), bool=∀α.α→α→α (heterogeneous iteration)");
 
@@ -997,13 +997,10 @@ fn compositor(args: &[String]) {
             None => { println!("  ladder stalls at snd ✗"); out.flush().ok(); return; }
         };
 
-        // Rung 7: pred (num→num) from {pair, fst, snd}. The pair-carrying iteration
-        // pred = λn.λf.λx. fst(n(λp.pair(snd p)(f(snd p)))(pair x x)), with n instantiated at
-        // α := num×num. This is the rung the Kleene pred could NOT reach (not typable in System F).
-        // BUT it is a SEARCH wall, not a typing wall: pred has size 25, and the brute-force
-        // enumeration of num→num at size 25 explodes (millions of terms, per-cell cap truncates
-        // before pred is reached). Verified: even with only {pair,fst,snd} atoms and cap 2M,
-        // max_size 25, pred is not generated. So pred is typable but not brute-force discoverable.
+        // Rung 7: pred (num→num) from {pair, fst, snd}. Blind enumeration remains a documented
+        // cap-truncated search wall through size 25. Cross it compositionally: synthesize the independently testable
+        // transition and seed, then let the generic Church-fold constructor wire those closed
+        // components to the already-discovered projection. No spelling of pred is supplied.
         let pred_gate = parse::Task {
             arity: 1,
             tests: vec![
@@ -1012,28 +1009,100 @@ fn compositor(args: &[String]) {
                 parse::Test { args: vec![num_t(2)], want: num_t(1), outer: 0 },
                 parse::Test { args: vec![num_t(3)], want: num_t(2), outer: 0 },
                 parse::Test { args: vec![num_t(4)], want: num_t(3), outer: 0 },
+                parse::Test { args: vec![num_t(6)], want: num_t(5), outer: 0 },
+                parse::Test { args: vec![num_t(8)], want: num_t(7), outer: 0 },
             ],
         };
-        let pred = match discover_step("pred", &arrow(num.clone(), num.clone()), &[
-            typed::Atom { body: pair.clone(), ty: arrow(num.clone(), arrow(num.clone(), pair_ty.clone())) },
-            typed::Atom { body: fst.clone(), ty: arrow(pair_ty.clone(), num.clone()) },
-            typed::Atom { body: snd.clone(), ty: arrow(pair_ty.clone(), num.clone()) },
-        ], &defs, 25, 2_000_000, &pred_gate) {
-            Some(p) => p.term,
-            None => {
-                println!("  pred: SEARCH WALL ✗ (typable via pair-carrying iteration, but size-25 term is\n\
-                 \x20  beyond brute-force enumeration — the num→num space at size 25 explodes and the\n\
-                 \x20  per-cell cap truncates before pred is reached)");
-                out.flush().ok();
-                return;
-            }
-        };
 
-        // The next wall: eq/mod26. eq composes pred+iszero+and; mod26 needs recursion.
+        let pair_atom = typed::Atom { body: pair.clone(), ty: arrow(num.clone(), arrow(num.clone(), pair_ty.clone())) };
+        let fst_atom = typed::Atom { body: fst.clone(), ty: arrow(pair_ty.clone(), num.clone()) };
+        let snd_atom = typed::Atom { body: snd.clone(), ty: arrow(pair_ty.clone(), num.clone()) };
+        let project_atoms = [fst_atom, snd_atom.clone()];
+        let step_atoms = [pair_atom.clone(), snd_atom];
+        let seed_atoms = [pair_atom];
+        let pred_found = match typed::find_church_fold_with_defs(
+            &arrow(pair_ty.clone(), num.clone()),
+            &arrow(arrow(num.clone(), num.clone()), arrow(pair_ty.clone(), pair_ty.clone())),
+            &arrow(num.clone(), pair_ty.clone()),
+            [&project_atoms, &step_atoms, &seed_atoms],
+            &defs,
+            [4, 12, 6],
+            500_000,
+            |candidate| direct_solves(&pred_gate, candidate),
+        ) {
+            Some(found) => found,
+            None => { println!("  compositional ladder stalls at pred ✗"); out.flush().ok(); return; }
+        };
+        let pred = pred_found.term;
+        println!(
+            "  COMPOSE pred = {}  (size {}, {} component terms generated, {} assemblies checked, truncated={}) ✓",
+            term::show(&pred),
+            pred_found.size,
+            pred_found.generated,
+            pred_found.assembled,
+            pred_found.truncated,
+        );
+
+        // Rung 8: enumerate every small directional relation from pred+iszero. For each
+        // one, promote it provisionally and run ordinary typed enumeration with `and`;
+        // only the end-to-end equality gate selects the retained decomposition.
+        let directions = typed::enumerate_closed_with_defs(
+            &arrow(num.clone(), arrow(num.clone(), boo.clone())),
+            &[
+                typed::Atom { body: pred.clone(), ty: arrow(num.clone(), num.clone()) },
+                typed::Atom { body: iszero.clone(), ty: arrow(num.clone(), boo.clone()) },
+            ],
+            &defs,
+            9,
+            200_000,
+        );
+
+        let eq_gate = parse::Task {
+            arity: 2,
+            tests: (0..=7).flat_map(|a| (0..=7).map(move |b| (a, b))).map(|(a, b)| parse::Test {
+                args: vec![num_t(a), num_t(b)],
+                want: if a == b { t.clone() } else { f.clone() },
+                outer: 0,
+            }).collect(),
+        };
+        let mut eq_generated = directions.generated;
+        let mut eq_truncated = directions.truncated;
+        let mut eq = None;
+        for direction in &directions.terms {
+            let candidates = typed::enumerate_closed_with_defs(
+                &arrow(num.clone(), arrow(num.clone(), boo.clone())),
+                &[
+                    typed::Atom { body: direction.clone(), ty: arrow(num.clone(), arrow(num.clone(), boo.clone())) },
+                    typed::Atom { body: and.clone(), ty: arrow(boo.clone(), arrow(boo.clone(), boo.clone())) },
+                ],
+                &defs,
+                15,
+                500_000,
+            );
+            eq_generated += candidates.generated;
+            eq_truncated |= candidates.truncated;
+            if let Some(found) = candidates.terms.into_iter().find(|candidate| direct_solves(&eq_gate, candidate)) {
+                eq = Some((direction.clone(), found));
+                break;
+            }
+        }
+        let Some((direction, eq)) = eq else {
+            println!("  compositional ladder stalls at eq ✗");
+            out.flush().ok();
+            return;
+        };
+        println!(
+            "  COMPOSE eq = {}  (size {}, {} generated, truncated={}; retained direction={}) ✓",
+            term::show(&eq), eq.size(), eq_generated, eq_truncated, term::show(&direction),
+        );
+
+        // The next wall is now recursion: mod26 cannot be obtained by finite System F iteration
+        // over an input-independent bound.
         println!("\n  ── the next wall ──");
-        println!("  pred is typable (pair-carrying iteration over num×num = ∀α.(num→num→α)→α) but is a\n\
-         \x20  SEARCH wall: the size-25 term is beyond brute-force enumeration.");
-        println!("  eq/mod26 still need more: eq composes pred+iszero+and, mod26 needs recursion.");
+        println!("  pred's blind search remains cap-truncated through size 25; goal-directed decomposition\n\
+         \x20  finds a smaller size-24 witness (it uses the pair directly as an eliminator)." );
+        println!("  eq is now discovered compositionally from pred+iszero+and.");
+        println!("  mod26 remains: it needs recursion (or an independently justified bounded domain).\n  eq witness: {}", term::show(&eq));
 
         // What the machine CAN still do with the discovered add: compose it with the supplied
         // scan_tally schema and verify the full Compositor's Tray rule.
@@ -1045,16 +1114,19 @@ fn compositor(args: &[String]) {
             if solves { "SOLVED ✓" } else { "NOT SOLVED ✗ (needs mod26, which needs recursion)" }
         );
 
-        println!("\n  honest accounting: the machine INVENTED add, and, iszero, fst, and snd from the\n\
-         \x20  irreducible base substrate {{cons,nil}} + {{zero,succ}} + {{true,false,ite}} via System F enumeration.\n\
+        println!("\n  honest accounting: the machine INVENTED add, and, iszero, fst, snd, pred, and eq from the\n\
+         \x20  irreducible base substrate {{cons,nil}} + {{zero,succ}} + {{true,false,ite}} via System F typed\n\
+         \x20  enumeration plus goal-directed composition. The pred search is supplied the accumulator type and\n\
+         \x20  generic Church-fold decomposition, but no component behavior or spelling of pred; its end-to-end\n\
+         \x20  gate alone selects among the enumerated projection/transition/seed assemblies.\n\
          \x20  The opaque Atom view could not even apply a numeral; the recursive Rec view invented add/and but\n\
          \x20  not iszero (Schwichtenberg); the Forall view lifts that wall; the product type num×num (a Forall\n\
-         \x20  encoding) makes pred TYPABLE via pair-carrying iteration, but pred is a SEARCH wall — the size-25\n\
-         \x20  term is beyond brute-force enumeration. The ONE supplied atom is pair — the Church-encoded pair\n\
+         \x20  encoding) makes pred typable. Blind enumeration through size 25 still truncates, but goal-directed\n\
+         \x20  search enumerates its transition and seed independently and composes a smaller size-24 witness; eq\n\
+         \x20  then composes from pred+iszero+and. The ONE supplied atom is pair — the Church-encoded pair\n\
          \x20  is not discoverable by typed enumeration (its result type is a Forall whose selector needs a\n\
-         \x20  type-variable term). The remaining stack — pred, eq, mod26 — needs a smarter search (goal-directed\n\
-         \x20  or compositional) and recursion, and scan_tally is a supplied fold SCHEMA. Inventing the full rule\n\
-         \x20  needs those next rungs.");
+         \x20  type-variable term). The remaining arithmetic rung is mod26, which needs recursion, and scan_tally\n\
+         \x20  is a supplied fold SCHEMA. Inventing the full rule needs those next rungs.");
         out.flush().ok();
     }
 }
