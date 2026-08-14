@@ -436,6 +436,20 @@ impl Enumerator<'_> {
             _ => None,
         };
         let effective = expanded.as_ref().unwrap_or(target);
+        // System F type abstraction is erased from `Term`, so introducing a
+        // universal type has zero term-syntax cost: enumerate its body with
+        // the bound type variable left available to context heads. This is
+        // what permits `λa.λb.λs. s a b` to inhabit the Church-product type
+        // `∀α. (num→num→α)→α` without adding type-level term constructors.
+        if let Type::Forall(body) = effective {
+            if !context.iter().any(|ty| has_free_type_var(ty, 0, 0)) {
+                for candidate in self.terms(body, context, size) {
+                    if !push_unique(&mut out, &mut seen, candidate, self.per_cell_cap) {
+                        self.truncated = true;
+                    }
+                }
+            }
+        }
         if let Type::Arrow(arg, result) = effective {
             if size >= 2 {
                 let mut inner = context.to_vec();
@@ -514,6 +528,18 @@ impl Enumerator<'_> {
         self.generated += out.len() as u64;
         self.memo.insert(key, out.clone());
         out
+    }
+}
+
+fn has_free_type_var(ty: &Type, variable: u32, binder_depth: u32) -> bool {
+    match ty {
+        Type::Var(index) => *index == variable + binder_depth,
+        Type::Arrow(argument, result) => {
+            has_free_type_var(argument, variable, binder_depth)
+                || has_free_type_var(result, variable, binder_depth)
+        }
+        Type::Forall(body) => has_free_type_var(body, variable, binder_depth + 1),
+        Type::Atom(_) | Type::Rec(_) => false,
     }
 }
 
@@ -802,5 +828,37 @@ mod tests {
         assert_eq!(found.assembled, 1);
         assert!(!found.truncated);
         assert!(found.generated > 0);
+    }
+
+    #[test]
+    fn implicit_forall_introduction_discovers_church_pair() {
+        let num = Type::Rec(0);
+        let product = Type::Rec(1);
+        let variable = Type::Var(0);
+        let mut defs = HashMap::new();
+        defs.insert(
+            0,
+            Type::forall(Type::arrow(
+                Type::arrow(variable.clone(), variable.clone()),
+                Type::arrow(variable.clone(), variable.clone()),
+            )),
+        );
+        defs.insert(
+            1,
+            Type::forall(Type::arrow(
+                Type::arrow(num.clone(), Type::arrow(num.clone(), variable.clone())),
+                variable,
+            )),
+        );
+        let target = Type::arrow(num.clone(), Type::arrow(num, product));
+        let expected = term::lam(term::lam(term::lam(term::app(
+            term::app(term::var(0), term::var(2)),
+            term::var(1),
+        ))));
+
+        let enumeration = enumerate_closed_with_defs(&target, &[], &defs, 8, 1_000);
+        assert!(!enumeration.truncated);
+        assert!(enumeration.terms.contains(&expected));
+        assert_eq!(expected.size(), 8);
     }
 }

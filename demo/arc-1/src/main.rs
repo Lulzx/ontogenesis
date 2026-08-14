@@ -931,13 +931,30 @@ fn compositor(args: &[String]) {
             None => { println!("  ladder stalls at iszero ✗"); out.flush().ok(); return; }
         };
 
-        // Rung 4: pair (num→num→(num×num)). The Church-encoded pair λa.λb.λs. s a b is a pure
-        // combinator, but the typed enumerator CANNOT discover it: its result type num×num is a
-        // Forall, and generating λs. body with body : num×num needs a term of type-variable type
-        // (the selector's α), which the enumerator cannot express. So pair is SUPPLIED as the one
-        // non-irreducible atom; fst/snd/pred are then discovered from it.
-        let pair = closed("λa.λb.λs.s(a, b)");
-        println!("  SUPPLY pair = λa.λb.λs.s(a, b)  (Church-encoded pair; not discoverable by typed enumeration)");
+        // Rung 4: pair (num→num→(num×num)). System F type abstraction is erased from the
+        // runtime term, so implicit Forall introduction lets the enumerator synthesize the
+        // selector body at α without adding Type::Pair or term-level type constructors.
+        let pair_witness = closed("λa.λb.λs.s(a, b)");
+        let pair_gate = parse::Task {
+            arity: 2,
+            tests: vec![
+                parse::Test { args: vec![num_t(0), num_t(0)], want: term::app(term::app(pair_witness.clone(), num_t(0)), num_t(0)), outer: 0 },
+                parse::Test { args: vec![num_t(1), num_t(2)], want: term::app(term::app(pair_witness.clone(), num_t(1)), num_t(2)), outer: 0 },
+                parse::Test { args: vec![num_t(3), num_t(5)], want: term::app(term::app(pair_witness.clone(), num_t(3)), num_t(5)), outer: 0 },
+            ],
+        };
+        let pair = match discover_step(
+            "pair",
+            &arrow(num.clone(), arrow(num.clone(), pair_ty.clone())),
+            &[],
+            &defs,
+            8,
+            10_000,
+            &pair_gate,
+        ) {
+            Some(p) => p.term,
+            None => { println!("  ladder stalls at pair ✗"); out.flush().ok(); return; }
+        };
 
         // Rung 5: fst ((num×num)→num) from the base substrate. Pure combinator λp. p (λa.λb.a).
         // Gate uses the discovered pair to build inputs: fst (pair a b) = a.
@@ -1171,7 +1188,8 @@ fn compositor(args: &[String]) {
             if heldout_solves { "SOLVED ✓" } else { "NOT SOLVED ✗" },
         );
 
-        println!("\n  honest accounting: the machine INVENTED add, and, iszero, fst, snd, pred, eq, and mod26 from the\n\
+        println!("\n  honest accounting: the machine INVENTED add, and, iszero, pair, fst, snd, pred, eq, and mod26\n\
+         \x20  from the\n\
          \x20  irreducible base substrate {{cons,nil}} + {{zero,succ}} + {{true,false,ite}} via System F typed\n\
          \x20  enumeration plus goal-directed composition. The pred search is supplied the accumulator type and\n\
          \x20  generic Church-fold decomposition, but no component behavior or spelling of pred; its end-to-end\n\
@@ -1180,9 +1198,9 @@ fn compositor(args: &[String]) {
          \x20  not iszero (Schwichtenberg); the Forall view lifts that wall; the product type num×num (a Forall\n\
          \x20  encoding) makes pred typable. Blind enumeration through size 25 still truncates, but goal-directed\n\
          \x20  search enumerates its transition and seed independently and composes a smaller size-24 witness; eq\n\
-         \x20  then composes from pred+iszero+and. The ONE supplied atom is pair — the Church-encoded pair\n\
-         \x20  is not discoverable by typed enumeration (its result type is a Forall whose selector needs a\n\
-         \x20  type-variable term). mod26 is not recursive: System F iteration over an enumerated 26-state\n\
+         \x20  then composes from pred+iszero+and. Implicit Forall introduction also discovers the Church pair,\n\
+         \x20  eliminating the last supplied arithmetic atom. mod26 is not recursive: System F iteration over an\n\
+         \x20  enumerated 26-state\n\
          \x20  transition discovers it. scan_tally remains a supplied fold SCHEMA, now parameterized by the\n\
          \x20  discovered eq; composing it with discovered mod26∘add solves the full rule.");
         out.flush().ok();
