@@ -328,25 +328,6 @@ fn main() {
     }
 }
 
-/// Church-numeral equality: eq a b = (isZero (a pred b)) (isZero (b pred a)) (isZero (a pred b)).
-/// The two genuinely-new value shapes the Compositor needs (mod-26 arithmetic and the
-/// stateful scan) are built on this, so it is the first thing the substrate must supply.
-fn compositor_eq_term() -> Rc<term::Term> {
-    let t = closed("λa.λb.a");
-    let f = closed("λa.λb.b");
-    let is_zero = term::lam(term::app(term::app(term::var(0), term::lam(f.clone())), t.clone()));
-    let pred = closed("λn.λf.λx.n(λg.λh.h(g(f)))(λu.x)(λu.u)");
-    term::lam(term::lam({
-        let a = term::var(1);
-        let b = term::var(0);
-        let a_pred_b = term::app(term::app(a.clone(), pred.clone()), b.clone());
-        let b_pred_a = term::app(term::app(b.clone(), pred.clone()), a.clone());
-        let A = term::app(is_zero.clone(), a_pred_b);
-        let B = term::app(is_zero.clone(), b_pred_a);
-        term::app(term::app(A.clone(), B), A)
-    }))
-}
-
 /// The stateful per-letter scan — the third genuinely-new value shape. It is a *generic*
 /// higher-order fold (like `map`/`reduce` in the C7 meta-space), parameterized by a shift
 /// function `shift : letter → count → letter`; it carries a per-letter tally as its fold
@@ -360,7 +341,7 @@ fn compositor_eq_term() -> Rc<term::Term> {
 /// The Church-list fold is a RIGHT fold, so to scan left-to-right we reverse the
 /// input, fold (which then visits elements in original order), and reverse the
 /// cons-built output back into order.
-fn compositor_scan_tally_term() -> Rc<term::Term> {
+fn compositor_scan_tally_term(eq: Rc<term::Term>) -> Rc<term::Term> {
     let zero = closed("λf.λx.x");
     let succ = closed("λn.λf.λx.f(n(f)(x))");
     let cons = closed("λc.λs.λf.λz.f(c)(s(f)(z))");
@@ -369,7 +350,6 @@ fn compositor_scan_tally_term() -> Rc<term::Term> {
     let fst = closed("λp.p(λa.λb.a)");
     let snd = closed("λp.p(λa.λb.b)");
     let ite = closed("λb.λx.λy.b(x)(y)");
-    let eq = compositor_eq_term();
     // append = λxs.λys. xs cons ys
     let append = term::lam(term::lam(term::app(term::app(term::var(1), cons.clone()), term::var(0))));
     // singleton = λa. cons a nil
@@ -675,6 +655,7 @@ fn probe_concepts() {
 fn compositor(args: &[String]) {
     use std::collections::HashMap;
     use std::io::Write;
+    nbe::set_stack_limit_bytes(64_000_000);
     let mut out = std::io::stdout();
 
     let mut budget = 5u64;
@@ -871,9 +852,9 @@ fn compositor(args: &[String]) {
         let num_t = |n: u32| closed(&bootstrap::church_num_str(n));
         let t = closed("λa.λb.a");
         let f = closed("λa.λb.b");
+        let ite = closed("λb.λx.λy.b(x)(y)");
         let zero = closed("λf.λx.x");
         let succ = closed("λn.λf.λx.f(n(f)(x))");
-        let scan_tally = compositor_scan_tally_term();
 
         // System F Church types: num = ∀α. (α→α)→(α→α), bool = ∀α. α→α→α.
         // The polymorphism lets a numeral be applied to a num→boo function (heterogeneous
@@ -1057,13 +1038,21 @@ fn compositor(args: &[String]) {
             200_000,
         );
 
-        let eq_gate = parse::Task {
-            arity: 2,
-            tests: (0..=7).flat_map(|a| (0..=7).map(move |b| (a, b))).map(|(a, b)| parse::Test {
+        let mut eq_tests: Vec<parse::Test> = (0..=7).flat_map(|a| (0..=7).map(move |b| (a, b))).map(|(a, b)| parse::Test {
                 args: vec![num_t(a), num_t(b)],
                 want: if a == b { t.clone() } else { f.clone() },
                 outer: 0,
-            }).collect(),
+            }).collect();
+        eq_tests.extend([(24, 24), (25, 25), (26, 26), (24, 25), (25, 24), (25, 26), (26, 25)]
+            .into_iter()
+            .map(|(a, b)| parse::Test {
+                args: vec![num_t(a), num_t(b)],
+                want: if a == b { t.clone() } else { f.clone() },
+                outer: 0,
+            }));
+        let eq_gate = parse::Task {
+            arity: 2,
+            tests: eq_tests,
         };
         let mut eq_generated = directions.generated;
         let mut eq_truncated = directions.truncated;
@@ -1096,25 +1085,93 @@ fn compositor(args: &[String]) {
             term::show(&eq), eq.size(), eq_generated, eq_truncated, term::show(&direction),
         );
 
-        // The next wall is now recursion: mod26 cannot be obtained by finite System F iteration
-        // over an input-independent bound.
-        println!("\n  ── the next wall ──");
-        println!("  pred's blind search remains cap-truncated through size 25; goal-directed decomposition\n\
-         \x20  finds a smaller size-24 witness (it uses the pair directly as an eliminator)." );
-        println!("  eq is now discovered compositionally from pred+iszero+and.");
-        println!("  mod26 remains: it needs recursion (or an independently justified bounded domain).\n  eq witness: {}", term::show(&eq));
-
-        // What the machine CAN still do with the discovered add: compose it with the supplied
-        // scan_tally schema and verify the full Compositor's Tray rule.
-        let shift = add.clone(); // shift(c,n) = (c+n) mod 26 needs mod26; here we only have add.
-        let compositor = term::app(scan_tally.clone(), shift.clone());
-        let solves = direct_solves(&task, &compositor);
+        // Rung 9: mod26 is a finite-state Church iteration, not a recursion problem:
+        // n repeatedly advances 0..25 and resets after 25. Enumerate predicate/reset/
+        // advance/seed independently; only the end-to-end modulo gate selects an assembly.
+        let mod26_gate = parse::Task {
+            arity: 1,
+            tests: [0u32, 1, 2, 24, 25, 26, 27, 51, 52, 53, 77, 78]
+                .into_iter()
+                .map(|n| parse::Test { args: vec![num_t(n)], want: num_t(n % 26), outer: 0 })
+                .collect(),
+        };
+        let num25 = (0..25).fold(Rc::new(term::Term::Prim(zero.clone())), |value, _| {
+            term::app(Rc::new(term::Term::Prim(succ.clone())), value)
+        });
+        println!("  CONSTRUCT numeral25 = succ^25(zero)  (size {}, then promoted) ✓", num25.size());
+        let comparison_atom = typed::Atom {
+            body: direction.clone(),
+            ty: arrow(num.clone(), arrow(num.clone(), boo.clone())),
+        };
+        let num25_atom = typed::Atom { body: num25.clone(), ty: num.clone() };
+        let zero_atom = typed::Atom { body: zero.clone(), ty: num.clone() };
+        let succ_atom = typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) };
+        let predicate_atoms = [comparison_atom, num25_atom.clone()];
+        let state_atoms = [zero_atom, num25_atom];
+        let advance_atoms = [succ_atom];
+        let mod26_found = match typed::find_finite_state_iteration_with_defs(
+            &num,
+            &boo,
+            Rc::new(term::Term::Prim(ite.clone())),
+            &predicate_atoms,
+            &state_atoms,
+            &advance_atoms,
+            &state_atoms,
+            &defs,
+            [6, 1, 4, 1],
+            200_000,
+            |candidate| direct_solves_with_fuel(&mod26_gate, candidate, 50_000_000),
+        ) {
+            Some(found) => found,
+            None => { println!("  compositional ladder stalls at mod26 ✗"); out.flush().ok(); return; }
+        };
+        let mod26 = mod26_found.term;
         println!(
-            "  compositor = scan_tally(add) solves the 5 examples? {}",
-            if solves { "SOLVED ✓" } else { "NOT SOLVED ✗ (needs mod26, which needs recursion)" }
+            "  COMPOSE mod26 = {}  (size {}, {} component terms generated, {} assemblies checked, truncated={}) ✓",
+            term::show(&mod26),
+            mod26_found.size,
+            mod26_found.generated,
+            mod26_found.assembled,
+            mod26_found.truncated,
         );
 
-        println!("\n  honest accounting: the machine INVENTED add, and, iszero, fst, snd, pred, and eq from the\n\
+        println!("\n  ── arithmetic ladder complete ──");
+        println!("  pred's blind search remains cap-truncated through size 25; goal-directed decomposition\n\
+         \x20  finds a smaller size-24 witness (it uses the pair directly as an eliminator)." );
+        println!("  eq is discovered compositionally from pred+iszero+and.");
+        println!("  mod26 is discovered as finite-state Church iteration; no fixed point is needed.");
+
+        // Feed the discovered equality into the supplied stateful scan schema, and compose
+        // the discovered arithmetic shift(c,k) = mod26(add c k).
+        let scan_tally = compositor_scan_tally_term(Rc::new(term::Term::Prim(eq.clone())));
+        let shift = term::lam(term::lam(term::app(
+            Rc::new(term::Term::Prim(mod26.clone())),
+            term::app(
+                term::app(Rc::new(term::Term::Prim(add.clone())), term::var(1)),
+                term::var(0),
+            ),
+        )));
+        let compositor = term::app(scan_tally, shift);
+        let heldout_task = parse::Task {
+            arity: 1,
+            tests: [("zzzz", "zabc"), ("xyzzy", "xyzaz"), ("a", "a"), ("", "")]
+                .into_iter()
+                .map(|(input, output)| parse::Test {
+                    args: vec![church_list(&nums(input))],
+                    want: church_list(&nums(output)),
+                    outer: 0,
+                })
+                .collect(),
+        };
+        let solves = direct_solves_with_fuel(&task, &compositor, 100_000_000);
+        let heldout_solves = direct_solves_with_fuel(&heldout_task, &compositor, 100_000_000);
+        println!(
+            "  compositor = scan_tally(eq, mod26∘add) solves examples? {}  held-out? {}",
+            if solves { "SOLVED ✓" } else { "NOT SOLVED ✗" },
+            if heldout_solves { "SOLVED ✓" } else { "NOT SOLVED ✗" },
+        );
+
+        println!("\n  honest accounting: the machine INVENTED add, and, iszero, fst, snd, pred, eq, and mod26 from the\n\
          \x20  irreducible base substrate {{cons,nil}} + {{zero,succ}} + {{true,false,ite}} via System F typed\n\
          \x20  enumeration plus goal-directed composition. The pred search is supplied the accumulator type and\n\
          \x20  generic Church-fold decomposition, but no component behavior or spelling of pred; its end-to-end\n\
@@ -1125,8 +1182,9 @@ fn compositor(args: &[String]) {
          \x20  search enumerates its transition and seed independently and composes a smaller size-24 witness; eq\n\
          \x20  then composes from pred+iszero+and. The ONE supplied atom is pair — the Church-encoded pair\n\
          \x20  is not discoverable by typed enumeration (its result type is a Forall whose selector needs a\n\
-         \x20  type-variable term). The remaining arithmetic rung is mod26, which needs recursion, and scan_tally\n\
-         \x20  is a supplied fold SCHEMA. Inventing the full rule needs those next rungs.");
+         \x20  type-variable term). mod26 is not recursive: System F iteration over an enumerated 26-state\n\
+         \x20  transition discovers it. scan_tally remains a supplied fold SCHEMA, now parameterized by the\n\
+         \x20  discovered eq; composing it with discovered mod26∘add solves the full rule.");
         out.flush().ok();
     }
 }
@@ -4258,9 +4316,13 @@ fn discover_schemas(opts: &bank::Options) -> Option<Schemas> {
 /// way — e.g. a projection that happens to compose the right values — so
 /// discovering a specific schema needs the direct gate.)
 fn direct_solves(task: &parse::Task, body: &Rc<term::Term>) -> bool {
+    direct_solves_with_fuel(task, body, 1_000_000)
+}
+
+fn direct_solves_with_fuel(task: &parse::Task, body: &Rc<term::Term>, fuel_limit: i64) -> bool {
     let empty: nbe::Env = Rc::new(Vec::new());
     task.tests.iter().all(|t| {
-        let mut fuel = nbe::Fuel(1_000_000);
+        let mut fuel = nbe::Fuel(fuel_limit);
         let applied = t.args.iter().fold(body.clone(), |acc, a| term::app(acc, a.clone()));
         let v = nbe::eval(&empty, &applied, &mut fuel).ok();
         let w = nbe::eval(&empty, &t.want, &mut fuel).ok();
@@ -4268,8 +4330,8 @@ fn direct_solves(task: &parse::Task, body: &Rc<term::Term>) -> bool {
             (Some(v), Some(w)) => {
                 let mut h1 = DefaultHasher::new();
                 let mut h2 = DefaultHasher::new();
-                let mut f1 = nbe::Fuel(1_000_000);
-                let mut f2 = nbe::Fuel(1_000_000);
+                let mut f1 = nbe::Fuel(fuel_limit);
+                let mut f2 = nbe::Fuel(fuel_limit);
                 let k1 = canon::canonicalize(v.as_ref(), &mut f1, &mut h1).ok();
                 let k2 = canon::canonicalize(w.as_ref(), &mut f2, &mut h2).ok();
                 k1 == k2

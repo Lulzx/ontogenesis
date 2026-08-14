@@ -85,12 +85,15 @@ pub fn force(th: &Thunk, fuel: &mut Fuel) -> Result<Rc<Val>, Abort> {
 thread_local! {
     static STACK_BASE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static STACK_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static STACK_LIMIT_BYTES: std::cell::Cell<usize> = const { std::cell::Cell::new(512_000) };
 }
 
 // Rust's test harness and embedders may use stacks much smaller than the
 // command-line worker's explicit 1 GiB stack. Leave enough headroom for
 // unwinding, destructors, and callers outside the evaluator.
-const STACK_LIMIT_BYTES: usize = 512_000;
+pub fn set_stack_limit_bytes(limit: usize) -> usize {
+    STACK_LIMIT_BYTES.with(|current| current.replace(limit))
+}
 
 // Ablation metering: coarse counters for where the "materializing semantic
 // values" wall physically sits. Off by default (near-zero overhead when off);
@@ -147,7 +150,7 @@ fn stack_guard() -> Result<StackFrame, Abort> {
         STACK_BASE.with(|base| {
             if active == 0 {
                 base.set(here);
-            } else if base.get().abs_diff(here) > STACK_LIMIT_BYTES {
+            } else if base.get().abs_diff(here) > STACK_LIMIT_BYTES.with(|limit| limit.get()) {
                 return Err(Abort);
             }
             depth.set(active + 1);
@@ -337,10 +340,11 @@ mod stack_tests {
             let probe = 0u8;
             &probe as *const u8 as usize
         };
+        let limit = STACK_LIMIT_BYTES.with(|value| value.get());
         STACK_DEPTH.with(|depth| depth.set(1));
-        STACK_BASE.with(|base| base.set(here.saturating_sub(STACK_LIMIT_BYTES * 2)));
+        STACK_BASE.with(|base| base.set(here.saturating_sub(limit * 2)));
         assert!(matches!(stack_guard(), Err(Abort)));
-        STACK_BASE.with(|base| base.set(here.saturating_add(STACK_LIMIT_BYTES * 2)));
+        STACK_BASE.with(|base| base.set(here.saturating_add(limit * 2)));
         assert!(matches!(stack_guard(), Err(Abort)));
         STACK_DEPTH.with(|depth| depth.set(0));
         STACK_BASE.with(|base| base.set(0));
@@ -355,5 +359,13 @@ mod stack_tests {
         drop(outer);
         STACK_DEPTH.with(|depth| assert_eq!(depth.get(), 0));
         STACK_BASE.with(|base| assert_eq!(base.get(), 0));
+    }
+
+    #[test]
+    fn stack_limit_override_is_thread_local_and_restorable() {
+        let previous = set_stack_limit_bytes(1_234_567);
+        assert_eq!(STACK_LIMIT_BYTES.with(|value| value.get()), 1_234_567);
+        assert_eq!(set_stack_limit_bytes(previous), 1_234_567);
+        assert_eq!(STACK_LIMIT_BYTES.with(|value| value.get()), previous);
     }
 }

@@ -74,6 +74,110 @@ pub struct ChurchFoldFound {
     pub truncated: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct FiniteStateFound {
+    pub term: Rc<Term>,
+    pub size: u32,
+    pub generated: u64,
+    pub assembled: u64,
+    pub truncated: bool,
+}
+
+/// Search a finite-state Church iteration of the form
+///
+/// `λn. n (λx. ite (predicate x) reset (advance x)) seed`.
+///
+/// Predicate, reset, advance, and seed are independently enumerated closed
+/// components. Only the assembled program is checked against `accepts`.
+pub fn find_finite_state_iteration_with_defs(
+    state_type: &Type,
+    bool_type: &Type,
+    ite: Rc<Term>,
+    predicate_atoms: &[Atom],
+    reset_atoms: &[Atom],
+    advance_atoms: &[Atom],
+    seed_atoms: &[Atom],
+    defs: &HashMap<u32, Type>,
+    component_max_sizes: [u32; 4],
+    per_cell_cap: usize,
+    mut accepts: impl FnMut(&Rc<Term>) -> bool,
+) -> Option<FiniteStateFound> {
+    let predicates = enumerate_closed_with_defs(
+        &Type::arrow(state_type.clone(), bool_type.clone()),
+        predicate_atoms,
+        defs,
+        component_max_sizes[0],
+        per_cell_cap,
+    );
+    let resets = enumerate_closed_with_defs(
+        state_type,
+        reset_atoms,
+        defs,
+        component_max_sizes[1],
+        per_cell_cap,
+    );
+    let advances = enumerate_closed_with_defs(
+        &Type::arrow(state_type.clone(), state_type.clone()),
+        advance_atoms,
+        defs,
+        component_max_sizes[2],
+        per_cell_cap,
+    );
+    let seeds = enumerate_closed_with_defs(
+        state_type,
+        seed_atoms,
+        defs,
+        component_max_sizes[3],
+        per_cell_cap,
+    );
+    let generated = predicates.generated + resets.generated + advances.generated + seeds.generated;
+    let truncated = predicates.truncated || resets.truncated || advances.truncated || seeds.truncated;
+
+    let mut candidates = Vec::new();
+    for (predicate_index, predicate) in predicates.terms.iter().enumerate() {
+        for (reset_index, reset) in resets.terms.iter().enumerate() {
+            for (advance_index, advance) in advances.terms.iter().enumerate() {
+                for (seed_index, seed) in seeds.terms.iter().enumerate() {
+                    let state = term::var(0);
+                    let condition = beta_apply_preserving_prims(predicate, state.clone())
+                        .unwrap_or_else(|| term::app(predicate.clone(), state.clone()));
+                    let advanced = beta_apply_preserving_prims(advance, state)
+                        .unwrap_or_else(|| term::app(advance.clone(), term::var(0)));
+                    let transition = term::lam(term::app(
+                        term::app(term::app(ite.clone(), condition), reset.clone()),
+                        advanced,
+                    ));
+                    let body = term::app(term::app(term::var(0), transition), seed.clone());
+                    let candidate = term::lam(body);
+                    candidates.push((
+                        candidate.size(),
+                        predicate_index,
+                        reset_index,
+                        advance_index,
+                        seed_index,
+                        candidate,
+                    ));
+                }
+            }
+        }
+    }
+    candidates.sort_by_key(|(size, predicate, reset, advance, seed, _)| {
+        (*size, *predicate, *reset, *advance, *seed)
+    });
+    for (index, (size, _, _, _, _, term)) in candidates.into_iter().enumerate() {
+        if accepts(&term) {
+            return Some(FiniteStateFound {
+                term,
+                size,
+                generated,
+                assembled: index as u64 + 1,
+                truncated,
+            });
+        }
+    }
+    None
+}
+
 /// Goal-directed search for a Church-iterator program. The search receives
 /// only the accumulator decomposition (projection, transition builder, seed
 /// builder), enumerates all three closed component spaces independently, and
@@ -647,6 +751,49 @@ mod tests {
             [&project_atoms, &step_atoms, &seed_atoms],
             &HashMap::new(),
             [4, 7, 4],
+            100,
+            |_| true,
+        )
+        .unwrap();
+
+        assert_eq!(found.assembled, 1);
+        assert!(!found.truncated);
+        assert!(found.generated > 0);
+    }
+
+    #[test]
+    fn finite_state_search_enumerates_components_before_end_to_end_gate() {
+        let state = Type::Atom(0);
+        let boolean = Type::Atom(1);
+        let true_term = term::lam(term::lam(term::var(1)));
+        let state_value = term::lam(term::var(0));
+        let predicate_atoms = [Atom {
+            body: term::lam(true_term.clone()),
+            ty: Type::arrow(state.clone(), boolean.clone()),
+        }];
+        let state_atoms = [Atom {
+            body: state_value,
+            ty: state.clone(),
+        }];
+        let advance_atoms = [Atom {
+            body: term::lam(term::var(0)),
+            ty: Type::arrow(state.clone(), state.clone()),
+        }];
+        let ite = term::lam(term::lam(term::lam(term::app(
+            term::app(term::var(2), term::var(1)),
+            term::var(0),
+        ))));
+
+        let found = find_finite_state_iteration_with_defs(
+            &state,
+            &boolean,
+            ite,
+            &predicate_atoms,
+            &state_atoms,
+            &advance_atoms,
+            &state_atoms,
+            &HashMap::new(),
+            [4, 1, 2, 1],
             100,
             |_| true,
         )
