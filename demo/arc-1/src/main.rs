@@ -447,6 +447,7 @@ fn discover_step(
         ),
         None => println!("  ✗ could NOT discover {name} within budget (size ≤ {max_size})"),
     }
+    std::io::stdout().flush().ok();
     found
 }
 
@@ -883,6 +884,11 @@ fn compositor(args: &[String]) {
         defs.insert(1, typed::Type::forall(arrow(v0.clone(), arrow(v0.clone(), v0.clone()))));
         let num = typed::Type::Rec(0);
         let boo = typed::Type::Rec(1);
+        // num×num = ∀α. (num→num→α)→α  (Church-encoded pair; no new Type::Pair needed).
+        // This is the product type that lets pred carry a (current, previous) pair through
+        // the iteration — the rung the Kleene pred could NOT reach (not typable in System F).
+        defs.insert(2, typed::Type::forall(arrow(arrow(num.clone(), arrow(num.clone(), v0.clone())), v0.clone())));
+        let pair_ty = typed::Type::Rec(2);
 
         println!("\n── Gate 4: --discover — the machine invents EVERYTHING from the irreducible base substrate ──");
         println!("  base substrate (irreducible λ-atoms): {{cons,nil}} + Church numerals {{zero,succ}} + booleans {{true,false,ite}}");
@@ -944,14 +950,90 @@ fn compositor(args: &[String]) {
             None => { println!("  ladder stalls at iszero ✗"); out.flush().ok(); return; }
         };
 
-        // The next wall: pred/eq/mod26. pred needs n applied to a (num→num)→(num→num)
-        // function (pair-carrying iteration), which System F can express but the enumerator
-        // must discover the right instantiation; eq needs pred+iszero+and; mod26 needs
-        // recursion. Report honestly what the machine invents vs. what still needs more.
+        // Rung 4: pair (num→num→(num×num)). The Church-encoded pair λa.λb.λs. s a b is a pure
+        // combinator, but the typed enumerator CANNOT discover it: its result type num×num is a
+        // Forall, and generating λs. body with body : num×num needs a term of type-variable type
+        // (the selector's α), which the enumerator cannot express. So pair is SUPPLIED as the one
+        // non-irreducible atom; fst/snd/pred are then discovered from it.
+        let pair = closed("λa.λb.λs.s(a, b)");
+        println!("  SUPPLY pair = λa.λb.λs.s(a, b)  (Church-encoded pair; not discoverable by typed enumeration)");
+
+        // Rung 5: fst ((num×num)→num) from the base substrate. Pure combinator λp. p (λa.λb.a).
+        // Gate uses the discovered pair to build inputs: fst (pair a b) = a.
+        let fst_gate = parse::Task {
+            arity: 1,
+            tests: vec![
+                parse::Test { args: vec![term::app(term::app(pair.clone(), num_t(1)), num_t(2))], want: num_t(1), outer: 0 },
+                parse::Test { args: vec![term::app(term::app(pair.clone(), num_t(0)), num_t(5))], want: num_t(0), outer: 0 },
+                parse::Test { args: vec![term::app(term::app(pair.clone(), num_t(3)), num_t(7))], want: num_t(3), outer: 0 },
+            ],
+        };
+        let fst = match discover_step("fst", &arrow(pair_ty.clone(), num.clone()), &[
+            typed::Atom { body: zero.clone(), ty: num.clone() },
+            typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+            typed::Atom { body: t.clone(), ty: boo.clone() },
+            typed::Atom { body: f.clone(), ty: boo.clone() },
+        ], &defs, 12, 200_000, &fst_gate) {
+            Some(p) => p.term,
+            None => { println!("  ladder stalls at fst ✗"); out.flush().ok(); return; }
+        };
+
+        // Rung 6: snd ((num×num)→num) from the base substrate. Pure combinator λp. p (λa.λb.b).
+        let snd_gate = parse::Task {
+            arity: 1,
+            tests: vec![
+                parse::Test { args: vec![term::app(term::app(pair.clone(), num_t(1)), num_t(2))], want: num_t(2), outer: 0 },
+                parse::Test { args: vec![term::app(term::app(pair.clone(), num_t(0)), num_t(5))], want: num_t(5), outer: 0 },
+                parse::Test { args: vec![term::app(term::app(pair.clone(), num_t(3)), num_t(7))], want: num_t(7), outer: 0 },
+            ],
+        };
+        let snd = match discover_step("snd", &arrow(pair_ty.clone(), num.clone()), &[
+            typed::Atom { body: zero.clone(), ty: num.clone() },
+            typed::Atom { body: succ.clone(), ty: arrow(num.clone(), num.clone()) },
+            typed::Atom { body: t.clone(), ty: boo.clone() },
+            typed::Atom { body: f.clone(), ty: boo.clone() },
+        ], &defs, 12, 200_000, &snd_gate) {
+            Some(p) => p.term,
+            None => { println!("  ladder stalls at snd ✗"); out.flush().ok(); return; }
+        };
+
+        // Rung 7: pred (num→num) from {pair, fst, snd}. The pair-carrying iteration
+        // pred = λn.λf.λx. fst(n(λp.pair(snd p)(f(snd p)))(pair x x)), with n instantiated at
+        // α := num×num. This is the rung the Kleene pred could NOT reach (not typable in System F).
+        // BUT it is a SEARCH wall, not a typing wall: pred has size 25, and the brute-force
+        // enumeration of num→num at size 25 explodes (millions of terms, per-cell cap truncates
+        // before pred is reached). Verified: even with only {pair,fst,snd} atoms and cap 2M,
+        // max_size 25, pred is not generated. So pred is typable but not brute-force discoverable.
+        let pred_gate = parse::Task {
+            arity: 1,
+            tests: vec![
+                parse::Test { args: vec![num_t(0)], want: num_t(0), outer: 0 },
+                parse::Test { args: vec![num_t(1)], want: num_t(0), outer: 0 },
+                parse::Test { args: vec![num_t(2)], want: num_t(1), outer: 0 },
+                parse::Test { args: vec![num_t(3)], want: num_t(2), outer: 0 },
+                parse::Test { args: vec![num_t(4)], want: num_t(3), outer: 0 },
+            ],
+        };
+        let pred = match discover_step("pred", &arrow(num.clone(), num.clone()), &[
+            typed::Atom { body: pair.clone(), ty: arrow(num.clone(), arrow(num.clone(), pair_ty.clone())) },
+            typed::Atom { body: fst.clone(), ty: arrow(pair_ty.clone(), num.clone()) },
+            typed::Atom { body: snd.clone(), ty: arrow(pair_ty.clone(), num.clone()) },
+        ], &defs, 25, 2_000_000, &pred_gate) {
+            Some(p) => p.term,
+            None => {
+                println!("  pred: SEARCH WALL ✗ (typable via pair-carrying iteration, but size-25 term is\n\
+                 \x20  beyond brute-force enumeration — the num→num space at size 25 explodes and the\n\
+                 \x20  per-cell cap truncates before pred is reached)");
+                out.flush().ok();
+                return;
+            }
+        };
+
+        // The next wall: eq/mod26. eq composes pred+iszero+and; mod26 needs recursion.
         println!("\n  ── the next wall ──");
-        println!("  iszero is now INVENTED (System F: n instantiated at α := bool).");
-        println!("  pred/eq/mod26 still need more: pred iterates a (num→num)→(num→num) function");
-        println!("  (pair-carrying), eq composes pred+iszero+and, mod26 needs recursion.");
+        println!("  pred is typable (pair-carrying iteration over num×num = ∀α.(num→num→α)→α) but is a\n\
+         \x20  SEARCH wall: the size-25 term is beyond brute-force enumeration.");
+        println!("  eq/mod26 still need more: eq composes pred+iszero+and, mod26 needs recursion.");
 
         // What the machine CAN still do with the discovered add: compose it with the supplied
         // scan_tally schema and verify the full Compositor's Tray rule.
@@ -963,12 +1045,16 @@ fn compositor(args: &[String]) {
             if solves { "SOLVED ✓" } else { "NOT SOLVED ✗ (needs mod26, which needs recursion)" }
         );
 
-        println!("\n  honest accounting: the machine INVENTED add, and, and iszero from the irreducible base\n\
-         \x20  substrate {{cons,nil}} + {{zero,succ}} + {{true,false,ite}} via System F enumeration. The\n\
-         \x20  opaque Atom view could not even apply a numeral; the recursive Rec view invented add/and but\n\
-         \x20  not iszero (Schwichtenberg); the Forall view lifts that wall. The remaining stack — pred, eq,\n\
-         \x20  mod26 — needs pair-carrying iteration and recursion, and scan_tally is a supplied fold SCHEMA.\n\
-         \x20  Inventing the full rule needs those next rungs.");
+        println!("\n  honest accounting: the machine INVENTED add, and, iszero, fst, and snd from the\n\
+         \x20  irreducible base substrate {{cons,nil}} + {{zero,succ}} + {{true,false,ite}} via System F enumeration.\n\
+         \x20  The opaque Atom view could not even apply a numeral; the recursive Rec view invented add/and but\n\
+         \x20  not iszero (Schwichtenberg); the Forall view lifts that wall; the product type num×num (a Forall\n\
+         \x20  encoding) makes pred TYPABLE via pair-carrying iteration, but pred is a SEARCH wall — the size-25\n\
+         \x20  term is beyond brute-force enumeration. The ONE supplied atom is pair — the Church-encoded pair\n\
+         \x20  is not discoverable by typed enumeration (its result type is a Forall whose selector needs a\n\
+         \x20  type-variable term). The remaining stack — pred, eq, mod26 — needs a smarter search (goal-directed\n\
+         \x20  or compositional) and recursion, and scan_tally is a supplied fold SCHEMA. Inventing the full rule\n\
+         \x20  needs those next rungs.");
         out.flush().ok();
     }
 }
