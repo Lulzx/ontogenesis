@@ -1,4 +1,8 @@
 /target
 /lambench
 /out
+/environment_files
+/tmp
+__pycache__/
+*.pyc
 .DS_Store
