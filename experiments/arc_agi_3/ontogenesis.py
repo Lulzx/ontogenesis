@@ -15,6 +15,7 @@ import numpy as np
 
 Point = tuple[int, int]
 TileKey = tuple[int, ...]
+ResourceKey = tuple[frozenset[int], int]
 
 
 @dataclass(frozen=True)
@@ -153,12 +154,13 @@ class OntogenesisController:
         self.targets: deque[VisualTarget] = deque()
         self.plan: deque[str] = deque()
         self.plan_is_product = False
+        self.plan_is_frontier = False
         self.visited_targets: set[Point] = set()
         self.active_target: VisualTarget | None = None
         self.active_before: LatentSignature | None = None
         self.active_before_budget = 0
         self.modifier_effects: dict[Point, str] = {}
-        self.resource_features: set[tuple[frozenset[int], int]] = (
+        self.resource_features: set[ResourceKey] = (
             set(inherited.resource_features) if inherited is not None else set()
         )
         self.successful_target_features: set[tuple[frozenset[int], int]] = (
@@ -167,21 +169,47 @@ class OntogenesisController:
             else set()
         )
         self.resources_collected = 0
+        self.resource_inventory: set[ResourceKey] = set()
+        self.consumed_resource_entries: set[Point] = set()
+        self.resource_entry_effects: dict[Point, ResourceKey] = {}
+        self.resource_budget_gains: dict[ResourceKey, int] = {}
+        self.resource_entry_gains: dict[Point, int] = {}
+        self.resource_edge_requirements: dict[
+            tuple[Point, str], frozenset[ResourceKey]
+        ] = {}
+        self.blocked_edge_resources: dict[
+            tuple[Point, str], frozenset[ResourceKey]
+        ] = {}
         self.goal_target: VisualTarget | None = None
         self.goal_signature_model: LatentSignature | None = None
         self.goal_attempt_signature: LatentSignature | None = None
         self.blocked_edges: set[tuple[Point, str]] = set()
         self.transition_edges: dict[tuple[Point, str], Point] = {}
         self.transition_entry_effects: dict[Point, Point] = {}
+        self.transition_basin_predictions: dict[Point, Point] = {}
         self.transition_entry_conflicts: set[Point] = set()
         self.transition_tile_effects: dict[TileKey, TransitionTileEffect] = {}
         self.transition_tile_observations: dict[
             TileKey, dict[Point, Point]
         ] = {}
         self.transition_tile_conflicts: set[TileKey] = set()
+        self.observed_entry_outcomes: dict[Point, set[Point]] = {}
+        self.frontier_attempted_entries: set[Point] = set()
+        self.frontier_probe_edge: tuple[Point, str] | None = None
+        self.frontier_probe_seed: Point | None = None
+        self.frontier_planned_entry: Point | None = None
         self.status_edge_effects: dict[tuple[Point, str], StatusEdgeEffect] = {}
         self.status_entry_effects: dict[Point, StatusEdgeEffect] = {}
         self.status_tile_effects: dict[TileKey, StatusEdgeEffect] = {}
+        self.status_edge_models: dict[
+            tuple[Point, str], dict[LatentSignature, LatentSignature]
+        ] = {}
+        self.status_entry_models: dict[
+            Point, dict[LatentSignature, LatentSignature]
+        ] = {}
+        self.status_tile_models: dict[
+            TileKey, dict[LatentSignature, LatentSignature]
+        ] = {}
         self.last_origin: Point | None = None
         self.last_was_planned = False
         self.last_was_transport = False
@@ -189,6 +217,7 @@ class OntogenesisController:
         self.last_transport_target: VisualTarget | None = None
         self.active_target_pixels = 0
         self.failed_predictions = 0
+        self.episode_failures = 0
         self.verified_interactions = 0
         self.action_attempts: Counter[str] = Counter()
         self.edge_attempts: Counter[tuple[Point, str]] = Counter()
@@ -226,6 +255,7 @@ class OntogenesisController:
 
     def mark_episode_failure(self) -> None:
         """Credit an externally observed failure to its edge and option trace."""
+        self.episode_failures += 1
         self.failed_matched_detours.update(self.matched_detours_this_episode)
         if self.last_origin is None or self.last_action is None:
             return
@@ -237,8 +267,12 @@ class OntogenesisController:
         )
         if edge_blocked:
             self.blocked_edges.add(edge)
+            self.blocked_edge_resources[edge] = frozenset(
+                self.resource_inventory
+            )
         self.plan.clear()
         self.plan_is_product = False
+        self.plan_is_frontier = False
         self.events.append(
             {
                 "event": (
@@ -269,11 +303,17 @@ class OntogenesisController:
         self.active_before_budget = 0
         self.active_target_pixels = 0
         self.resources_collected = 0
+        self.resource_inventory.clear()
+        self.consumed_resource_entries.clear()
         self.goal_attempt_signature = None
         self.matched_detours_this_episode.clear()
         self.visited_targets.clear()
         self.plan.clear()
         self.plan_is_product = False
+        self.plan_is_frontier = False
+        self.frontier_probe_edge = None
+        self.frontier_probe_seed = None
+        self.frontier_planned_entry = None
         self.targets.clear()
 
     def choose(self, frame: np.ndarray) -> str:
@@ -331,9 +371,20 @@ class OntogenesisController:
                 not self.plan
                 and not self._plan_goal_product_option(frame)
                 and not self._plan_status_option(frame)
+                and not self._plan_information_frontier(frame)
             ):
                 self._plan_next_target(frame)
             action = self.plan.popleft() if self.plan else self._least_used_action()
+
+        if self.plan_is_frontier and not self.plan and self.mover_anchor is not None:
+            self.frontier_probe_edge = (self.mover_anchor, action)
+            law = self.translations.get(action)
+            if law is not None:
+                expected = (
+                    self.mover_anchor[0] + law.dx,
+                    self.mover_anchor[1] + law.dy,
+                )
+                self.frontier_attempted_entries.add(expected)
 
         self.previous = frame.copy()
         self.last_origin = self.mover_anchor
@@ -363,13 +414,18 @@ class OntogenesisController:
             after,
         )
         self.status_edge_effects[(effect.origin, effect.action)] = effect
+        self.status_edge_models.setdefault(
+            (effect.origin, effect.action), {}
+        )[before] = after
         law = self.translations.get(effect.action)
         if law is not None:
             expected = (effect.origin[0] + law.dx, effect.origin[1] + law.dy)
             self.status_entry_effects[expected] = effect
+            self.status_entry_models.setdefault(expected, {})[before] = after
             tile_key = self._tile_key(before_frame, expected)
             if tile_key is not None:
                 self.status_tile_effects[tile_key] = effect
+                self.status_tile_models.setdefault(tile_key, {})[before] = after
         # A changed latent state changes the value of every queued target.
         # Discard the old ordering so the next decision is ranked against the
         # new state rather than blindly continuing a now-obsolete option list.
@@ -408,6 +464,33 @@ class OntogenesisController:
         pattern_cost = sum(a != b for a, b in zip(current.pattern, goal.pattern))
         return color_cost + pattern_cost
 
+    @classmethod
+    def _apply_status_model(
+        cls,
+        model: dict[LatentSignature, LatentSignature] | None,
+        current: LatentSignature,
+    ) -> LatentSignature | None:
+        """Apply exact evidence first, then only unanimous generalization."""
+        if not model:
+            return None
+        exact = model.get(current)
+        if exact is not None:
+            return exact
+        predictions = {
+            predicted
+            for before, after in model.items()
+            if (
+                predicted := cls._apply_status_effect(
+                    StatusEdgeEffect((0, 0), "", (0, 0), before, after),
+                    current,
+                )
+            )
+            is not None
+        }
+        if len(predictions) == 1:
+            return next(iter(predictions))
+        return None
+
     @staticmethod
     def _status_effect_kind(
         before: LatentSignature | None, after: LatentSignature | None
@@ -427,21 +510,28 @@ class OntogenesisController:
             return False
         current_distance = self._signature_distance(current, goal)
         choices: list[tuple[int, int, StatusEdgeEffect, list[str]]] = []
-        for effect in self.status_edge_effects.values():
-            if (effect.origin, effect.action) in self.blocked_edges:
+        status_edges = set(self.status_edge_models) | set(self.status_edge_effects)
+        for edge in status_edges:
+            model = self.status_edge_models.get(edge)
+            if model is None:
+                effect = self.status_edge_effects[edge]
+                model = {effect.before: effect.after}
+            origin, action = edge
+            if self._edge_is_blocked(edge):
                 continue
-            predicted = self._apply_status_effect(effect, current)
+            predicted = self._apply_status_model(model, current)
             if predicted is None:
                 continue
             distance = self._signature_distance(predicted, goal)
             if distance >= current_distance:
                 continue
-            if self.mover_anchor == effect.origin:
+            if self.mover_anchor == origin:
                 route: list[str] = []
             else:
-                route = self._shortest_path(frame, effect.origin)
+                route = self._shortest_path(frame, origin)
                 if not route:
                     continue
+            effect = StatusEdgeEffect(origin, action, origin, current, predicted)
             choices.append((distance, len(route), effect, route))
         if not choices:
             return False
@@ -451,6 +541,7 @@ class OntogenesisController:
         )
         self.plan.extend([*route, effect.action])
         self.plan_is_product = False
+        self.plan_is_frontier = False
         self.events.append(
             {
                 "event": "status_option_planned",
@@ -478,13 +569,16 @@ class OntogenesisController:
             if self.goal_attempt_signature is not None and current == self.goal_attempt_signature:
                 continue
             route = self._shortest_product_path(frame, target.anchor, current, goal)
-            if route and len(route) <= self._action_budget(frame):
+            if route:
                 choices.append((len(route), target.anchor, target, route))
         if not choices:
             return False
         _, _, target, route = min(choices, key=lambda item: (item[0], item[1]))
+        if self._plan_information_frontier(frame, [(target, route)]):
+            return True
         self.plan.extend(route)
         self.plan_is_product = True
+        self.plan_is_frontier = False
         self.active_target = target
         self.active_before = current
         self.active_before_budget = self._action_budget(frame)
@@ -510,17 +604,57 @@ class OntogenesisController:
         edge = (self.last_origin, self.last_action)
         if self.mover_anchor == expected:
             self.blocked_edges.discard(edge)
+            self.observed_entry_outcomes.setdefault(expected, set()).add(expected)
+            blocked_resources = self.blocked_edge_resources.pop(edge, None)
+            if blocked_resources is not None:
+                acquired = frozenset(self.resource_inventory - blocked_resources)
+                if acquired:
+                    self.resource_edge_requirements[edge] = acquired
+                    self.events.append(
+                        {
+                            "event": "resource_requirement_learned",
+                            "origin": self.last_origin,
+                            "action": self.last_action,
+                            "resources": len(acquired),
+                        }
+                    )
+            if self.frontier_probe_edge == edge:
+                self.frontier_probe_edge = None
+                self.frontier_probe_seed = None
+                self.frontier_planned_entry = None
+                self.plan_is_frontier = False
             return
         if self.mover_anchor == self.last_origin:
             self.blocked_edges.add(edge)
+            self.blocked_edge_resources[edge] = frozenset(self.resource_inventory)
+            self.observed_entry_outcomes.setdefault(expected, set()).add(
+                self.last_origin
+            )
             self.failed_predictions += 1
             if self.last_was_planned:
                 self.plan.clear()
+            if self.plan_is_frontier and self.frontier_probe_edge != edge:
+                if self.frontier_planned_entry is not None:
+                    self.frontier_attempted_entries.add(
+                        self.frontier_planned_entry
+                    )
+                self.plan.clear()
+                self.plan_is_frontier = False
+                self.frontier_probe_seed = None
+                self.frontier_planned_entry = None
+            if self.frontier_probe_edge == edge:
+                self.frontier_probe_edge = None
+                self.frontier_probe_seed = None
+                self.frontier_planned_entry = None
+                self.plan_is_frontier = False
             return
         # A reproducible nonlocal outcome is a newly acquired transition
         # primitive.  It is neither failed motion nor an object mutation.
         known_destination = self.transition_edges.get(edge)
         self.transition_edges[edge] = self.mover_anchor
+        self.observed_entry_outcomes.setdefault(expected, set()).add(
+            self.mover_anchor
+        )
         if expected not in self.transition_entry_conflicts:
             entry_destination = self.transition_entry_effects.get(expected)
             if entry_destination is not None and entry_destination != self.mover_anchor:
@@ -528,6 +662,7 @@ class OntogenesisController:
                 self.transition_entry_conflicts.add(expected)
             else:
                 self.transition_entry_effects[expected] = self.mover_anchor
+            self._rebuild_transition_basins()
         tile_key = self._tile_key(self.previous, expected)
         if tile_key is not None:
             self._learn_tile_transition(tile_key, expected, self.mover_anchor)
@@ -544,12 +679,29 @@ class OntogenesisController:
             self.plan_is_product and known_destination == self.mover_anchor
         )
         self.failed_predictions += 1
+        if (
+            self.plan_is_frontier
+            and self.frontier_probe_edge != edge
+            and known_destination != self.mover_anchor
+        ):
+            if self.frontier_planned_entry is not None:
+                self.frontier_attempted_entries.add(self.frontier_planned_entry)
+            self.plan.clear()
+            self.plan_is_frontier = False
+            self.frontier_probe_seed = None
+            self.frontier_planned_entry = None
         if self.last_was_planned and not self.last_was_expected_product_transport:
             self.plan.clear()
             self.plan_is_product = False
+            self.plan_is_frontier = False
             target = self.active_target
             if target is not None and expected == target.anchor:
                 self.last_transport_target = target
+        if self.frontier_probe_edge == edge:
+            self.frontier_probe_edge = None
+            self.frontier_probe_seed = None
+            self.frontier_planned_entry = None
+            self.plan_is_frontier = False
 
     def _interaction_observed(self, frame: np.ndarray) -> bool:
         target = self.active_target
@@ -923,6 +1075,8 @@ class OntogenesisController:
         )
         after = self._status_signature(frame)
         after_budget = self._action_budget(frame)
+        remote_changed = self._remote_scene_changed(self.previous, frame, target)
+        resource_key = (target.colors, target.size)
         # Contact can change every visible feature of the mover.  Identity is
         # temporal (the endpoint of the verified intervention), not a frozen
         # color label.  Re-anchor at the contacted object and acquire the new
@@ -941,6 +1095,11 @@ class OntogenesisController:
         repeat_modifier = False
         effect = "none"
         status_effect = self._status_effect_kind(before, after)
+        acquired_capability = (
+            after_budget > before_budget
+            or target.kind == "resource"
+            or remote_changed
+        )
         if status_effect != "none":
             effect = status_effect
             self.modifier_effects[target.anchor] = effect
@@ -959,17 +1118,37 @@ class OntogenesisController:
                     and goal is not None
                     and after.pattern != goal.pattern
                 )
-        elif after_budget > before_budget or target.kind == "resource":
+        elif acquired_capability:
             effect = "resource"
             self.modifier_effects[target.anchor] = effect
-            self.resource_features.add((target.colors, target.size))
-            self.resources_collected += 1
         elif target.kind != "resource":
             if effect == "none" and target.kind == "goal_analogue":
                 self.goal_attempt_signature = after
             else:
                 self.modifier_effects[target.anchor] = effect
-        remote_changed = self._remote_scene_changed(self.previous, frame, target)
+        if acquired_capability:
+            self.resource_features.add(resource_key)
+            if resource_key not in self.resource_inventory:
+                self.resources_collected += 1
+            self.resource_inventory.add(resource_key)
+            self.consumed_resource_entries.add(target.anchor)
+            self.resource_entry_effects[target.anchor] = resource_key
+            inferred_gain = max(0, after_budget - before_budget + 1)
+            if inferred_gain:
+                self.resource_entry_gains[target.anchor] = max(
+                    inferred_gain,
+                    self.resource_entry_gains.get(target.anchor, 0),
+                )
+                self.resource_budget_gains[resource_key] = max(
+                    inferred_gain,
+                    self.resource_budget_gains.get(resource_key, 0),
+                )
+            # A resource can change the feasibility of previously blocked
+            # edges. Keep the negative evidence, but make those edges eligible
+            # for a controlled retry under the new product state.
+            for edge, blocked_resources in self.blocked_edge_resources.items():
+                if blocked_resources != frozenset(self.resource_inventory):
+                    self.blocked_edges.discard(edge)
         if remote_changed:
             # Only invalidate a negative observation made in the old scene.
             # Do not promote or prioritize a new mechanic from one transition.
@@ -992,6 +1171,7 @@ class OntogenesisController:
                 "budget_before": before_budget,
                 "budget_after": after_budget,
                 "remote_changed": remote_changed,
+                "resources": len(self.resource_inventory),
             }
         )
         self.targets.clear()
@@ -1097,6 +1277,8 @@ class OntogenesisController:
                 )
             ):
                 priority = 0
+            elif effect in {"rotation", "color", "shape"}:
+                priority = 4
             elif target.kind == "goal_analogue":
                 priority = 1 if matched else 3
             elif target.kind == "resource":
@@ -1137,6 +1319,103 @@ class OntogenesisController:
             rotated = rotated.rotate_clockwise()
         return 0
 
+    def _plan_information_frontier(
+        self,
+        frame: np.ndarray,
+        candidate_routes: list[tuple[VisualTarget, list[str]]] | None = None,
+    ) -> bool:
+        """Probe the first uncertain basin boundary on an incentive path."""
+        if (
+            self.mover_anchor is None
+            or not self.transition_entry_effects
+            or self.episode_failures == 0
+            or not self.failed_matched_detours
+        ):
+            return False
+        budget = self._action_budget(frame)
+        nonlocal_entries = set(self.transition_entry_effects)
+        choices: list[
+            tuple[int, Point, Point, Point, str, list[str]]
+        ] = []
+        if candidate_routes is None:
+            candidate_routes = [
+                (target, route)
+                for target in self.targets
+                if target.kind == "goal_analogue"
+                and (route := self._shortest_path(frame, target.anchor))
+            ]
+        for target, route in candidate_routes:
+            position = self.mover_anchor
+            prefix: list[str] = []
+            for action in route:
+                law = self.translations.get(action)
+                if law is None:
+                    break
+                origin = position
+                expected = (position[0] + law.dx, position[1] + law.dy)
+                edge = (position, action)
+                tile_key = self._tile_key(frame, expected)
+                position = self.transition_edges.get(edge, expected)
+                if position == expected:
+                    position = self._entry_transition(expected) or expected
+                if position == expected and tile_key is not None:
+                    schema = self.transition_tile_effects.get(tile_key)
+                    if schema is not None:
+                        position = schema.resolve(expected)
+                prefix.append(action)
+                if (
+                    expected in self.observed_entry_outcomes
+                    or expected in self.frontier_attempted_entries
+                ):
+                    continue
+                seed = min(
+                    nonlocal_entries,
+                    key=lambda point: (
+                        abs(expected[0] - point[0])
+                        + abs(expected[1] - point[1]),
+                        point,
+                    ),
+                )
+                distance = abs(expected[0] - seed[0]) + abs(
+                    expected[1] - seed[1]
+                )
+                if (
+                    distance <= self.stride * 2
+                    and len(prefix) < budget
+                ):
+                    choices.append(
+                        (
+                            len(prefix),
+                            target.anchor,
+                            expected,
+                            seed,
+                            action,
+                            list(prefix),
+                        )
+                    )
+                    break
+        if not choices:
+            return False
+        _, _, candidate, seed, action, route = min(choices)
+        law = self.translations[action]
+        origin = (candidate[0] - law.dx, candidate[1] - law.dy)
+        self.plan.extend(route)
+        self.plan_is_product = False
+        self.plan_is_frontier = True
+        self.frontier_probe_seed = seed
+        self.frontier_planned_entry = candidate
+        self.active_target = None
+        self.events.append(
+            {
+                "event": "information_frontier_planned",
+                "entry": candidate,
+                "origin": origin,
+                "action": action,
+                "path_length": len(route),
+            }
+        )
+        return True
+
     def _plan_next_target(self, frame: np.ndarray) -> None:
         deferred: list[VisualTarget] = []
         for _ in range(len(self.targets)):
@@ -1168,6 +1447,7 @@ class OntogenesisController:
                     )
                 self.plan.extend(path)
                 self.plan_is_product = False
+                self.plan_is_frontier = False
                 self.active_target = target
                 self.active_before = current
                 self.active_before_budget = self._action_budget(frame)
@@ -1189,6 +1469,66 @@ class OntogenesisController:
                 return
             deferred.append(target)
         self.targets.extend(deferred)
+
+    def _edge_is_blocked(
+        self,
+        edge: tuple[Point, str],
+        resources: frozenset[ResourceKey] | None = None,
+    ) -> bool:
+        """Interpret a blocked edge in the resource context that produced it."""
+        active = frozenset(self.resource_inventory) if resources is None else resources
+        requirement = self.resource_edge_requirements.get(edge)
+        if requirement is not None and not requirement.issubset(active):
+            return True
+        if edge not in self.blocked_edges:
+            return False
+        observed = self.blocked_edge_resources.get(edge)
+        return observed is None or observed == active
+
+    def _entry_transition(self, expected: Point) -> Point | None:
+        """Return an exact or locally continuous transition-basin outcome."""
+        return self.transition_entry_effects.get(
+            expected, self.transition_basin_predictions.get(expected)
+        )
+
+    def _rebuild_transition_basins(self) -> None:
+        """Compile conservative local-continuity predictions from observations."""
+        predictions: dict[Point, Point] = {}
+        by_destination: dict[Point, set[Point]] = {}
+        for entry, destination in self.transition_entry_effects.items():
+            by_destination.setdefault(destination, set()).add(entry)
+        for destination, entries in by_destination.items():
+            ordered = sorted(entries)
+            for first in ordered:
+                for second in ordered:
+                    dx = second[0] - first[0]
+                    dy = second[1] - first[1]
+                    if (dx, dy) not in (
+                        (self.stride, 0),
+                        (-self.stride, 0),
+                        (0, self.stride),
+                        (0, -self.stride),
+                    ):
+                        continue
+                    before = (first[0] - dx, first[1] - dy)
+                    after = (second[0] + dx, second[1] + dy)
+                    predictions.setdefault(before, destination)
+                    predictions.setdefault(after, destination)
+            rows = {entry[1] for entry in entries}
+            for y in rows:
+                xs = [entry[0] for entry in entries if entry[1] == y]
+                for x in range(min(xs) + self.stride, max(xs), self.stride):
+                    predictions.setdefault((x, y), destination)
+            columns = {entry[0] for entry in entries}
+            for x in columns:
+                ys = [entry[1] for entry in entries if entry[0] == x]
+                for y in range(min(ys) + self.stride, max(ys), self.stride):
+                    predictions.setdefault((x, y), destination)
+        for entry in self.transition_entry_effects:
+            predictions.pop(entry, None)
+        for conflict in self.transition_entry_conflicts:
+            predictions.pop(conflict, None)
+        self.transition_basin_predictions = predictions
 
     def _shortest_path(self, frame: np.ndarray, goal: Point) -> list[str]:
         if self.mover_anchor is None or self.floor_color is None:
@@ -1218,7 +1558,7 @@ class OntogenesisController:
                 tile_key = self._tile_key(frame, expected)
                 nxt = self.transition_edges.get(edge)
                 if nxt is None:
-                    nxt = self.transition_entry_effects.get(expected)
+                    nxt = self._entry_transition(expected)
                 if nxt is None and tile_key is not None:
                     schema = self.transition_tile_effects.get(tile_key)
                     if schema is not None:
@@ -1227,7 +1567,7 @@ class OntogenesisController:
                     nxt = expected
                 if (
                     nxt in parent
-                    or edge in self.blocked_edges
+                    or self._edge_is_blocked(edge)
                     or not self._traversable(frame, nxt, goal)
                 ):
                     continue
@@ -1251,36 +1591,89 @@ class OntogenesisController:
         start_status: LatentSignature,
         goal_status: LatentSignature,
     ) -> list[str]:
-        """Plan over learned position and latent-state transitions together."""
+        """Plan over position, latent state, resources, and visible budget."""
         if self.mover_anchor is None or self.floor_color is None:
             return []
         by_delta = {(law.dx, law.dy): law.action for law in self.translations.values()}
         moves = [delta for delta in by_delta if delta != (0, 0)]
         if not moves:
             return []
-        start = (self.mover_anchor, start_status)
+        start_resources = frozenset(self.resource_inventory)
+        start_consumed = frozenset(self.consumed_resource_entries)
+        start_budget = self._action_budget(frame)
+        start = (
+            self.mover_anchor,
+            start_status,
+            start_resources,
+            start_consumed,
+            start_budget,
+        )
         queue = deque([start])
         parent: dict[
-            tuple[Point, LatentSignature],
-            tuple[tuple[Point, LatentSignature], str] | None,
+            tuple[
+                Point,
+                LatentSignature,
+                frozenset[ResourceKey],
+                frozenset[Point],
+                int,
+            ],
+            tuple[
+                tuple[
+                    Point,
+                    LatentSignature,
+                    frozenset[ResourceKey],
+                    frozenset[Point],
+                    int,
+                ],
+                str,
+            ]
+            | None,
         ] = {start: None}
-        finish: tuple[Point, LatentSignature] | None = None
+        best_budget: dict[
+            tuple[
+                Point,
+                LatentSignature,
+                frozenset[ResourceKey],
+                frozenset[Point],
+            ],
+            int,
+        ] = {
+            (
+                self.mover_anchor,
+                start_status,
+                start_resources,
+                start_consumed,
+            ): start_budget
+        }
+        finish: tuple[
+            Point,
+            LatentSignature,
+            frozenset[ResourceKey],
+            frozenset[Point],
+            int,
+        ] | None = None
         while queue:
-            position, status = queue.popleft()
-            state = (position, status)
+            position, status, resources, consumed, budget = queue.popleft()
+            state = (position, status, resources, consumed, budget)
+            if budget < best_budget.get(
+                (position, status, resources, consumed), -1
+            ):
+                continue
             if position == goal_position and status == goal_status:
                 finish = state
                 break
+            if budget <= 0:
+                continue
             for delta in moves:
                 action = by_delta[delta]
                 edge = (position, action)
-                if edge in self.blocked_edges:
+                if self._edge_is_blocked(edge, resources):
                     continue
                 expected = (position[0] + delta[0], position[1] + delta[1])
                 tile_key = self._tile_key(frame, expected)
                 nxt = self.transition_edges.get(edge)
                 if nxt is None:
-                    nxt = self.transition_entry_effects.get(expected)
+                    nxt = self._entry_transition(expected)
                 if nxt is None and tile_key is not None:
                     schema = self.transition_tile_effects.get(tile_key)
                     if schema is not None:
@@ -1288,14 +1681,19 @@ class OntogenesisController:
                 if nxt is None:
                     nxt = expected
                 learned_interaction = (
-                    edge in self.status_edge_effects
+                    edge in self.status_edge_models
+                    or edge in self.status_edge_effects
                     or edge in self.transition_edges
+                    or expected in self.status_entry_models
                     or expected in self.status_entry_effects
                     or expected in self.transition_entry_effects
+                    or self._entry_transition(expected) is not None
+                    or expected in self.resource_entry_effects
                     or (
                         tile_key is not None
                         and (
-                            tile_key in self.status_tile_effects
+                            tile_key in self.status_tile_models
+                            or tile_key in self.status_tile_effects
                             or tile_key in self.transition_tile_effects
                         )
                     )
@@ -1306,19 +1704,53 @@ class OntogenesisController:
                 ):
                     continue
                 next_status = status
-                effect = self.status_edge_effects.get(edge)
-                if effect is None:
-                    effect = self.status_entry_effects.get(expected)
-                if effect is None and tile_key is not None:
-                    effect = self.status_tile_effects.get(tile_key)
-                if effect is not None:
-                    predicted = self._apply_status_effect(effect, status)
+                model = self.status_edge_models.get(edge)
+                if model is None and edge in self.status_edge_effects:
+                    effect = self.status_edge_effects[edge]
+                    model = {effect.before: effect.after}
+                if model is None:
+                    model = self.status_entry_models.get(expected)
+                if model is None and expected in self.status_entry_effects:
+                    effect = self.status_entry_effects[expected]
+                    model = {effect.before: effect.after}
+                if model is None and tile_key is not None:
+                    model = self.status_tile_models.get(tile_key)
+                if (
+                    model is None
+                    and tile_key is not None
+                    and tile_key in self.status_tile_effects
+                ):
+                    effect = self.status_tile_effects[tile_key]
+                    model = {effect.before: effect.after}
+                if model is not None:
+                    predicted = self._apply_status_model(model, status)
                     if predicted is None:
                         continue
                     next_status = predicted
-                next_state = (nxt, next_status)
-                if next_state in parent:
+                next_resources = resources
+                next_consumed = consumed
+                next_budget = budget - 1
+                resource = self.resource_entry_effects.get(expected)
+                if resource is not None:
+                    if resource not in resources:
+                        next_resources = frozenset((*resources, resource))
+                    if expected not in consumed:
+                        next_consumed = frozenset((*consumed, expected))
+                        next_budget += self.resource_entry_gains.get(
+                            expected,
+                            self.resource_budget_gains.get(resource, 0),
+                        )
+                next_state = (
+                    nxt,
+                    next_status,
+                    next_resources,
+                    next_consumed,
+                    next_budget,
+                )
+                quotient = (nxt, next_status, next_resources, next_consumed)
+                if best_budget.get(quotient, -1) >= next_budget:
                     continue
+                best_budget[quotient] = next_budget
                 parent[next_state] = (state, action)
                 queue.append(next_state)
         if finish is None:
@@ -1415,6 +1847,9 @@ class OntogenesisController:
             f"blocked_edges={len(self.blocked_edges)},"
             f"transition_edges={len(self.transition_edges)},"
             f"status_edges={len(self.status_edge_effects)},"
+            f"resource_inventory={len(self.resource_inventory)},"
+            f"resource_requirements={len(self.resource_edge_requirements)},"
+            f"frontier_entries={len(self.frontier_attempted_entries)},"
             f"failed_predictions={self.failed_predictions},"
             f"verified_interactions={self.verified_interactions},"
             f"unique_interventions={len(self.edge_attempts)},"

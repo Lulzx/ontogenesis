@@ -5,7 +5,8 @@
     {"name": "recolor_a", "seed": 3251, "mechanics": ["recolor"], "max_actions": 110},
     {"name": "resource_transport_a", "seed": 4001, "mechanics": ["resource", "transport"], "max_actions": 120},
     {"name": "key_gate_a", "seed": 5011, "mechanics": ["key_gate"], "max_actions": 130},
-    {"name": "composed_state_a", "seed": 6029, "mechanics": ["rotate", "recolor", "resource"], "max_actions": 150}
+    {"name": "composed_state_a", "seed": 6029, "mechanics": ["rotate", "recolor", "resource"], "max_actions": 150},
+    {"name": "transition_basin_a", "seed": 13033, "mechanics": ["transition_basin"], "max_actions": 140, "distractors": 1}
   ],
   "heldout": [
     {"name": "direct_goal_b", "seed": 7001, "mechanics": [], "max_actions": 70, "distractors": 2},
@@ -13,6 +14,9 @@
     {"name": "recolor_gate_b", "seed": 9001, "mechanics": ["recolor", "key_gate"], "max_actions": 150, "distractors": 2},
     {"name": "novel_toggle_b", "seed": 10007, "mechanics": ["toggle"], "max_actions": 130, "distractors": 1},
     {"name": "novel_hazard_b", "seed": 11003, "mechanics": ["hazard", "resource"], "max_actions": 140, "distractors": 2},
-    {"name": "novel_conveyor_b", "seed": 12007, "mechanics": ["rotate", "conveyor", "key_gate"], "max_actions": 170, "distractors": 1}
+    {"name": "novel_conveyor_b", "seed": 12007, "mechanics": ["rotate", "conveyor", "key_gate"], "max_actions": 170, "distractors": 1},
+    {"name": "hidden_basin_b1", "seed": 14101, "mechanics": ["transition_basin"], "max_actions": 140, "distractors": 2},
+    {"name": "hidden_basin_b2", "seed": 14107, "mechanics": ["transition_basin", "resource"], "max_actions": 150, "distractors": 1},
+    {"name": "hidden_basin_b3", "seed": 14113, "mechanics": ["transition_basin", "rotate", "key_gate"], "max_actions": 170, "distractors": 2}
   ]
 }

@@ -150,6 +150,20 @@ class OntogenesisTests(unittest.TestCase):
             current.rotate_clockwise(),
         )
 
+    def test_cyclic_color_model_uses_exact_observed_successor(self) -> None:
+        pattern = (True, True, False, False, True, False, True, False, False)
+        red = LatentSignature(9, pattern)
+        blue = LatentSignature(12, pattern)
+        green = LatentSignature(14, pattern)
+        model = {red: blue, blue: green, green: red}
+        self.assertEqual(
+            OntogenesisController._apply_status_model(model, green), red
+        )
+        unseen = LatentSignature(8, pattern)
+        self.assertIsNone(
+            OntogenesisController._apply_status_model(model, unseen)
+        )
+
     def test_status_planner_respects_failed_edge_quotient(self) -> None:
         controller = OntogenesisController(["move"])
         before = LatentSignature(
@@ -210,6 +224,116 @@ class OntogenesisTests(unittest.TestCase):
         route = controller._shortest_product_path(frame, (20, 10), before, after)
         self.assertEqual(route, ["right", "right"])
 
+    def test_product_path_acquires_resource_before_budget_expires(self) -> None:
+        controller = OntogenesisController(["right"])
+        controller.translations = {
+            "right": AcquiredTranslation("right", 5, 0, 25),
+        }
+        controller.stride = 5
+        controller.floor_color = 3
+        controller.mover_anchor = (10, 10)
+        status = LatentSignature(
+            9, (True, True, False, False, True, False, True, False, False)
+        )
+        resource = (frozenset({7}), 25)
+        controller.resource_entry_effects[(15, 10)] = resource
+        controller.resource_budget_gains[resource] = 3
+        frame = np.full((64, 64), 3, dtype=np.int16)
+        for x in range(12, 55):
+            frame[61:63, x] = 6 + x % 2
+        frame[61:63, 12:14] = 11
+        route = controller._shortest_product_path(frame, (25, 10), status, status)
+        self.assertEqual(route, ["right", "right", "right"])
+
+    def test_product_path_retries_blocked_edge_after_resource(self) -> None:
+        controller = OntogenesisController(["right"])
+        controller.translations = {
+            "right": AcquiredTranslation("right", 5, 0, 25),
+        }
+        controller.stride = 5
+        controller.floor_color = 3
+        controller.mover_anchor = (10, 10)
+        status = LatentSignature(
+            9, (True, True, False, False, True, False, True, False, False)
+        )
+        resource = (frozenset({7}), 25)
+        controller.resource_entry_effects[(15, 10)] = resource
+        edge = ((15, 10), "right")
+        controller.blocked_edges.add(edge)
+        controller.blocked_edge_resources[edge] = frozenset()
+        frame = np.full((64, 64), 3, dtype=np.int16)
+        route = controller._shortest_product_path(frame, (20, 10), status, status)
+        self.assertEqual(route, ["right", "right"])
+
+    def test_identical_resource_instances_each_refill_once(self) -> None:
+        controller = OntogenesisController(["right"])
+        controller.translations = {
+            "right": AcquiredTranslation("right", 5, 0, 25),
+        }
+        controller.stride = 5
+        controller.floor_color = 3
+        controller.mover_anchor = (10, 10)
+        status = LatentSignature(
+            9, (True, True, False, False, True, False, True, False, False)
+        )
+        resource = (frozenset({7}), 25)
+        controller.resource_entry_effects = {
+            (15, 10): resource,
+            (20, 10): resource,
+        }
+        controller.resource_entry_gains = {(15, 10): 1, (20, 10): 1}
+        frame = np.full((64, 64), 3, dtype=np.int16)
+        for x in range(12, 55):
+            frame[61:63, x] = 6 + x % 2
+        frame[61:63, 12] = 11
+        route = controller._shortest_product_path(frame, (25, 10), status, status)
+        self.assertEqual(route, ["right", "right", "right"])
+
+    def test_success_after_resource_learns_edge_requirement(self) -> None:
+        controller = OntogenesisController(["right"])
+        controller.translations = {
+            "right": AcquiredTranslation("right", 5, 0, 25),
+        }
+        resource = (frozenset({7}), 25)
+        edge = ((10, 10), "right")
+        controller.last_origin = edge[0]
+        controller.last_action = edge[1]
+        controller.mover_anchor = (15, 10)
+        controller.blocked_edges.add(edge)
+        controller.blocked_edge_resources[edge] = frozenset()
+        controller.resource_inventory.add(resource)
+        controller._validate_transition(np.full((64, 64), 3, dtype=np.int16))
+        self.assertEqual(
+            controller.resource_edge_requirements[edge], frozenset({resource})
+        )
+
+    def test_information_frontier_targets_unobserved_basin_neighbor(self) -> None:
+        controller = OntogenesisController(["right", "left", "down", "up"])
+        controller.translations = {
+            "right": AcquiredTranslation("right", 5, 0, 25),
+            "left": AcquiredTranslation("left", -5, 0, 25),
+            "down": AcquiredTranslation("down", 0, 5, 25),
+            "up": AcquiredTranslation("up", 0, -5, 25),
+        }
+        controller.stride = 5
+        controller.floor_color = 3
+        controller.mover_anchor = (30, 20)
+        controller.episode_failures = 1
+        controller.failed_matched_detours.add((frozenset({7}), 25))
+        controller.transition_entry_effects[(35, 20)] = (10, 10)
+        controller.observed_entry_outcomes[(35, 20)] = {(10, 10)}
+        controller.frontier_attempted_entries.add((25, 20))
+        controller.targets.append(
+            VisualTarget((40, 20), "goal_analogue", frozenset({9}), 5)
+        )
+        frame = np.full((64, 64), 3, dtype=np.int16)
+        self.assertTrue(controller._plan_information_frontier(frame))
+        events = controller.drain_events()
+        entry = events[-1]["entry"]
+        self.assertNotIn(entry, controller.observed_entry_outcomes)
+        self.assertNotEqual(entry, (25, 20))
+        self.assertTrue(controller.plan_is_frontier)
+
     def test_expected_product_transport_preserves_remaining_plan(self) -> None:
         controller = OntogenesisController(["right"])
         controller.translations["right"] = AcquiredTranslation(
@@ -269,6 +393,18 @@ class OntogenesisTests(unittest.TestCase):
         controller.transition_entry_effects[(15, 10)] = (30, 30)
         frame = np.full((64, 64), 3, dtype=np.int16)
         self.assertEqual(controller._shortest_path(frame, (30, 35)), ["right", "down"])
+
+    def test_adjacent_equal_outcomes_predict_one_basin_frontier_cell(self) -> None:
+        controller = OntogenesisController(["move"])
+        controller.stride = 5
+        destination = (40, 40)
+        controller.transition_entry_effects = {
+            (15, 20): destination,
+            (20, 20): destination,
+        }
+        controller._rebuild_transition_basins()
+        self.assertEqual(controller._entry_transition((25, 20)), destination)
+        self.assertIsNone(controller._entry_transition((25, 25)))
 
     def test_status_change_takes_priority_over_simultaneous_budget_gain(self) -> None:
         before = LatentSignature(

@@ -109,6 +109,7 @@ class SyntheticEnvironment:
         self._rng = rng
         self._entity_colors = iter(rng.sample([6, 7, 10, 13, 14, 15], 6))
         self._build_entities()
+        self._build_transition_basin()
         self.total_actions = 0
         self.reset()
 
@@ -177,6 +178,46 @@ class SyntheticEnvironment:
         if "hazard" in self.spec.mechanics:
             self.hazards.update(take() for _ in range(2))
 
+    def _build_transition_basin(self) -> None:
+        """Generate an unrendered transition field across a naive goal path."""
+        self.transition_basin: set[Point] = set()
+        self.basin_destination = self.start
+        if "transition_basin" not in self.spec.mechanics:
+            return
+        occupied = {entity.anchor for entity in self.entities}
+        path: list[Point] = []
+        cursor = self.start
+        while cursor[0] != self.goal.anchor[0]:
+            step = self.stride if self.goal.anchor[0] > cursor[0] else -self.stride
+            cursor = (cursor[0] + step, cursor[1])
+            path.append(cursor)
+        while cursor[1] != self.goal.anchor[1]:
+            step = self.stride if self.goal.anchor[1] > cursor[1] else -self.stride
+            cursor = (cursor[0], cursor[1] + step)
+            path.append(cursor)
+        candidates = [
+            point
+            for point in path[:-1]
+            if point not in occupied and point != self.start
+        ]
+        if not candidates:
+            return
+        center = candidates[len(candidates) // 2]
+        horizontal_path = center[1] == self.start[1]
+        offsets = (
+            ((0, -self.stride), (0, 0), (0, self.stride))
+            if horizontal_path
+            else ((-self.stride, 0), (0, 0), (self.stride, 0))
+        )
+        for dx, dy in offsets:
+            point = (center[0] + dx, center[1] + dy)
+            if (
+                14 <= point[0] <= 59
+                and 5 <= point[1] <= 50
+                and point not in occupied
+            ):
+                self.transition_basin.add(point)
+
     def reset(self) -> np.ndarray:
         self.avatar = self.start
         self.status = LatentSignature(self.avatar_color, self.initial_pattern)
@@ -207,10 +248,13 @@ class SyntheticEnvironment:
         dx, dy = self.action_deltas[action]
         destination = (self.avatar[0] + dx, self.avatar[1] + dy)
         if not self._blocked(destination):
-            self.avatar = destination
-            if destination in self.hazards:
-                self.failed = True
+            if destination in self.transition_basin:
+                self.avatar = self.basin_destination
             else:
+                self.avatar = destination
+            if self.avatar in self.hazards:
+                self.failed = True
+            elif self.avatar == destination:
                 self._interact(destination)
         if self.budget <= 0 and not self.solved:
             self.failed = True

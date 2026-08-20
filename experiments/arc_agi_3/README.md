@@ -20,12 +20,16 @@ extracts a visual latent `(color, 3x3 pattern)` state, discovers rotation and
 color/shape modifiers from their effects, recognizes repeated objects as
 resource equivalence classes, and reads the visible action-budget bar.
 
-The current rung adds episode-level negative credit, product-state planning
-over `(position, latent signature)`, and acquired transition quotients. A
-verified nonlocal edge is represented both concretely and, when supported by
-repeated evidence, by an entry-cell or visual-tile schema. Tile schemas require
-two distinct observations and distinguish absolute portals from relative
-conveyors; conflicting observations reject the schema.
+The current rung adds episode-level negative credit and product-state planning
+over `(position, latent signature, resource classes, consumed resource
+instances, visible budget)`. Status operators retain observed transition
+functions instead of overwriting one `before -> after` pair, so cyclic effects
+remain executable. A verified nonlocal edge is represented concretely and,
+when supported by repeated evidence, by an entry-cell, visual-tile, or local
+transition-basin schema. Basin predictions interpolate observed gaps and
+extend only one lattice step beyond adjacent equal outcomes. Information
+frontiers test unobserved basin-adjacent entries only on an incentive-bearing
+goal route and only after episode-level negative evidence.
 
 Run against the official toolkit (Python 3.12):
 
@@ -77,8 +81,10 @@ uv run --with numpy --python 3.12 \
   python experiments/arc_agi_3/evaluate_synthetic.py --split all
 ```
 
-The frozen result at this checkpoint is `12/12` (curriculum `6/6`, held-out
-`6/6`). This is an acquisition gate, not an ARC-AGI-3 score or a claim that the
+The frozen result at this checkpoint is `16/16` (curriculum `7/7`, held-out
+`9/9`). The transition-basin curriculum case improved from 24 to 21 actions
+after admitting local-continuity inference. This is an acquisition gate, not
+an ARC-AGI-3 score or a claim that the
 generated distribution matches private environments.
 
 Claim boundary: passing a public environment would demonstrate acquisition of
@@ -97,14 +103,15 @@ results are three distinct claims.
 
 ## Observed public run
 
-On 2026-08-20, the official Kaggle starter's local harness, toolkit `arc-agi`
-0.9.9, and environment `ls20-9607627b` produced this result:
+On 2026-08-20, the official Kaggle starter at commit `eeb1535`, toolkit
+`arc-agi` 0.9.9, and environment `ls20-9607627b` produced this result for the
+current rung:
 
 ```text
 level 1 completed at cumulative action 17
 level 2 completed at cumulative action 64
 levels completed: 2 / 7
-framework actions: 1001
+framework actions: 1001 in 2.79 seconds
 local diagnostic scorecard score: 10.714285714285714
 acquired laws: ACTION1=(0,-5), ACTION2=(0,5),
                ACTION3=(-5,0), ACTION4=(5,0)
@@ -115,11 +122,12 @@ competition rerun or leaderboard result. The controller solved the first two
 levels while paying for four initial interventions and transferred its learned
 action laws and reward-linked goal prototype between levels.
 
-It stalls on level 3. It discovers resources, recoloring and rotation
-operators, and multiple nonlocal transitions. Failed episodes now trigger a
-joint position/latent-state planner and accumulate transition topology instead
-of replaying the same option, but the level contains a largely invisible
-transition field whose topology is still learned too slowly for the visible
-budget. The next gate is information-frontier selection for transition-basin
-boundaries and a resource dimension in the product state; further public-only
-ranking changes are not an acceptable substitute.
+It still stalls on level 3. The frame-only trace discovers two refill
+instances, a cyclic recoloring operator, rotation, transport hubs, and dozens
+of nonlocal transitions; it invokes both product planning and
+information-frontier probes. The score did not improve, which bounds the
+result: representation reachability is no longer the only wall. The remaining
+failure is efficient reward-conditioned arbitration under partially mapped
+transition topology. Further mechanisms must improve the frozen generated
+gate or a new pre-frozen held-out family before another public-only ranking
+change is admitted.
